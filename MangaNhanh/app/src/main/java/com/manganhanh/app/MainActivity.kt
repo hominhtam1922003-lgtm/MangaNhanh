@@ -85,7 +85,7 @@ class MainActivity : ComponentActivity() {
 }
 
 object Sources {
-    var netTruyenDomain = "https://nettruyen.gg"
+    var netTruyenDomain = "https://nettruyenvn.info"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
@@ -107,6 +107,8 @@ object Sources {
 }
 
 object Scraper {
+    private val client = OkHttpClient()
+
     suspend fun loadManga(query: String = "", genreUrl: String = "", isRanking: Boolean = false): List<Manga> = withContext(Dispatchers.IO) {
         val list = mutableListOf<Manga>()
         val base = Sources.netTruyenDomain
@@ -181,22 +183,53 @@ object Scraper {
                 desc = descEl.text().trim()
             }
 
-            val rows: Elements = doc.select(".list-chapter li, #nt_listchapter li, ul.list-chapter li, .chapter-list div.row")
-            for (row: Element in rows) {
-                val a: Element = row.select("a").first() ?: continue
-                val t = a.text().trim()
-                var url = a.attr("href")
-                if (!url.startsWith("http")) {
-                    url = if (url.startsWith("/")) "$base$url" else "$base/$url"
-                }
-                if (t.isNotBlank() && chapters.none { it.link == url }) {
-                    chapters.add(Chapter(t, url))
+            // 1. Thử lấy comicId từ trang chi tiết để gọi trực tiếp API lấy full danh sách chương (bỏ qua nút xem thêm)
+            var comicId = ""
+            val idInput = doc.select("#IsLogin, #item-detail, input#comic-id, #rating-form").first()
+            // Hoặc bóc tách từ các thuộc tính data-id trên trang
+            val ratingEl = doc.select("[data-id]").first()
+            if (ratingEl != null) {
+                comicId = ratingEl.attr("data-id")
+            }
+            if (comicId.isBlank()) {
+                // Thử tìm trong các thẻ script chứa id truyện
+                for (script in doc.select("script")) {
+                    val text = script.html()
+                    if (text.contains("comicId") || text.contains("id_comic")) {
+                        val match = Regex("""(comicId|id_comic)\s*[:=]\s*(\d+)""").find(text)
+                        if (match != null) {
+                            comicId = match.groupValues[2]
+                            break
+                        }
+                    }
                 }
             }
-            
+
+            // Nếu tìm được comicId, gọi thẳng API list chương của NetTruyen để lấy sạch 100% chương
+            if (comicId.isNotBlank()) {
+                try {
+                    val apiLink = "$base/Comic/Chapter/ListChapter?comicId=$comicId"
+                    val apiDoc = Jsoup.connect(apiLink).userAgent(UA).referrer(manga.link).timeout(10000).get()
+                    val apiRows = apiDoc.select("li, .row, a")
+                    for (el in apiRows) {
+                        val a = if (el.tagName() == "a") el else el.select("a").first() ?: continue
+                        val t = a.text().trim()
+                        var url = a.attr("href")
+                        if (url.isNotBlank()) {
+                            if (!url.startsWith("http")) url = if (url.startsWith("/")) "$base$url" else "$base/$url"
+                            if (t.isNotBlank() && chapters.none { it.link == url }) {
+                                chapters.add(Chapter(t, url))
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // 2. Nếu phương thức API không lấy được, fallback quét toàn bộ các bảng hiển thị sẵn trên trang
             if (chapters.isEmpty()) {
-                val directLinks = doc.select(".list-chapter a, #nt_listchapter a, ul.list-chapter a")
-                for (a in directLinks) {
+                val rows: Elements = doc.select("#nt_listchapter li, .list-chapter li, ul.list-chapter li, .chapter-list div.row")
+                for (row: Element in rows) {
+                    val a: Element = row.select("a").first() ?: continue
                     val t = a.text().trim()
                     var url = a.attr("href")
                     if (!url.startsWith("http")) {
@@ -204,6 +237,23 @@ object Scraper {
                     }
                     if (t.isNotBlank() && chapters.none { it.link == url }) {
                         chapters.add(Chapter(t, url))
+                    }
+                }
+            }
+
+            // 3. Phương thức vét cạn cuối cùng nếu vẫn thiếu
+            if (chapters.isEmpty()) {
+                val directLinks = doc.select("a")
+                for (a in directLinks) {
+                    val t = a.text().trim()
+                    var url = a.attr("href")
+                    if (url.contains("chapter") || url.contains("chap")) {
+                        if (!url.startsWith("http")) {
+                            url = if (url.startsWith("/")) "$base$url" else "$base/$url"
+                        }
+                        if (t.isNotBlank() && chapters.none { it.link == url }) {
+                            chapters.add(Chapter(t, url))
+                        }
                     }
                 }
             }
@@ -306,7 +356,7 @@ fun HomeView(
 ) {
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
-    var tab by remember { mutableIntStateOf(0) } // 0: Mới nhất, 1: Xếp hạng, 2: Thể loại, 3: Yêu thích
+    var tab by remember { mutableIntStateOf(0) }
     var selectedGenre by remember { mutableStateOf<Genre?>(null) }
     var list by remember { mutableStateOf<List<Manga>>(emptyList()) }
     var genres by remember { mutableStateOf<List<Genre>>(emptyList()) }

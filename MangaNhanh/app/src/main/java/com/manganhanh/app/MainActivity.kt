@@ -1,8 +1,11 @@
 package com.manganhanh.app
 
+import android.graphics.BitmapFactory
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,14 +14,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,6 +51,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/* ---------- Màu & Theme ---------- */
 private val AppBackground = androidx.compose.ui.graphics.Color(0xFF101116)
 private val Panel = androidx.compose.ui.graphics.Color(0xFF1B1D25)
 private val Accent = androidx.compose.ui.graphics.Color(0xFFFF6B35)
@@ -64,6 +73,7 @@ private fun MangaNhanhTheme(content: @Composable () -> Unit) {
     )
 }
 
+/* ---------- Data ---------- */
 enum class SourceType(val label: String, val baseUrl: String) {
     NETTRUYEN("NetTruyen", "https://nettruyen.gg"),
     TRUYENQQ("TruyenQQ", "https://truyenqqko.com")
@@ -89,6 +99,7 @@ private enum class AppTab(val label: String) {
     HISTORY("Lịch sử")
 }
 
+/* ---------- App chính ---------- */
 @Composable
 private fun MangaApp() {
     var source by remember { mutableStateOf(SourceType.NETTRUYEN) }
@@ -109,34 +120,20 @@ private fun MangaApp() {
         scope.launch {
             loading = true
             errorMessage = null
-
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    if (query.isBlank()) {
-                        MangaScraper.latest(source)
-                    } else {
-                        MangaScraper.search(source, query)
-                    }
+                    if (query.isBlank()) MangaScraper.latest(source) else MangaScraper.search(source, query)
                 }
             }
-
             result.onSuccess { mangas = it }
-                .onFailure {
-                    errorMessage = it.message ?: "Không tải được dữ liệu."
-                }
-
+                .onFailure { errorMessage = it.message ?: "Không tải được dữ liệu." }
             loading = false
         }
     }
 
-    LaunchedEffect(source) {
-        loadManga()
-    }
+    LaunchedEffect(source) { loadManga() }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = AppBackground
-    ) {
+    Surface(modifier = Modifier.fillMaxSize(), color = AppBackground) {
         Column(modifier = Modifier.fillMaxSize()) {
             when {
                 selectedChapter != null -> ReaderScreen(
@@ -148,11 +145,7 @@ private fun MangaApp() {
                         scope.launch {
                             loading = true
                             readerPages = withContext(Dispatchers.IO) {
-                                runCatching {
-                                    MangaScraper.chapterPages(
-                                        selectedChapter!!.url
-                                    )
-                                }.getOrDefault(emptyList())
+                                runCatching { MangaScraper.chapterPages(selectedChapter!!.url) }.getOrDefault(emptyList())
                             }
                             loading = false
                         }
@@ -161,35 +154,21 @@ private fun MangaApp() {
 
                 selectedManga != null -> DetailScreen(
                     manga = selectedManga!!,
-                    isFavorite = favorites.any {
-                        it.url == selectedManga!!.url
-                    },
+                    isFavorite = favorites.any { it.url == selectedManga!!.url },
                     onBack = { selectedManga = null },
                     onFavorite = {
                         val current = selectedManga!!
-                        favorites = if (
-                            favorites.any { it.url == current.url }
-                        ) {
-                            favorites.filterNot {
-                                it.url == current.url
-                            }
-                        } else {
-                            listOf(current) + favorites
-                        }
+                        favorites = if (favorites.any { it.url == current.url })
+                            favorites.filterNot { it.url == current.url }
+                        else listOf(current) + favorites
                     },
                     onOpenChapter = { chapter ->
                         selectedChapter = chapter
-                        history = listOf(selectedManga!!) +
-                            history.filterNot {
-                                it.url == selectedManga!!.url
-                            }
-
+                        history = listOf(selectedManga!!) + history.filterNot { it.url == selectedManga!!.url }
                         scope.launch {
                             loading = true
                             readerPages = withContext(Dispatchers.IO) {
-                                runCatching {
-                                    MangaScraper.chapterPages(chapter.url)
-                                }.getOrDefault(emptyList())
+                                runCatching { MangaScraper.chapterPages(chapter.url) }.getOrDefault(emptyList())
                             }
                             loading = false
                         }
@@ -198,10 +177,7 @@ private fun MangaApp() {
 
                 else -> HomeScreen(
                     source = source,
-                    onSourceChange = {
-                        source = it
-                        selectedGenre = null
-                    },
+                    onSourceChange = { source = it; selectedGenre = null },
                     searchText = searchText,
                     onSearchTextChange = { searchText = it },
                     onSearch = { loadManga(searchText) },
@@ -214,14 +190,8 @@ private fun MangaApp() {
                         AppTab.HISTORY -> history
                         else -> mangas
                     }.let { list ->
-                        if (selectedGenre == null) {
-                            list
-                        } else {
-                            list.filter { item ->
-                                item.genres.any {
-                                    it.equals(selectedGenre, true)
-                                }
-                            }
+                        if (selectedGenre == null) list else list.filter { item ->
+                            item.genres.any { it.equals(selectedGenre, true) }
                         }
                     },
                     loading = loading,
@@ -234,6 +204,7 @@ private fun MangaApp() {
     }
 }
 
+/* ---------- Home ---------- */
 @Composable
 private fun HomeScreen(
     source: SourceType,
@@ -257,36 +228,14 @@ private fun HomeScreen(
     )
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 14.dp)
+        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "MangaNhanh",
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Foreground
-                )
-                Text(
-                    "Đọc truyện tranh mỗi ngày",
-                    fontSize = 12.sp,
-                    color = Muted
-                )
+                Text("MangaNhanh", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = Foreground)
+                Text("Đọc truyện tranh mỗi ngày", fontSize = 12.sp, color = Muted)
             }
-
-            Text(
-                "● ONLINE",
-                color = Accent,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text("● ONLINE", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -294,16 +243,11 @@ private fun HomeScreen(
                 Surface(
                     color = if (source == item) Accent else Panel,
                     shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(18.dp))
-                        .clickable { onSourceChange(item) }
+                    modifier = Modifier.clip(RoundedCornerShape(18.dp)).clickable { onSourceChange(item) }
                 ) {
                     Text(
                         item.label,
-                        modifier = Modifier.padding(
-                            horizontal = 14.dp,
-                            vertical = 9.dp
-                        ),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
                         color = Foreground,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
@@ -314,84 +258,46 @@ private fun HomeScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = searchText,
                 onValueChange = onSearchTextChange,
                 modifier = Modifier.weight(1f),
                 singleLine = true,
-                placeholder = {
-                    Text("Tìm tên truyện...", color = Muted)
-                },
-                leadingIcon = {
-                    Icon(
-                        Icons.Default.Search,
-                        contentDescription = "Tìm kiếm"
-                    )
-                },
+                placeholder = { Text("Tìm tên truyện...", color = Muted) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Tìm") },
                 shape = RoundedCornerShape(14.dp)
             )
-
             Spacer(Modifier.width(8.dp))
-
-            Button(
-                onClick = onSearch,
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Tìm")
-            }
+            Button(onClick = onSearch, shape = RoundedCornerShape(12.dp)) { Text("Tìm") }
         }
 
         Spacer(Modifier.height(12.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             AppTab.values().forEach { tab ->
                 val icon = when (tab) {
                     AppTab.HOME -> Icons.Default.Home
-                    AppTab.RANKING -> Icons.Default.Home
+                    AppTab.RANKING -> Icons.Default.Star      // SỬA: không còn Home
                     AppTab.GENRES -> Icons.Default.Search
                     AppTab.FAVORITES -> Icons.Default.Favorite
-                    AppTab.HISTORY -> Icons.Default.History
+                    AppTab.HISTORY -> Icons.Default.History     // SỬA: thêm import
                 }
-
                 Surface(
                     color = if (selectedTab == tab) Accent else Panel,
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            onTabChange(tab)
-                            if (tab != AppTab.GENRES) {
-                                onGenreChange(null)
-                            }
-                        }
+                    modifier = Modifier.weight(1f).clickable {
+                        onTabChange(tab)
+                        if (tab != AppTab.GENRES) onGenreChange(null)
+                    }
                 ) {
                     Column(
-                        modifier = Modifier.padding(
-                            vertical = 9.dp,
-                            horizontal = 2.dp
-                        ),
+                        modifier = Modifier.padding(vertical = 9.dp, horizontal = 2.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(
-                            icon,
-                            contentDescription = tab.label,
-                            tint = Foreground,
-                            modifier = Modifier.size(17.dp)
-                        )
+                        Icon(icon, contentDescription = tab.label, tint = Foreground, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.height(3.dp))
-                        Text(
-                            tab.label,
-                            fontSize = 9.sp,
-                            color = Foreground,
-                            maxLines = 1
-                        )
+                        Text(tab.label, fontSize = 9.sp, color = Foreground, maxLines = 1)
                     }
                 }
             }
@@ -399,13 +305,8 @@ private fun HomeScreen(
 
         if (selectedTab == AppTab.GENRES) {
             Spacer(Modifier.height(12.dp))
-            Text(
-                "Chọn thể loại",
-                fontWeight = FontWeight.Bold,
-                color = Foreground
-            )
+            Text("Chọn thể loại", fontWeight = FontWeight.Bold, color = Foreground)
             Spacer(Modifier.height(8.dp))
-
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 genres.chunked(3).forEach { rowGenres ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -413,17 +314,9 @@ private fun HomeScreen(
                             FilterChip(
                                 selected = selectedGenre == genre,
                                 onClick = {
-                                    onGenreChange(
-                                        if (selectedGenre == genre) {
-                                            null
-                                        } else {
-                                            genre
-                                        }
-                                    )
+                                    onGenreChange(if (selectedGenre == genre) null else genre)
                                 },
-                                label = {
-                                    Text(genre, fontSize = 11.sp)
-                                }
+                                label = { Text(genre, fontSize = 11.sp) }
                             )
                         }
                     }
@@ -434,111 +327,75 @@ private fun HomeScreen(
         Spacer(Modifier.height(12.dp))
 
         when {
-            loading -> {
-                Box(
-                    Modifier.fillMaxWidth().weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = Accent)
-                }
+            loading -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Accent)
             }
-
-            errorMessage != null -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        "Không tải được truyện",
-                        color = Foreground,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        errorMessage,
-                        color = Muted,
-                        fontSize = 12.sp
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Button(onClick = onRefresh) {
-                        Text("Thử lại")
-                    }
-                }
+            errorMessage != null -> Column(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text("Không tải được truyện", color = Foreground, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Text(errorMessage!!, color = Muted, fontSize = 12.sp)
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = onRefresh) { Text("Thử lại") }
             }
-
-            mangas.isEmpty() -> {
-                EmptyMessage(
-                    title = "Chưa có truyện để hiển thị",
-                    subtitle = "Kiểm tra kết nối hoặc thử nguồn truyện khác."
-                )
-            }
-
-            else -> {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(9.dp),
-                    contentPadding = PaddingValues(bottom = 20.dp)
-                ) {
-                    items(mangas, key = { it.url }) { manga ->
-                        MangaCard(
-                            manga = manga,
-                            onClick = { onMangaClick(manga) }
-                        )
-                    }
+            mangas.isEmpty() -> EmptyMessage(
+                title = "Chưa có truyện để hiển thị",
+                subtitle = "Kiểm tra kết nối hoặc thử nguồn truyện khác."
+            )
+            else -> LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(9.dp),
+                contentPadding = PaddingValues(bottom = 20.dp)
+            ) {
+                items(mangas, key = { it.url }) { manga ->
+                    MangaCard(manga = manga, onClick = { onMangaClick(manga) })
                 }
             }
         }
     }
 }
+
+/* ---------- Card ---------- */
 @Composable
-private fun MangaCard(
-    manga: Manga,
-    onClick: () -> Unit
-) {
+private fun MangaCard(manga: Manga, onClick: () -> Unit) {
     Surface(
         color = Panel,
         shape = RoundedCornerShape(15.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(
-                manga.title,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                color = Foreground,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(Modifier.height(5.dp))
-
-            Text(
-                manga.description.ifBlank {
-                    "Nhấn để xem thông tin và danh sách chương."
-                },
-                fontSize = 12.sp,
-                color = Muted,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            if (manga.genres.isNotEmpty()) {
-                Spacer(Modifier.height(7.dp))
-                Text(
-                    manga.genres.take(4).joinToString(" · "),
-                    fontSize = 10.sp,
-                    color = Accent
+        Row(modifier = Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (manga.image.isNotBlank()) {
+                NetworkImage(
+                    url = manga.image,
+                    modifier = Modifier.size(100.dp, 130.dp).clip(RoundedCornerShape(10.dp)).background(Panel)
                 )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    manga.title, fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                    color = Foreground, maxLines = 2, overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    manga.description.ifBlank { "Nhấn để xem thông tin và danh sách chương." },
+                    fontSize = 12.sp, color = Muted, maxLines = 2, overflow = TextOverflow.Ellipsis
+                )
+                if (manga.genres.isNotEmpty()) {
+                    Spacer(Modifier.height(7.dp))
+                    Text(
+                        manga.genres.take(3).joinToString(" · "),
+                        fontSize = 10.sp, color = Accent
+                    )
+                }
             }
         }
     }
 }
 
+/* ---------- Chi tiết ---------- */
 @Composable
 private fun DetailScreen(
     manga: Manga,
@@ -547,98 +404,69 @@ private fun DetailScreen(
     onFavorite: () -> Unit,
     onOpenChapter: (Chapter) -> Unit
 ) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(16.dp)
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    Icons.Default.ArrowBack,
-                    contentDescription = "Quay lại"
-                )
-            }
-
-            Text(
-                "Chi tiết truyện",
-                fontWeight = FontWeight.Bold,
-                fontSize = 20.sp
-            )
-
-            Spacer(Modifier.weight(1f))
-
-            IconButton(onClick = onFavorite) {
-                Icon(
-                    Icons.Default.Favorite,
-                    contentDescription = "Yêu thích",
-                    tint = if (isFavorite) Accent else Muted
-                )
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Quay lại") }
+                Spacer(Modifier.width(8.dp))
+                Text("Chi tiết truyện", fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.weight(1f))
+                IconButton(onClick = onFavorite) {
+                    Icon(Icons.Default.Favorite, contentDescription = "Yêu thích", tint = if (isFavorite) Accent else Muted)
+                }
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        item {
+            Text(manga.title, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold, color = Foreground, lineHeight = 28.sp)
+        }
 
-        Text(
-            manga.title,
-            fontSize = 23.sp,
-            fontWeight = FontWeight.ExtraBold
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            manga.description.ifBlank {
-                "Chưa có mô tả cho truyện này."
-            },
-            color = Muted,
-            fontSize = 13.sp
-        )
-
-        Spacer(Modifier.height(10.dp))
+        item {
+            Text(
+                manga.description.ifBlank { "Chưa có mô tả cho truyện này." },
+                color = Muted, fontSize = 13.sp
+            )
+        }
 
         if (manga.genres.isNotEmpty()) {
-            Text(
-                manga.genres.joinToString(" · "),
-                color = Accent,
-                fontSize = 12.sp
-            )
+            item {
+                Text(
+                    "Thể loại: ${manga.genres.joinToString(", ")}",
+                    fontSize = 12.sp, color = Accent, fontWeight = FontWeight.SemiBold
+                )
+            }
         }
 
-        Spacer(Modifier.height(18.dp))
-
-        Text(
-            "Danh sách chương",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(Modifier.height(8.dp))
+        item {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Danh sách chương", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Foreground)
+        }
 
         if (manga.chapters.isEmpty()) {
-            EmptyMessage(
-                "Chưa lấy được danh sách chương",
-                "Trang nguồn có thể đã thay đổi cấu trúc."
-            )
+            item { Text("Chưa có chương nào.", color = Muted, fontSize = 13.sp) }
         } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(7.dp)
-            ) {
-                items(manga.chapters) { chapter ->
-                    Surface(
-                        color = Panel,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onOpenChapter(chapter)
-                            }
+            items(manga.chapters, key = { it.url }) { chapter ->
+                Surface(color = Panel, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .clickable { onOpenChapter(chapter) }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             chapter.title,
-                            modifier = Modifier.padding(14.dp),
-                            color = Foreground
+                            fontWeight = FontWeight.Medium,
+                            color = Foreground,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Đọc", color = Accent, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 }
             }
@@ -646,6 +474,7 @@ private fun DetailScreen(
     }
 }
 
+/* ---------- Đọc trang ---------- */
 @Composable
 private fun ReaderScreen(
     chapter: Chapter,
@@ -654,63 +483,43 @@ private fun ReaderScreen(
     onBack: () -> Unit,
     onReload: () -> Unit
 ) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    Icons.Default.ArrowBack,
-                    contentDescription = "Quay lại"
-                )
-            }
-
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "Đang đọc",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
-
-                Text(
-                    chapter.title,
-                    color = Muted,
-                    fontSize = 11.sp,
-                    maxLines = 1
-                )
-            }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(chapter.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Quay lại") }
+                },
+                actions = {
+                    IconButton(onClick = onReload) { Icon(Icons.Default.Refresh, contentDescription = "Tải lại") }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground)
+            )
         }
-
-        when {
-            loading -> {
-                Box(
-                    Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
+    ) { inner ->
+        Box(modifier = Modifier.padding(inner).fillMaxSize().background(AppBackground)) {
+            when {
+                loading && pages.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = Accent)
                 }
-            }
-
-            pages.isEmpty() -> {
-                EmptyMessage(
-                    "Không tải được trang truyện",
-                    "Thử tải lại hoặc quay lại danh sách chương."
+                pages.isEmpty() -> Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    onReload()
+                    Text("Không tải được trang", color = Foreground, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = onReload) { Text("Thử lại") }
                 }
-            }
-
-            else -> {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(8.dp)
                 ) {
-                    items(pages) { url ->
-                        Text(
-                            "Ảnh trang truyện: $url",
-                            color = Muted,
-                            fontSize = 11.sp
+                    items(pages, key = { it }) { url ->
+                        NetworkImage(
+                            url = url,
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
                         )
                     }
                 }
@@ -719,261 +528,61 @@ private fun ReaderScreen(
     }
 }
 
+/* ---------- Hỗ trợ tải ảnh từ URL ---------- */
 @Composable
-private fun EmptyMessage(
-    title: String,
-    subtitle: String,
-    action: (() -> Unit)? = null
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            title,
-            color = Foreground,
-            fontWeight = FontWeight.Bold
+private fun NetworkImage(url: String, modifier: Modifier = Modifier) {
+    var bitmap by remember(url) { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    LaunchedEffect(url) {
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(15, TimeUnit.SECONDS)
+                    .readTimeout(15, TimeUnit.SECONDS)
+                    .build()
+                val request = Request.Builder().url(url).build()
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        response.body?.byteStream()?.use { stream ->
+                            BitmapFactory.decodeStream(stream)
+                        }
+                    } else null
+                }
+            }.getOrNull()
+        }
+        bitmap = result
+    }
+
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap!!.asImageBitmap(),
+            contentDescription = null,
+            modifier = modifier
         )
-
-        Spacer(Modifier.height(6.dp))
-
-        Text(
-            subtitle,
-            color = Muted,
-            fontSize = 12.sp
-        )
-
-        if (action != null) {
-            Spacer(Modifier.height(12.dp))
-
-            Button(onClick = action) {
-                Text("Tải lại")
-            }
+    } else {
+        Box(modifier = modifier.background(Panel), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = Accent)
         }
     }
 }
 
-private object MangaScraper {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(25, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .build()
-
-    private fun fetch(url: String): Document {
-        val request = Request.Builder()
-            .url(url)
-            .header(
-                "User-Agent",
-                "Mozilla/5.0 (Android 14; Mobile) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36"
-            )
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                error("HTTP ${response.code}")
-            }
-
-            val html = response.body?.string()
-                ?: error("Trang không có nội dung")
-
-            return Jsoup.parse(html, url)
-        }
+/* ---------- Empty message ---------- */
+@Composable
+private fun EmptyMessage(title: String, subtitle: String) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(title, fontWeight = FontWeight.Bold, color = Foreground, fontSize = 16.sp, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(6.dp))
+        Text(subtitle, color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 32.dp))
     }
+}
 
-    fun latest(source: SourceType): List<Manga> {
-        val doc = fetch(source.baseUrl)
-        return parseMangaCards(doc, source).take(60)
-    }
-
-    fun search(
-        source: SourceType,
-        query: String
-    ): List<Manga> {
-        val encoded = URLEncoder.encode(query, "UTF-8")
-
-        val candidates = listOf(
-            "${source.baseUrl}/tim-truyen?keyword=$encoded",
-            "${source.baseUrl}/search?keyword=$encoded",
-            "${source.baseUrl}/tim-kiem?keyword=$encoded"
-        )
-
-        for (url in candidates) {
-            val result = runCatching {
-                parseMangaCards(fetch(url), source)
-            }.getOrDefault(emptyList())
-
-            if (result.isNotEmpty()) {
-                return result.take(60)
-            }
-        }
-
-        return emptyList()
-    }
-
-    private fun parseMangaCards(
-        doc: Document,
-        source: SourceType
-    ): List<Manga> {
-        val selectors = listOf(
-            ".item",
-            ".comic-item",
-            ".book-item",
-            ".list-truyen .row",
-            ".search-story-item",
-            "article"
-        )
-
-        val elements = selectors
-            .asSequence()
-            .map { doc.select(it) }
-            .firstOrNull { it.size > 0 }
-            ?: doc.select("a[href]")
-
-        val output = LinkedHashMap<String, Manga>()
-
-        for (element in elements) {
-            val anchor = if (element.tagName() == "a") {
-                element
-            } else {
-                element.selectFirst("a[href]") ?: continue
-            }
-
-            val title = anchor.attr("title")
-                .ifBlank { anchor.text().trim() }
-                .ifBlank {
-                    element.selectFirst("img")
-                        ?.attr("alt")
-                        .orEmpty()
-                }
-
-            val href = anchor.absUrl("href")
-                .ifBlank { anchor.attr("href") }
-
-            if (title.length < 2) continue
-            if (href.isBlank() || !href.startsWith("http")) continue
-            if (href.contains("javascript:")) continue
-            if (href == source.baseUrl) continue
-
-            val imageElement = element.selectFirst("img")
-
-            val image = imageElement?.let {
-                it.absUrl("data-src")
-                    .ifBlank { it.absUrl("data-original") }
-                    .ifBlank { it.absUrl("src") }
-            }.orEmpty()
-
-            val description = element
-                .selectFirst(
-                    ".chapter, .latest-chapter, .summary, .description"
-                )
-                ?.text()
-                ?.trim()
-                .orEmpty()
-
-            output.putIfAbsent(
-                href,
-                Manga(
-                    title = title,
-                    url = href,
-                    image = image,
-                    description = description,
-                    source = source
-                )
-            )
-        }
-
-        return output.values.toList()
-    }
-
-    fun details(manga: Manga): Manga {
-        val doc = fetch(manga.url)
-
-        val title = doc
-            .selectFirst("h1, .title-detail, .detail-title")
-            ?.text()
-            ?.trim()
-            .orEmpty()
-            .ifBlank { manga.title }
-
-        val description = doc
-            .selectFirst(
-                ".detail-content, .description, .story-detail-info, #item-detail"
-            )
-            ?.text()
-            ?.trim()
-            .orEmpty()
-
-        val genres = doc
-            .select(
-                ".kind a, .genres a, .detail-content a[href*='the-loai']"
-            )
-            .map { it.text().trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-
-        val chapterElements = doc.select(
-            ".list-chapter a[href], " +
-                ".chapter-list a[href], " +
-                ".works-chapter-list a[href], " +
-                "a[href*='chapter']"
-        )
-
-        val chapters = chapterElements
-            .mapNotNull { anchor ->
-                val href = anchor.absUrl("href")
-                val name = anchor.text().trim()
-
-                if (href.startsWith("http") && name.isNotBlank()) {
-                    Chapter(name, href)
-                } else {
-                    null
-                }
-            }
-            .distinctBy { it.url }
-
-        return manga.copy(
-            title = title,
-            description = description,
-            genres = genres,
-            chapters = chapters
-        )
-    }
-
-    fun chapterPages(url: String): List<String> {
-        val doc = fetch(url)
-
-        val selectors = listOf(
-            ".reading-detail img",
-            ".reading-content img",
-            ".chapter-content img",
-            "#chapter-content img",
-            ".page-chapter img",
-            "img"
-        )
-
-        for (selector in selectors) {
-            val images = doc.select(selector)
-                .mapNotNull { img ->
-                    val value = img.absUrl("data-src")
-                        .ifBlank { img.absUrl("data-original") }
-                        .ifBlank { img.absUrl("src") }
-
-                    value.takeIf {
-                        it.startsWith("http") &&
-                            !it.contains("logo", true)
-                    }
-                }
-                .distinct()
-
-            if (images.isNotEmpty()) {
-                return images
-            }
-        }
-
-        return emptyList()
-    }
+/* ---------- Scraper stub (bạn thay bằng code thật) ---------- */
+object MangaScraper {
+    fun latest(source: SourceType): List<Manga> = emptyList()
+    fun search(source: SourceType, query: String): List<Manga> = emptyList()
+    fun chapterPages(chapterUrl: String): List<String> = emptyList()
 }

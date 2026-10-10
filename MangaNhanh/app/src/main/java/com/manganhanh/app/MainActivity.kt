@@ -452,7 +452,7 @@ fun HomeView(
             )
         }
 
-        if (loading) {
+                if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AccentColor)
             }
@@ -461,4 +461,260 @@ fun HomeView(
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     contentPadding = PaddingValues(16.dp),
-                    ho
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(genres) { genre ->
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(CardBg)
+                                .clickable { selectedGenre = genre }
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(genre.name, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
+                }
+            } else {
+                if (tab == 2 && selectedGenre != null) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Thể loại: ${selectedGenre!!.name}", color = AccentColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { selectedGenre = null }) {
+                            Text("Đổi thể loại", color = TextSub, fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(list) { m ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(CardBg)
+                                .clickable { onSelectManga(m) }
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(context).data(m.cover).crossfade(true).build(),
+                                imageLoader = loader,
+                                contentDescription = m.title,
+                                modifier = Modifier.size(70.dp, 95.dp).clip(RoundedCornerShape(8.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                            Spacer(Modifier.width(14.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(m.title, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Spacer(Modifier.height(6.dp))
+                                Text(m.latestChap, color = AccentColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DetailView(
+    manga: Manga,
+    isFav: Boolean,
+    onToggleFav: () -> Unit,
+    onRead: (Chapter, List<Chapter>) -> Unit,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    var desc by remember { mutableStateOf("Đang tải dữ liệu...") }
+    var chaps by remember { mutableStateOf<List<Chapter>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    val loader = remember(manga.source) { buildCoilLoader(context, Sources.getBase(manga.source)) }
+
+    LaunchedEffect(manga.link) {
+        val (d, c) = Scraper.loadDetails(manga)
+        desc = d
+        chaps = c
+        loading = false
+    }
+
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, null, tint = TextMain)
+            }
+            Text("Chi tiết", color = TextMain, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = onToggleFav) {
+                Icon(if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = AccentColor)
+            }
+        }
+
+        Row(Modifier.fillMaxWidth().padding(16.dp)) {
+            AsyncImage(
+                model = ImageRequest.Builder(context).data(manga.cover).crossfade(true).build(),
+                imageLoader = loader,
+                contentDescription = null,
+                modifier = Modifier.size(95.dp, 135.dp).clip(RoundedCornerShape(10.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(manga.title, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 3)
+                Spacer(Modifier.height(8.dp))
+                Text(manga.latestChap, color = AccentColor, fontSize = 13.sp)
+            }
+        }
+
+        Text(
+            text = desc,
+            color = TextSub,
+            fontSize = 13.sp,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+
+Spacer(Modifier.height(14.dp))
+        Text(
+            "DANH SÁCH CHƯƠNG (${chaps.size})",
+            color = TextMain,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = AccentColor)
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(chaps) { chap ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(CardBg)
+                            .clickable { onRead(chap, chaps) }
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(chap.title, color = TextMain, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Text("Đọc ngay", color = AccentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ReaderView(
+    manga: Manga,
+    chapter: Chapter,
+    allChapters: List<Chapter>,
+    onBack: () -> Unit,
+    onSelectChapter: (Chapter) -> Unit
+) {
+    val context = LocalContext.current
+    var pages by remember { mutableStateOf<List<String>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    val loader = remember(chapter.source) { buildCoilLoader(context, Sources.getBase(chapter.source)) }
+
+    val currentIndex = allChapters.indexOfFirst { it.link == chapter.link }
+    val prevChapter = if (currentIndex != -1 && currentIndex < allChapters.size - 1) allChapters[currentIndex + 1] else null
+    val nextChapter = if (currentIndex != -1 && currentIndex > 0) allChapters[currentIndex - 1] else null
+
+    LaunchedEffect(chapter.link) {
+        loading = true
+        pages = Scraper.loadPages(chapter)
+        loading = false
+    }
+
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = AccentColor)
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxSize()) {
+                items(pages) { url ->
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(url)
+                            .crossfade(true)
+                            .build(),
+                        imageLoader = loader,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                        contentScale = ContentScale.FillWidth
+                    )
+                }
+            }
+        }
+
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .background(Color.Black.copy(alpha = 0.85f))
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Default.ArrowBack, null, tint = Color.White)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(manga.title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(chapter.title, color = Color.LightGray, fontSize = 11.sp, maxLines = 1)
+                }
+
+                IconButton(
+                    onClick = { if (prevChapter != null) onSelectChapter(prevChapter) },
+                    enabled = prevChapter != null
+                ) {
+                    Icon(
+                        Icons.Default.KeyboardArrowLeft,
+                        contentDescription = "Chap trước",
+                        tint = if (prevChapter != null) Color.White else Color.DarkGray
+                    )
+                }
+
+                IconButton(
+                    onClick = { if (nextChapter != null) onSelectChapter(nextChapter) },
+                    enabled = nextChapter != null
+                ) {
+                    Icon(
+                        Icons.Default.KeyboardArrowRight,
+                        contentDescription = "Chap sau",
+                        tint = if (nextChapter != null) Color.White else Color.DarkGray
+                    )
+                }
+            }
+        }
+    }
+}
+

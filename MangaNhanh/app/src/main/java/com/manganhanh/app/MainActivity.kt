@@ -32,8 +32,8 @@ private val Surface = Color(0xFF1B1D22)
 private val Muted = Color(0xFF9A9DA6)
 private val Accent = Color(0xFFE8E9ED)
 
- data class Chapter(val number: Int, val title: String = "Chương $number", val updated: String = "Chưa có dữ liệu nguồn")
- data class Manga(val id: Int, val title: String, val genre: String, val latest: Int, val description: String)
+data class Chapter(val number: Int, val title: String = "Chương $number", val updated: String = "Chưa có dữ liệu nguồn")
+data class Manga(val id: Int, val title: String, val genre: String, val latest: Int, val description: String)
 
 private val demoManga = listOf(
     Manga(1, "Thợ Săn Bóng Đêm", "Hành động · Fantasy", 128, "Một thợ săn trẻ khám phá sức mạnh bí ẩn và bước vào thế giới đầy quái vật."),
@@ -164,7 +164,8 @@ fun DetailScreen(manga: Manga, favorite: Boolean, lastRead: Int?, onBack: () -> 
         Text("DANH SÁCH CHƯƠNG", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
         Spacer(Modifier.height(8.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items((1..minOf(manga.latest, 30)).reversed()) { n ->
+            val chapters = (1..minOf(manga.latest, 30)).reversed().toList()
+            items(chapters) { n ->
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Surface).clickable { onRead(n) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Chương $n", color = Accent, modifier = Modifier.weight(1f))
                     Text(if (n == lastRead) "Đang đọc" else "Đọc", color = Muted, fontSize = 12.sp)

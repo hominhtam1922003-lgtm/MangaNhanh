@@ -9,26 +9,37 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 
 private val DarkBg = Color(0xFF0F1015)
+private val CardBg = Color(0xFF181A20)
+private val AccentColor = Color(0xFFFF5252)
+private val TextSub = Color(0xFF8A8F9E)
+
+data class MangaSource(val name: String, val url: String)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(background = DarkBg)) {
+            MaterialTheme(colorScheme = darkColorScheme(background = DarkBg, surface = CardBg)) {
                 Surface(Modifier.fillMaxSize(), color = DarkBg) {
-                    // Bạn có thể đổi link trực tiếp tại đây: "https://nettruyen.gg/" hoặc "https://goctruyentranhvui30.com/"
-                    WebViewApp(initialUrl = "https://nettruyen.gg/")
+                    MultiSourceWebViewApp()
                 }
             }
         }
@@ -37,48 +48,94 @@ class MainActivity : ComponentActivity() {
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun WebViewApp(initialUrl: String) {
+fun MultiSourceWebViewApp() {
+    val sources = remember {
+        listOf(
+            MangaSource("Góc Truyện Tranh", "https://goctruyentranhvui30.com/"),
+            MangaSource("TruyenQQ", "https://truyenqqto.com/"),
+            MangaSource("HentaiVN", "https://hentaivnreal.com/"),
+            MangaSource("MissAV", "https://missav.live/vi/genres?page=2")
+        )
+    }
+
+    var selectedIndex by remember { mutableIntStateOf(0) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
 
-    // Xử lý nút Back trên điện thoại để lùi trang web thay vì văng app
+    // Bấm nút Back trên điện thoại sẽ lùi trang web thay vì thoát app
     BackHandler(enabled = canGoBack) {
         webViewInstance?.goBack()
     }
 
-    AndroidView(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
-        factory = { context ->
-            WebView(context).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    loadWithOverviewMode = true
-                    useWideViewPort = true
-                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                    cacheMode = WebSettings.LOAD_DEFAULT
-                    setSupportZoom(true)
-                    builtInZoomControls = true
-                    displayZoomControls = false
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        // Thanh chọn nguồn lướt ngang ở trên cùng
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(CardBg)
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            sources.forEachIndexed { index, source ->
+                val isSelected = selectedIndex == index
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) AccentColor else DarkBg)
+                        .clickable {
+                            selectedIndex = index
+                            webViewInstance?.loadUrl(source.url)
+                        }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = source.name,
+                        color = if (isSelected) Color.White else TextSub,
+                        fontSize = 13.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
                 }
-                webViewClient = object : WebViewClient() {
-                    override fun onPageFinished(view: WebView?, url: String?) {
-                        super.onPageFinished(view, url)
-                        canGoBack = view?.canGoBack() ?: false
-                    }
-                }
-                loadUrl(initialUrl)
-                webViewInstance = this
             }
-        },
-        update = { webView ->
-            webViewInstance = webView
         }
-    )
+
+        // Khung hiển thị nội dung WebView
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { context ->
+                    WebView(context).apply {
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            loadWithOverviewMode = true
+                            useWideViewPort = true
+                            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                            cacheMode = WebSettings.LOAD_DEFAULT
+                            setSupportZoom(true)
+                            builtInZoomControls = true
+                            displayZoomControls = false
+                        }
+                        webViewClient = object : WebViewClient() {
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                super.onPageFinished(view, url)
+                                canGoBack = view?.canGoBack() ?: false
+                            }
+                        }
+                        loadUrl(sources[selectedIndex].url)
+                        webViewInstance = this
+                    }
+                },
+                update = { webView ->
+                    webViewInstance = webView
+                }
+            )
+        }
+    }
 }

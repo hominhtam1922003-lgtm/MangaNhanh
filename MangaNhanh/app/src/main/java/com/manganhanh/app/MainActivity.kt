@@ -37,8 +37,6 @@ import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
@@ -97,10 +95,8 @@ object Sources {
     var netTruyenDomain = "https://nettruyen.gg"
     var truyenQqDomain = "https://truyenqqko.com"
 
-    // Tối ưu kết nối mạng ngầm đồng thời (Connection Pooling) để tải cực nhanh
     private val client = OkHttpClient.Builder()
-        .connectTimeout(4, TimeUnit.SECONDS)
-        .readTimeout(4, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
         .connectionPool(ConnectionPool(20, 5L, TimeUnit.MINUTES))
         .build()
 
@@ -124,30 +120,29 @@ object Sources {
 
 object Scraper {
     suspend fun loadManga(source: SourceType, query: String = "", genreUrl: String = "", isRanking: Boolean = false): List<Manga> = withContext(Dispatchers.IO) {
+        val list = mutableListOf<Manga>()
         val base = Sources.getBase(source)
-        val targetUrl = when {
-            genreUrl.isNotBlank() -> genreUrl
-            query.isNotBlank() -> {
-                if (source == SourceType.NETTRUYEN) "$base/tim-truyen?keyword=${URLEncoder.encode(query, "UTF-8")}"
-                else "$base/tim-kiem/trang-1.html?q=${URLEncoder.encode(query, "UTF-8")}"
-            }
-            isRanking -> {
-                if (source == SourceType.NETTRUYEN) "$base/hot"
-                else "$base/truyen-hot.html"
-            }
-            else -> {
-                if (source == SourceType.NETTRUYEN) "$base/trang-chu"
-                else "$base/truyen-moi-cap-nhat.html"
-            }
-        }
-
         try {
-            val doc = Jsoup.connect(targetUrl).userAgent(UA).referrer(base).timeout(10000).get()
-            val list = mutableListOf<Manga>()
+            val targetUrl = when {
+                genreUrl.isNotBlank() -> genreUrl
+                query.isNotBlank() -> {
+                    if (source == SourceType.NETTRUYEN) "$base/tim-truyen?keyword=${URLEncoder.encode(query, "UTF-8")}"
+                    else "$base/tim-kiem/trang-1.html?q=${URLEncoder.encode(query, "UTF-8")}"
+                }
+                isRanking -> {
+                    if (source == SourceType.NETTRUYEN) "$base/hot"
+                    else "$base/truyen-hot.html"
+                }
+                else -> {
+                    if (source == SourceType.NETTRUYEN) "$base/trang-chu"
+                    else "$base/truyen-moi-cap-nhat.html"
+                }
+            }
+
+            val doc = Jsoup.connect(targetUrl).userAgent(UA).referrer(base).timeout(15000).get()
 
             if (source == SourceType.NETTRUYEN) {
-                val items = doc.select(".items .item, .list-items .item, div.item")
-                for (item in items) {
+                for (item in doc.select(".items .item, .list-items .item, div.item")) {
                     val titleEl = item.select(".title a, h3 a, figcaption a").first() ?: continue
                     val title = titleEl.text().trim()
                     var link = titleEl.attr("href")
@@ -162,8 +157,7 @@ object Scraper {
                     if (title.isNotBlank()) list.add(Manga(title, link, img, chap, source))
                 }
             } else {
-                val items = doc.select(".row .item, ul.list_grid li, ul.grid li, .list-stories li, .book_list li")
-                for (item in items) {
+                for (item in doc.select(".row .item, ul.list_grid li, ul.grid li, .list-stories li, .book_list li")) {
                     val titleEl = item.select(".book_name h3 a, .title-book a, .book_name a, h3 a").first() ?: continue
                     val title = titleEl.attr("title").ifBlank { titleEl.text().trim() }
                     var link = titleEl.attr("href")
@@ -178,82 +172,93 @@ object Scraper {
                     if (title.isNotBlank()) list.add(Manga(title, link, img, chap, source))
                 }
             }
-            return@withContext list
-        } catch (_: Exception) {
-            return@withContext emptyList()
-        }
+        } catch (_: Exception) {}
+        list
     }
 
     suspend fun loadGenres(source: SourceType): List<Genre> = withContext(Dispatchers.IO) {
+        val genres = mutableListOf<Genre>()
         val base = Sources.getBase(source)
         try {
-            val doc = Jsoup.connect(base).userAgent(UA).referrer(base).timeout(10000).get()
+            val doc = Jsoup.connect(base).userAgent(UA).referrer(base).timeout(15000).get()
             val elements = if (source == SourceType.NETTRUYEN) {
                 doc.select(".nav-item.dropdown ul.dropdown-menu li a, .sub-menu li a, .genre-item a")
             } else {
                 doc.select(".genre-item a, .menu-list li a, .TopNavGenres li a")
             }
-            val genres = elements.mapNotNull { el ->
+            for (el in elements) {
                 val name = el.text().trim()
                 var href = el.attr("href")
                 if (href.isNotBlank() && name.isNotBlank()) {
                     if (!href.startsWith("http")) href = if (href.startsWith("/")) "$base$href" else "$base/$href"
-                    Genre(name, href)
-                } else null
-            }.distinctBy { it.url }
-
-            if (genres.isNotEmpty()) return@withContext genres
+                    if (genres.none { it.url == href }) {
+                        genres.add(Genre(name, href))
+                    }
+                }
+            }
         } catch (_: Exception) {}
-
-        // Fallback danh sách thể loại nhanh
-        listOf(
-            Genre("Action", "$base/tim-truyen/action"),
-            Genre("Adventure", "$base/tim-truyen/adventure"),
-            Genre("Comedy", "$base/tim-truyen/comedy"),
-            Genre("Drama", "$base/tim-truyen/drama"),
-            Genre("Fantasy", "$base/tim-truyen/fantasy"),
-            Genre("Romance", "$base/tim-truyen/romance"),
-            Genre("Manhua", "$base/tim-truyen/manhua"),
-            Genre("Manhwa", "$base/tim-truyen/manhwa")
-        )
+        
+        if (genres.isEmpty()) {
+            genres.add(Genre("Action", "$base/tim-truyen/action"))
+            genres.add(Genre("Adventure", "$base/tim-truyen/adventure"))
+            genres.add(Genre("Comedy", "$base/tim-truyen/comedy"))
+            genres.add(Genre("Drama", "$base/tim-truyen/drama"))
+            genres.add(Genre("Fantasy", "$base/tim-truyen/fantasy"))
+            genres.add(Genre("Romance", "$base/tim-truyen/romance"))
+            genres.add(Genre("Manhua", "$base/tim-truyen/manhua"))
+            genres.add(Genre("Manhwa", "$base/tim-truyen/manhwa"))
+        }
+        genres
     }
 
     suspend fun loadDetails(manga: Manga): Pair<String, List<Chapter>> = withContext(Dispatchers.IO) {
+        val chapters = mutableListOf<Chapter>()
+        var desc = "Đang cập nhật giới thiệu..."
         val base = Sources.getBase(manga.source)
         try {
-            val doc = Jsoup.connect(manga.link).userAgent(UA).referrer(base).timeout(10000).get()
-            val desc = doc.select(".detail-content p, .comic-description, .detail-summary, .story-detail-info").first()?.text()?.trim() ?: "Đang cập nhật giới thiệu..."
+            val doc: Document = Jsoup.connect(manga.link).userAgent(UA).referrer(base).timeout(15000).get()
+            
+            val descEl = doc.select(".detail-content p, .comic-description, .detail-summary, .story-detail-info").first()
+            if (descEl != null && descEl.text().isNotBlank()) {
+                desc = descEl.text().trim()
+            }
 
-            val rows = doc.select(".list-chapter li, #nt_listchapter li, .chapter-list div.row, .works-chapter-list .works-chapter-item, .list_chapter li, .chap-list .row")
-            var chapters = rows.mapNotNull { row ->
-                val a = row.select("a").first() ?: return@mapNotNull null
+            val rows: Elements = doc.select(".list-chapter li, #nt_listchapter li, .chapter-list div.row, .works-chapter-list .works-chapter-item, .list_chapter li, .chap-list .row")
+            for (row: Element in rows) {
+                val a: Element = row.select("a").first() ?: continue
                 val t = a.text().trim()
                 var url = a.attr("href")
-                if (!url.startsWith("http")) url = if (url.startsWith("/")) "$base$url" else "$base/$url"
-                if (t.isNotBlank()) Chapter(t, url, manga.source) else null
-            }.distinctBy { it.link }
-
+                if (!url.startsWith("http")) {
+                    url = if (url.startsWith("/")) "$base$url" else "$base/$url"
+                }
+                if (t.isNotBlank() && chapters.none { it.link == url }) {
+                    chapters.add(Chapter(t, url, manga.source))
+                }
+            }
+            
             if (chapters.isEmpty()) {
-                chapters = doc.select(".list-chapter a, #nt_listchapter a, .list_chapter a, .chap-list a").mapNotNull { a ->
+                val directLinks = doc.select(".list-chapter a, #nt_listchapter a, .list_chapter a, .chap-list a")
+                for (a in directLinks) {
                     val t = a.text().trim()
                     var url = a.attr("href")
-                    if (!url.startsWith("http")) url = if (url.startsWith("/")) "$base$url" else "$base/$url"
-                    if (t.isNotBlank()) Chapter(t, url, manga.source) else null
-                }.distinctBy { it.link }
+                    if (!url.startsWith("http")) {
+                        url = if (url.startsWith("/")) "$base$url" else "$base/$url"
+                    }
+                    if (t.isNotBlank() && chapters.none { it.link == url }) {
+                        chapters.add(Chapter(t, url, manga.source))
+                    }
+                }
             }
-            Pair(desc, chapters)
-        } catch (_: Exception) {
-            Pair("Không thể tải thông tin.", emptyList())
-        }
+        } catch (_: Exception) {}
+        Pair(desc, chapters)
     }
 
     suspend fun loadPages(chapter: Chapter): List<String> = withContext(Dispatchers.IO) {
+        val pages = mutableListOf<String>()
         val base = Sources.getBase(chapter.source)
         try {
-            val doc = Jsoup.connect(chapter.link).userAgent(UA).referrer(base).timeout(10000).get()
-            val elements = doc.select(".page-chapter img, .reading-detail img, .chapter-content img, .story-see-content img")
-            
-            elements.mapNotNull { img ->
+            val doc = Jsoup.connect(chapter.link).userAgent(UA).referrer(base).timeout(15000).get()
+            for (img in doc.select(".page-chapter img, .reading-detail img, .chapter-content img, .story-see-content img")) {
                 var src = img.attr("data-original").orEmpty().ifBlank {
                     img.attr("data-src").orEmpty().ifBlank {
                         img.attr("data-cdn").orEmpty().ifBlank { img.attr("src").orEmpty() }
@@ -263,11 +268,12 @@ object Scraper {
                 else if (src.isNotBlank() && !src.startsWith("http")) src = "$base/$src"
 
                 val lower = src.lowercase()
-                if (src.isNotBlank() && !lower.contains("banner") && !lower.contains("logo") && !lower.contains("icon")) src else null
+                if (src.isNotBlank() && !lower.contains("banner") && !lower.contains("logo") && !lower.contains("icon")) {
+                    pages.add(src)
+                }
             }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        } catch (_: Exception) {}
+        pages
     }
 }
 
@@ -306,12 +312,16 @@ fun MangaApp() {
         Surface(Modifier.fillMaxSize(), color = DarkBg) {
             when {
                 readingSession != null && curManga != null -> {
+                    val currentChap = readingSession!!.first
+                    val allChaps = readingSession!!.second
                     ReaderView(
                         manga = curManga!!,
-                        chapter = readingSession!!.first,
-                        allChapters = readingSession!!.second,
+                        chapter = currentChap,
+                        allChapters = allChaps,
                         onBack = { readingSession = null },
-                        onSelectChapter = { newChap -> readingSession = Pair(newChap, readingSession!!.second) }
+                        onSelectChapter = { newChap ->
+                            readingSession = Pair(newChap, allChaps)
+                        }
                     )
                 }
                 curManga != null -> {
@@ -321,7 +331,9 @@ fun MangaApp() {
                         onToggleFav = {
                             favorites = if (favorites.contains(curManga!!.link)) favorites - curManga!!.link else favorites + curManga!!.link
                         },
-                        onRead = { chap, listChaps -> readingSession = Pair(chap, listChaps) },
+                        onRead = { chap, listChaps -> 
+                            readingSession = Pair(chap, listChaps) 
+                        },
                         onBack = { curManga = null }
                     )
                 }
@@ -385,7 +397,10 @@ fun HomeView(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (active) AccentColor else CardBg)
-                            .clickable { onSourceChange(s); selectedGenre = null }
+                            .clickable { 
+                                onSourceChange(s)
+                                selectedGenre = null
+                            }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         fontSize = 12.sp
                     )
@@ -408,7 +423,10 @@ fun HomeView(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(if (active) Color(0xFF2A2E3D) else CardBg)
-                        .clickable { tab = index; if (index != 2) selectedGenre = null }
+                        .clickable { 
+                            tab = index
+                            if (index != 2) selectedGenre = null
+                        }
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 )
             }
@@ -443,15 +461,4 @@ fun HomeView(
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(genres) { genre ->
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(CardBg)
-                                .clickable { selectedGenre = genre }
-                               
+                    ho

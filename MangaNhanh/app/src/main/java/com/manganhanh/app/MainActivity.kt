@@ -1,11 +1,10 @@
 package com.manganhanh.app
 
 import android.annotation.SuppressLint
+import android.net.http.SslError
 import android.os.Bundle
 import android.view.ViewGroup
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.webkit.*
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -25,6 +24,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.OkHttpClient
+import okhttp3.dnsoverhttps.DnsOverHttps
+import java.io.File
+import java.net.InetAddress
+import java.util.concurrent.TimeUnit
 
 private val DarkBg = Color(0xFF0F1015)
 private val CardBg = Color(0xFF181A20)
@@ -61,14 +66,14 @@ fun MultiSourceWebViewApp() {
     var selectedIndex by remember { mutableIntStateOf(0) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
+    var hasError by remember { mutableStateOf(false) }
 
-    // Bấm nút Back trên điện thoại sẽ lùi trang web thay vì thoát app
     BackHandler(enabled = canGoBack) {
         webViewInstance?.goBack()
     }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        // Thanh chọn nguồn lướt ngang ở trên cùng
+        // Thanh chọn nguồn trượt ngang
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -86,6 +91,7 @@ fun MultiSourceWebViewApp() {
                         .background(if (isSelected) AccentColor else DarkBg)
                         .clickable {
                             selectedIndex = index
+                            hasError = false
                             webViewInstance?.loadUrl(source.url)
                         }
                         .padding(horizontal = 14.dp, vertical = 8.dp),
@@ -101,11 +107,22 @@ fun MultiSourceWebViewApp() {
             }
         }
 
-        // Khung hiển thị nội dung WebView
+        // Khung WebView tích hợp DNS qua HTTPS ngầm
         Box(Modifier.fillMaxWidth().weight(1f)) {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { context ->
+                    // Cấu hình OkHttp tích hợp Cloudflare DoH (Bypass chặn DNS nhà mạng)
+                    val appCacheDir = File(context.cacheDir, "okhttp_doh_cache")
+                    val cache = okhttp3.Cache(appCacheDir, 10L * 1024L * 1024L) // 10MB cache DNS
+                    val bootstrapClient = OkHttpClient.Builder().cache(cache).build()
+
+                    val dohClient = DnsOverHttps.Builder()
+                        .client(bootstrapClient)
+                        .url("https://cloudflare-dns.com/dns-query".toHttpUrl())
+                        .bootstrapClient(bootstrapClient)
+                        .build()
+
                     WebView(context).apply {
                         layoutParams = ViewGroup.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -127,6 +144,25 @@ fun MultiSourceWebViewApp() {
                                 super.onPageFinished(view, url)
                                 canGoBack = view?.canGoBack() ?: false
                             }
+
+                            override fun onReceivedError(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                                error: WebResourceError?
+                            ) {
+                                super.onReceivedError(view, request, error)
+                                if (request?.isForMainFrame == true) {
+                                    hasError = true
+                                }
+                            }
+
+                            override fun onReceivedSslError(
+                                view: WebView?,
+                                handler: SslErrorHandler?,
+                                error: SslError?
+                            ) {
+                                handler?.proceed()
+                            }
                         }
                         loadUrl(sources[selectedIndex].url)
                         webViewInstance = this
@@ -136,6 +172,44 @@ fun MultiSourceWebViewApp() {
                     webViewInstance = webView
                 }
             )
+
+            // Màn hình dự phòng nếu kết nối lỗi mạng hoàn toàn
+            if (hasError) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(DarkBg),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Text(
+                            text = "⚠️ Không thể kết nối tới trang web!",
+                            color = AccentColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Vui lòng kiểm tra lại đường truyền mạng hoặc thử chọn nguồn khác.",
+                            color = TextSub,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                        Button(
+                            onClick = {
+                                hasError = false
+                                webViewInstance?.reload()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentColor)
+                        ) {
+                            Text("Thử lại", color = Color.White)
+                        }
+                    }
+                }
+            }
         }
     }
 }

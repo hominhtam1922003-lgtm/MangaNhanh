@@ -79,25 +79,32 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-object ApiClient {
+object SafeApiClient {
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     suspend fun getJson(url: String): String = withContext(Dispatchers.IO) {
         try {
-            val req = Request.Builder().url(url).header("User-Agent", UA).build()
+            val req = Request.Builder()
+                .url(url)
+                .header("User-Agent", UA)
+                .header("Accept", "application/json")
+                .build()
             val res = client.newCall(req).execute()
             if (res.isSuccessful) {
                 return@withContext res.body?.string().orEmpty()
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         ""
     }
 }
 
-object Scraper {
+object FastMangaRepository {
     private const val API_BASE = "https://otruyenapi.com/v1/api"
 
     suspend fun loadManga(query: String = "", genreSlug: String = "", isRanking: Boolean = false): List<Manga> = withContext(Dispatchers.IO) {
@@ -110,7 +117,7 @@ object Scraper {
                 else -> "$API_BASE/danh-sach/truyen-moi?page=1"
             }
 
-            val jsonStr = ApiClient.getJson(url)
+            val jsonStr = SafeApiClient.getJson(url)
             if (jsonStr.isBlank()) return@withContext emptyList()
 
             val json = JSONObject(jsonStr)
@@ -120,10 +127,14 @@ object Scraper {
 
             for (i in 0 until items.length()) {
                 val item = items.optJSONObject(i) ?: continue
-                val title = item.optString("name")
-                val slug = item.optString("slug")
-                val thumb = item.optString("thumb_url")
-                val cover = if (thumb.startsWith("http")) thumb else "$cdnImage/$thumb"
+                val title = item.optString("name", "Đang cập nhật")
+                val slug = item.optString("slug", "")
+                val thumb = item.optString("thumb_url", "")
+                val cover = when {
+                    thumb.startsWith("http") -> thumb
+                    thumb.isNotBlank() -> "$cdnImage/$thumb"
+                    else -> ""
+                }
                 
                 val chaptersArr = item.optJSONArray("chaptersLatest")
                 val latestChap = if (chaptersArr != null && chaptersArr.length() > 0) {
@@ -134,27 +145,31 @@ object Scraper {
                     list.add(Manga(title, slug, cover, "Chap $latestChap"))
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         list
     }
 
     suspend fun loadGenres(): List<Genre> = withContext(Dispatchers.IO) {
         val genres = mutableListOf<Genre>()
         try {
-            val jsonStr = ApiClient.getJson("$API_BASE/the-loai")
+            val jsonStr = SafeApiClient.getJson("$API_BASE/the-loai")
             if (jsonStr.isNotBlank()) {
                 val json = JSONObject(jsonStr)
                 val items = json.optJSONObject("data")?.optJSONArray("items") ?: JSONArray()
                 for (i in 0 until items.length()) {
                     val item = items.optJSONObject(i) ?: continue
-                    val name = item.optString("name")
-                    val slug = item.optString("slug")
+                    val name = item.optString("name", "")
+                    val slug = item.optString("slug", "")
                     if (name.isNotBlank() && slug.isNotBlank()) {
                         genres.add(Genre(name, slug))
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         if (genres.isEmpty()) {
             genres.add(Genre("Action", "action"))
@@ -171,7 +186,7 @@ object Scraper {
         val chapters = mutableListOf<Chapter>()
         var desc = "Đang cập nhật giới thiệu..."
         try {
-            val jsonStr = ApiClient.getJson("$API_BASE/truyen/${manga.link}")
+            val jsonStr = SafeApiClient.getJson("$API_BASE/truyen/${manga.link}")
             if (jsonStr.isBlank()) return@withContext Pair(desc, chapters)
 
             val json = JSONObject(jsonStr)
@@ -186,42 +201,54 @@ object Scraper {
                 val serverChapList = server.optJSONArray("server_data") ?: continue
                 for (j in 0 until serverChapList.length()) {
                     val chap = serverChapList.optJSONObject(j) ?: continue
-                    val name = chap.optString("chapter_name")
-                    val apiServer = chap.optString("chapter_api_data")
+                    val name = chap.optString("chapter_name", "")
+                    val apiServer = chap.optString("chapter_api_data", "")
                     if (name.isNotBlank() && apiServer.isNotBlank()) {
                         chapters.add(Chapter("Chap $name", apiServer))
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         Pair(desc, chapters)
     }
 
     suspend fun loadPages(chapter: Chapter): List<String> = withContext(Dispatchers.IO) {
         val pages = mutableListOf<String>()
         try {
-            val jsonStr = ApiClient.getJson(chapter.link)
+            val jsonStr = SafeApiClient.getJson(chapter.link)
             if (jsonStr.isBlank()) return@withContext emptyList()
 
             val json = JSONObject(jsonStr)
             val data = json.optJSONObject("data") ?: return@withContext emptyList()
-            val domainCdn = data.optString("domain_cdn")
-            val chapterPath = data.optString("chapter_path")
+            val domainCdn = data.optString("domain_cdn", "")
+            val chapterPath = data.optString("chapter_path", "")
             val chapterImages = data.optJSONArray("chapter_image") ?: JSONArray()
 
             for (i in 0 until chapterImages.length()) {
-                val img = chapterImages.optString(i)
+                val imgObj = chapterImages.optJSONObject(i)
+                val img = imgObj?.optString("image_file", "") ?: chapterImages.optString(i, "")
                 if (img.isNotBlank()) {
-                    pages.add("$domainCdn/$chapterPath/$img")
+                    val fullUrl = if (img.startsWith("http")) img else "$domainCdn/$chapterPath/$img"
+                    pages.add(fullUrl)
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         pages
     }
 }
 
 fun buildCoilLoader(context: Context): ImageLoader {
+    val okHttpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
+
     return ImageLoader.Builder(context)
+        .okHttpClient(okHttpClient)
         .diskCachePolicy(CachePolicy.ENABLED)
         .memoryCachePolicy(CachePolicy.ENABLED)
         .crossfade(true)
@@ -273,25 +300,23 @@ fun HomeView(
     onSelectManga: (Manga) -> Unit,
     favorites: Set<String>
 ) {
-    val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     var tab by remember { mutableIntStateOf(0) }
     var selectedGenre by remember { mutableStateOf<Genre?>(null) }
     var list by remember { mutableStateOf<List<Manga>>(emptyList()) }
     var genres by remember { mutableStateOf<List<Genre>>(emptyList()) }
-    var loading by remember { mutableStateOf(false) }
-    val loader = remember { buildCoilLoader(context) }
+    var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(tab, selectedGenre, query) {
         loading = true
         if (tab == 2 && genres.isEmpty()) {
-            genres = Scraper.loadGenres()
+            genres = FastMangaRepository.loadGenres()
         }
         list = when {
-            tab == 1 -> Scraper.loadManga(isRanking = true)
-            tab == 2 && selectedGenre != null -> Scraper.loadManga(genreSlug = selectedGenre!!.url)
-            tab == 3 -> Scraper.loadManga(query).filter { favorites.contains(it.link) }
-            else -> Scraper.loadManga(query)
+            tab == 1 -> FastMangaRepository.loadManga(isRanking = true)
+            tab == 2 && selectedGenre != null -> FastMangaRepository.loadManga(genreSlug = selectedGenre!!.url)
+            tab == 3 -> FastMangaRepository.loadManga(query).filter { favorites.contains(it.link) }
+            else -> FastMangaRepository.loadManga(query)
         }
         loading = false
     }
@@ -391,41 +416,49 @@ fun HomeView(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(list) { m ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(CardBg)
-                                .clickable { onSelectManga(m) }
-                                .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context).data(m.cover).crossfade(true).build(),
-                                imageLoader = loader,
-                                contentDescription = m.title,
-                                modifier = Modifier.size(70.dp, 95.dp).clip(RoundedCornerShape(8.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                            Spacer(Modifier.width(14.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(m.title, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Spacer(Modifier.height(6.dp))
-                                Text(m.latestChap, color = AccentColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
+                        MangaItemRow(m, onSelectManga)
                     }
                 }
             }
 
             if (loading) {
                 Box(
-                    Modifier.fillMaxSize().background(DarkBg.copy(alpha = 0.4f)),
+                    Modifier.fillMaxSize().background(DarkBg.copy(alpha = 0.5f)),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(color = AccentColor)
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun MangaItemRow(m: Manga, onSelectManga: (Manga) -> Unit) {
+    val context = LocalContext.current
+    val loader = remember { buildCoilLoader(context) }
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(CardBg)
+            .clickable { onSelectManga(m) }
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(context).data(m.cover).crossfade(true).build(),
+            imageLoader = loader,
+            contentDescription = m.title,
+            modifier = Modifier.size(70.dp, 95.dp).clip(RoundedCornerShape(8.dp)),
+            contentScale = ContentScale.Crop
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(m.title, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(6.dp))
+            Text(m.latestChap, color = AccentColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -445,7 +478,7 @@ fun DetailView(
     val loader = remember { buildCoilLoader(context) }
 
     LaunchedEffect(manga.link) {
-        val (d, c) = Scraper.loadDetails(manga)
+        val (d, c) = FastMangaRepository.loadDetails(manga)
         desc = d
         chaps = c
         loading = false
@@ -549,7 +582,7 @@ fun ReaderView(
 
     LaunchedEffect(chapter.link) {
         loading = true
-        pages = Scraper.loadPages(chapter)
+        pages = FastMangaRepository.loadPages(chapter)
         loading = false
     }
 

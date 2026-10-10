@@ -41,7 +41,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONObject
+import org.jsoup.Connection
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -56,7 +56,6 @@ private val TextMain = Color(0xFFF0F1F5)
 private val TextSub = Color(0xFF8A8F9E)
 
 private const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-private const val DOMAIN_CONFIG = "https://raw.githubusercontent.com/hominhtam19220/MangaNhanh/main/domains.json"
 
 data class Manga(
     val title: String,
@@ -85,33 +84,43 @@ class MainActivity : ComponentActivity() {
 }
 
 object Sources {
-    var netTruyenDomain = "https://nettruyenvn.info"
+    val domains = listOf("https://nettruyenvn.info", "https://nettruyenin.com", "https://www.nettruyenww.com")
+    var currentDomain = domains[0]
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .connectionPool(ConnectionPool(20, 5L, TimeUnit.MINUTES))
-        .build()
-
-    suspend fun updateDomain() = withContext(Dispatchers.IO) {
-        try {
-            val req = Request.Builder().url(DOMAIN_CONFIG).build()
-            val res = client.newCall(req).execute()
-            val body = res.body?.string().orEmpty()
-            if (body.isNotBlank()) {
-                val json = JSONObject(body)
-                val nt = json.optString("nettruyen")
-                if (nt.isNotBlank()) netTruyenDomain = nt.trimEnd('/')
-            }
-        } catch (_: Exception) {}
+    suspend fun checkWorkingDomain() = withContext(Dispatchers.IO) {
+        for (d in domains) {
+            try {
+                val res = Jsoup.connect(d)
+                    .userAgent(UA)
+                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+                    .header("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7")
+                    .timeout(6000)
+                    .execute()
+                if (res.statusCode() == 200 && res.parse().select(".items .item, .comic-item").isNotEmpty()) {
+                    currentDomain = d
+                    break
+                }
+            } catch (_: Exception) {}
+        }
     }
 }
 
-object Scraper {
-    private val client = OkHttpClient()
+// Hàm tiện ích giúp kết nối Jsoup vượt qua các bộ lọc cơ bản
+fun connectSafe(url: String): Connection {
+    return Jsoup.connect(url)
+        .userAgent(UA)
+        .referrer(Sources.currentDomain)
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+        .header("Accept-Language", "vi-VN,vi;q=0.9")
+        .header("Connection", "keep-alive")
+        .timeout(15000)
+        .followRedirects(true)
+}
 
+object Scraper {
     suspend fun loadManga(query: String = "", genreUrl: String = "", isRanking: Boolean = false): List<Manga> = withContext(Dispatchers.IO) {
         val list = mutableListOf<Manga>()
-        val base = Sources.netTruyenDomain
+        val base = Sources.currentDomain
         try {
             val targetUrl = when {
                 genreUrl.isNotBlank() -> genreUrl
@@ -120,7 +129,7 @@ object Scraper {
                 else -> "$base/trang-chu"
             }
 
-            val doc = Jsoup.connect(targetUrl).userAgent(UA).referrer(base).timeout(15000).get()
+            val doc = connectSafe(targetUrl).get()
 
             for (item in doc.select(".items .item, .list-items .item, div.item, .comic-item")) {
                 val titleEl = item.select(".title a, h3 a, figcaption a, .comic-title a").first() ?: continue
@@ -142,9 +151,9 @@ object Scraper {
 
     suspend fun loadGenres(): List<Genre> = withContext(Dispatchers.IO) {
         val genres = mutableListOf<Genre>()
-        val base = Sources.netTruyenDomain
+        val base = Sources.currentDomain
         try {
-            val doc = Jsoup.connect(base).userAgent(UA).referrer(base).timeout(15000).get()
+            val doc = connectSafe(base).get()
             val elements = doc.select(".nav-item.dropdown ul.dropdown-menu li a, .sub-menu li a, .genre-item a, ul.genre-list li a")
             for (el in elements) {
                 val name = el.text().trim()
@@ -174,25 +183,22 @@ object Scraper {
     suspend fun loadDetails(manga: Manga): Pair<String, List<Chapter>> = withContext(Dispatchers.IO) {
         val chapters = mutableListOf<Chapter>()
         var desc = "Đang cập nhật giới thiệu..."
-        val base = Sources.netTruyenDomain
+        val base = Sources.currentDomain
         try {
-            val doc: Document = Jsoup.connect(manga.link).userAgent(UA).referrer(base).timeout(15000).get()
+            val doc: Document = connectSafe(manga.link).get()
             
             val descEl = doc.select(".detail-content p, .comic-description, .detail-summary, .summary-content").first()
             if (descEl != null && descEl.text().isNotBlank()) {
                 desc = descEl.text().trim()
             }
 
-            // 1. Thử lấy comicId từ trang chi tiết để gọi trực tiếp API lấy full danh sách chương (bỏ qua nút xem thêm)
+            // Bóc tách ID truyện từ trang chi tiết để gọi thẳng vào API lấy full toàn bộ danh sách chương không bị giới hạn 20 chương
             var comicId = ""
-            val idInput = doc.select("#IsLogin, #item-detail, input#comic-id, #rating-form").first()
-            // Hoặc bóc tách từ các thuộc tính data-id trên trang
             val ratingEl = doc.select("[data-id]").first()
             if (ratingEl != null) {
                 comicId = ratingEl.attr("data-id")
             }
             if (comicId.isBlank()) {
-                // Thử tìm trong các thẻ script chứa id truyện
                 for (script in doc.select("script")) {
                     val text = script.html()
                     if (text.contains("comicId") || text.contains("id_comic")) {
@@ -205,11 +211,10 @@ object Scraper {
                 }
             }
 
-            // Nếu tìm được comicId, gọi thẳng API list chương của NetTruyen để lấy sạch 100% chương
             if (comicId.isNotBlank()) {
                 try {
                     val apiLink = "$base/Comic/Chapter/ListChapter?comicId=$comicId"
-                    val apiDoc = Jsoup.connect(apiLink).userAgent(UA).referrer(manga.link).timeout(10000).get()
+                    val apiDoc = connectSafe(apiLink).referrer(manga.link).get()
                     val apiRows = apiDoc.select("li, .row, a")
                     for (el in apiRows) {
                         val a = if (el.tagName() == "a") el else el.select("a").first() ?: continue
@@ -225,7 +230,7 @@ object Scraper {
                 } catch (_: Exception) {}
             }
 
-            // 2. Nếu phương thức API không lấy được, fallback quét toàn bộ các bảng hiển thị sẵn trên trang
+            // Dự phòng quét danh sách thông thường trên trang
             if (chapters.isEmpty()) {
                 val rows: Elements = doc.select("#nt_listchapter li, .list-chapter li, ul.list-chapter li, .chapter-list div.row")
                 for (row: Element in rows) {
@@ -240,32 +245,15 @@ object Scraper {
                     }
                 }
             }
-
-            // 3. Phương thức vét cạn cuối cùng nếu vẫn thiếu
-            if (chapters.isEmpty()) {
-                val directLinks = doc.select("a")
-                for (a in directLinks) {
-                    val t = a.text().trim()
-                    var url = a.attr("href")
-                    if (url.contains("chapter") || url.contains("chap")) {
-                        if (!url.startsWith("http")) {
-                            url = if (url.startsWith("/")) "$base$url" else "$base/$url"
-                        }
-                        if (t.isNotBlank() && chapters.none { it.link == url }) {
-                            chapters.add(Chapter(t, url))
-                        }
-                    }
-                }
-            }
         } catch (_: Exception) {}
         Pair(desc, chapters)
     }
 
     suspend fun loadPages(chapter: Chapter): List<String> = withContext(Dispatchers.IO) {
         val pages = mutableListOf<String>()
-        val base = Sources.netTruyenDomain
+        val base = Sources.currentDomain
         try {
-            val doc = Jsoup.connect(chapter.link).userAgent(UA).referrer(base).timeout(15000).get()
+            val doc = connectSafe(chapter.link).get()
             for (img in doc.select(".page-chapter img, .reading-detail img, .chapter-content img")) {
                 var src = img.attr("data-original").orEmpty().ifBlank {
                     img.attr("data-src").orEmpty().ifBlank {
@@ -290,7 +278,7 @@ fun buildCoilLoader(context: Context): ImageLoader {
         .addInterceptor { chain ->
             val req = chain.request().newBuilder()
                 .header("User-Agent", UA)
-                .header("Referer", Sources.netTruyenDomain)
+                .header("Referer", Sources.currentDomain)
                 .build()
             chain.proceed(req)
         }
@@ -310,39 +298,47 @@ fun MangaApp() {
     var curManga by remember { mutableStateOf<Manga?>(null) }
     var readingSession by remember { mutableStateOf<Pair<Chapter, List<Chapter>>?>(null) }
     var favorites by remember { mutableStateOf(setOf<String>()) }
+    var isInitialized by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        Sources.updateDomain()
+        Sources.checkWorkingDomain()
+        isInitialized = true
     }
 
     MaterialTheme(colorScheme = darkColorScheme(background = DarkBg, surface = CardBg)) {
         Surface(Modifier.fillMaxSize(), color = DarkBg) {
-            when {
-                readingSession != null && curManga != null -> {
-                    ReaderView(
-                        manga = curManga!!,
-                        chapter = readingSession!!.first,
-                        allChapters = readingSession!!.second,
-                        onBack = { readingSession = null },
-                        onSelectChapter = { newChap -> readingSession = Pair(newChap, readingSession!!.second) }
-                    )
+            if (!isInitialized) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = AccentColor)
                 }
-                curManga != null -> {
-                    DetailView(
-                        manga = curManga!!,
-                        isFav = favorites.contains(curManga!!.link),
-                        onToggleFav = {
-                            favorites = if (favorites.contains(curManga!!.link)) favorites - curManga!!.link else favorites + curManga!!.link
-                        },
-                        onRead = { chap, listChaps -> readingSession = Pair(chap, listChaps) },
-                        onBack = { curManga = null }
-                    )
-                }
-                else -> {
-                    HomeView(
-                        onSelectManga = { curManga = it },
-                        favorites = favorites
-                    )
+            } else {
+                when {
+                    readingSession != null && curManga != null -> {
+                        ReaderView(
+                            manga = curManga!!,
+                            chapter = readingSession!!.first,
+                            allChapters = readingSession!!.second,
+                            onBack = { readingSession = null },
+                            onSelectChapter = { newChap -> readingSession = Pair(newChap, readingSession!!.second) }
+                        )
+                    }
+                    curManga != null -> {
+                        DetailView(
+                            manga = curManga!!,
+                            isFav = favorites.contains(curManga!!.link),
+                            onToggleFav = {
+                                favorites = if (favorites.contains(curManga!!.link)) favorites - curManga!!.link else favorites + curManga!!.link
+                            },
+                            onRead = { chap, listChaps -> readingSession = Pair(chap, listChaps) },
+                            onBack = { curManga = null }
+                        )
+                    }
+                    else -> {
+                        HomeView(
+                            onSelectManga = { curManga = it },
+                            favorites = favorites
+                        )
+                    }
                 }
             }
         }

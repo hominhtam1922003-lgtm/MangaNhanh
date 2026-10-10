@@ -480,4 +480,44 @@ fun ReaderView(
         loading = false
     }
 
-    Box(Modifier.fil
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = AccentColor)
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxSize()) {
+                items(pages) { url ->
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(url)
+                            .crossfade(true)
+                            .build(),
+                        imageLoader = loader,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                        contentScale = ContentScale.FillWidth
+                    )
+                }
+            }
+        }
+
+        // Thanh công cụ nổi trên đầu (có nút back)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .background(Color.Black.copy(alpha = 0.75f))
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, null, tint = Color.White)
+            }
+            Column {
+                Text(manga.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(chapter.title, color = Color.LightGray, fontSize = 12.sp)
+            }
+        }
+    }
+}

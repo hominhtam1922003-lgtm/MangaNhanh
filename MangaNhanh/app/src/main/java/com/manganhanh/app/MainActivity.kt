@@ -35,6 +35,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
+import org.jsoup.select.Elements
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
@@ -118,17 +121,17 @@ object ScraperManager {
                     } else {
                         "$base/tim-truyen?keyword=" + URLEncoder.encode(keyword, "UTF-8")
                     }
-                    val doc = Jsoup.connect(url).userAgent(USER_AGENT).referrer(base).timeout(15000).get()
-                    val items = doc.select(".items .item, .list-items .item, div.item")
-                    for (el in items) {
-                        val titleEl = el.select(".title a, h3 a, figcaption a").first() ?: continue
+                    val doc: Document = Jsoup.connect(url).userAgent(USER_AGENT).referrer(base).timeout(15000).get()
+                    val items: Elements = doc.select(".items .item, .list-items .item, div.item")
+                    for (el: Element in items) {
+                        val titleEl: Element = el.select(".title a, h3 a, figcaption a").first() ?: continue
                         val title = titleEl.text().trim()
                         var detailUrl = titleEl.attr("href")
                         if (detailUrl.startsWith("http") == false) {
                             detailUrl = if (detailUrl.startsWith("/")) "$base$detailUrl" else "$base/$detailUrl"
                         }
 
-                        val imgEl = el.select("img").first()
+                        val imgEl: Element? = el.select("img").first()
                         var cover = imgEl?.attr("data-original").orEmpty().ifBlank {
                             imgEl?.attr("data-src").orEmpty().ifBlank {
                                 imgEl?.attr("src").orEmpty()
@@ -152,17 +155,17 @@ object ScraperManager {
                     } else {
                         "$base/tim-kiem/trang-1.html?q=" + URLEncoder.encode(keyword, "UTF-8")
                     }
-                    val doc = Jsoup.connect(url).userAgent(USER_AGENT).referrer(base).timeout(15000).get()
-                    val items = doc.select("ul.list_grid li, ul.grid li, .list-stories li")
-                    for (el in items) {
-                        val titleEl = el.select(".book_avatar a, .book_name a, h3 a").first() ?: continue
+                    val doc: Document = Jsoup.connect(url).userAgent(USER_AGENT).referrer(base).timeout(15000).get()
+                    val items: Elements = doc.select("ul.list_grid li, ul.grid li, .list-stories li")
+                    for (el: Element in items) {
+                        val titleEl: Element = el.select(".book_avatar a, .book_name a, h3 a").first() ?: continue
                         val title = titleEl.attr("title").ifBlank { titleEl.text().trim() }
                         var detailUrl = titleEl.attr("href")
                         if (detailUrl.startsWith("http") == false) {
                             detailUrl = if (detailUrl.startsWith("/")) "$base$detailUrl" else "$base/$detailUrl"
                         }
 
-                        val imgEl = el.select("img").first()
+                        val imgEl: Element? = el.select("img").first()
                         var cover = imgEl?.attr("src").orEmpty().ifBlank {
                             imgEl?.attr("data-src").orEmpty()
                         }
@@ -188,17 +191,17 @@ object ScraperManager {
         var description = "Đang cập nhật tóm tắt..."
         val base = DomainManager.getBase(source)
         try {
-            val doc = Jsoup.connect(detailUrl).userAgent(USER_AGENT).referrer(base).timeout(15000).get()
+            val doc: Document = Jsoup.connect(detailUrl).userAgent(USER_AGENT).referrer(base).timeout(15000).get()
             when (source) {
                 MangaSource.NETTRUYEN -> {
-                    val descEl = doc.select(".detail-content p, .comic-description, .detail-summary").first()
+                    val descEl: Element? = doc.select(".detail-content p, .comic-description, .detail-summary").first()
                     if (descEl != null && descEl.text().isNotBlank()) {
                         description = descEl.text().trim()
                     }
 
-                    val rows = doc.select(".list-chapter li, #nt_listchapter li, .chapter-list div.row")
-                    for (row in rows) {
-                        val a = row.select("a").first() ?: continue
+                    val rows: Elements = doc.select(".list-chapter li, #nt_listchapter li, .chapter-list div.row")
+                    for (row: Element in rows) {
+                        val a: Element = row.select("a").first() ?: continue
                         val t = a.text().trim()
                         var url = a.attr("href")
                         if (url.startsWith("http") == false) {
@@ -210,13 +213,13 @@ object ScraperManager {
                     }
                 }
                 MangaSource.TRUYENQQ -> {
-                    val descEl = doc.select(".story-detail-info, .story-detail-summary, .detail-content").first()
+                    val descEl: Element? = doc.select(".story-detail-info, .story-detail-summary, .detail-content").first()
                     if (descEl != null && descEl.text().isNotBlank()) {
                         description = descEl.text().trim()
                     }
 
-                    val rows = doc.select(".works-chapter-list .works-chapter-item a, .list_chapter a")
-                    for (a in rows) {
+                    val rows: Elements = doc.select(".works-chapter-list .works-chapter-item a, .list_chapter a")
+                    for (a: Element in rows) {
                         val t = a.text().trim()
                         var url = a.attr("href")
                         if (url.startsWith("http") == false) {
@@ -236,9 +239,9 @@ object ScraperManager {
         val pages = mutableListOf<String>()
         val base = DomainManager.getBase(source)
         try {
-            val doc = Jsoup.connect(chapterUrl).userAgent(USER_AGENT).referrer(base).timeout(15000).get()
-            val elements = doc.select(".page-chapter img, .reading-detail img, .chapter-content img, .story-see-content img")
-            for (img in elements) {
+            val doc: Document = Jsoup.connect(chapterUrl).userAgent(USER_AGENT).referrer(base).timeout(15000).get()
+            val elements: Elements = doc.select(".page-chapter img, .reading-detail img, .chapter-content img, .story-see-content img")
+            for (img: Element in elements) {
                 var src = img.attr("data-original").orEmpty().ifBlank {
                     img.attr("data-src").orEmpty().ifBlank {
                         img.attr("data-cdn").orEmpty().ifBlank {
@@ -446,10 +449,4 @@ fun HomeScreen(
                         }
                     }
                 }
-                if (displayList.isEmpty()) {
-                    item { Text("Không tìm thấy truyện hoặc website tải chậm.", color = Muted, modifier = Modifier.padding(20.dp)) }
-                }
-            }
-        }
-
-        Row(Modifier.fillMaxWidth().navigationBarsPadding().background(Color(0xFF15161A)).padding(vertical = 
+                if (displayList.

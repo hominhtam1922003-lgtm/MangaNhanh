@@ -14,17 +14,11 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
         }
     }
     compileOptions {
@@ -49,7 +43,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     
-    // Thư viện phụ trợ cào truyện
+    // Đồ nghề cào truyện và load ảnh mượt
     implementation("org.jsoup:jsoup:1.17.2")
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

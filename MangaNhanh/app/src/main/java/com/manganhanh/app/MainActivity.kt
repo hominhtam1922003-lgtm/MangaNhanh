@@ -101,7 +101,9 @@ object DomainManager {
                     truyenQqBase = qq.trimEnd('/')
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            // Ignored
+        }
     }
 
     fun getBase(source: MangaSource): String {
@@ -127,7 +129,7 @@ object ScraperManager {
                         val titleEl: Element = el.select(".title a, h3 a, figcaption a").first() ?: continue
                         val title = titleEl.text().trim()
                         var detailUrl = titleEl.attr("href")
-                        if (detailUrl.startsWith("http") == false) {
+                        if (!detailUrl.startsWith("http")) {
                             detailUrl = if (detailUrl.startsWith("/")) "$base$detailUrl" else "$base/$detailUrl"
                         }
 
@@ -139,7 +141,7 @@ object ScraperManager {
                         }
                         if (cover.startsWith("//")) {
                             cover = "https:$cover"
-                        } else if (cover.isNotBlank() && cover.startsWith("http") == false) {
+                        } else if (cover.isNotBlank() && !cover.startsWith("http")) {
                             cover = if (cover.startsWith("/")) "$base$cover" else "$base/$cover"
                         }
 
@@ -161,7 +163,7 @@ object ScraperManager {
                         val titleEl: Element = el.select(".book_avatar a, .book_name a, h3 a").first() ?: continue
                         val title = titleEl.attr("title").ifBlank { titleEl.text().trim() }
                         var detailUrl = titleEl.attr("href")
-                        if (detailUrl.startsWith("http") == false) {
+                        if (!detailUrl.startsWith("http")) {
                             detailUrl = if (detailUrl.startsWith("/")) "$base$detailUrl" else "$base/$detailUrl"
                         }
 
@@ -171,7 +173,7 @@ object ScraperManager {
                         }
                         if (cover.startsWith("//")) {
                             cover = "https:$cover"
-                        } else if (cover.isNotBlank() && cover.startsWith("http") == false) {
+                        } else if (cover.isNotBlank() && !cover.startsWith("http")) {
                             cover = if (cover.startsWith("/")) "$base$cover" else "$base/$cover"
                         }
 
@@ -182,7 +184,9 @@ object ScraperManager {
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            // Ignored
+        }
         list
     }
 
@@ -204,7 +208,7 @@ object ScraperManager {
                         val a: Element = row.select("a").first() ?: continue
                         val t = a.text().trim()
                         var url = a.attr("href")
-                        if (url.startsWith("http") == false) {
+                        if (!url.startsWith("http")) {
                             url = if (url.startsWith("/")) "$base$url" else "$base/$url"
                         }
                         if (t.isNotBlank()) {
@@ -222,7 +226,7 @@ object ScraperManager {
                     for (a: Element in rows) {
                         val t = a.text().trim()
                         var url = a.attr("href")
-                        if (url.startsWith("http") == false) {
+                        if (!url.startsWith("http")) {
                             url = if (url.startsWith("/")) "$base$url" else "$base/$url"
                         }
                         if (t.isNotBlank()) {
@@ -231,7 +235,9 @@ object ScraperManager {
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            // Ignored
+        }
         Pair(description, chapters)
     }
 
@@ -252,7 +258,7 @@ object ScraperManager {
 
                 if (src.startsWith("//")) {
                     src = "https:$src"
-                } else if (src.isNotBlank() && src.startsWith("http") == false) {
+                } else if (src.isNotBlank() && !src.startsWith("http")) {
                     src = if (src.startsWith("/")) "$base$src" else "$base/$src"
                 }
 
@@ -261,7 +267,9 @@ object ScraperManager {
                     pages.add(src)
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            // Ignored
+        }
         pages
     }
 }
@@ -285,7 +293,7 @@ fun MangaApp() {
     var readingChapter by remember { mutableStateOf<ChapterItem?>(null) }
     var query by remember { mutableStateOf("") }
     var currentSource by remember { mutableStateOf(MangaSource.NETTRUYEN) }
-    var tab by remember { mutableStateOf(0) }
+    var tab by remember { mutableIntStateOf(0) }
     var favorites by remember { mutableStateOf(setOf<String>()) }
     var initialized by remember { mutableStateOf(false) }
 
@@ -365,7 +373,11 @@ fun HomeScreen(
         loading = false
     }
 
-    val displayList = mangaList.filter { tab != 1 || favorites.contains(it.detailUrl) }
+    val displayList = if (tab == 1) {
+        mangaList.filter { favorites.contains(it.detailUrl) }
+    } else {
+        mangaList
+    }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -395,7 +407,7 @@ fun HomeScreen(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            MangaSource.values().forEach { s ->
+            MangaSource.entries.forEach { s ->
                 val isSelected = s == source
                 Box(
                     modifier = Modifier
@@ -445,8 +457,4 @@ fun HomeScreen(
                         Column(Modifier.weight(1f).padding(start = 14.dp)) {
                             Text(manga.title, color = Accent, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2)
                             Spacer(Modifier.height(6.dp))
-                            Text(manga.latestChap, color = Muted, fontSize = 12.sp)
-                        }
-                    }
-                }
-                if (displayList.
+                            Text(manga.latestChap, color = 

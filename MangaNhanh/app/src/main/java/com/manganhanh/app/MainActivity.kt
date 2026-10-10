@@ -38,14 +38,10 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.jsoup.Connection
-import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
-import org.jsoup.nodes.Element
-import org.jsoup.select.Elements
+import org.json.JSONArray
+import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
@@ -83,67 +79,60 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-object Sources {
-    val domains = listOf("https://nettruyenvn.info", "https://nettruyenin.com", "https://www.nettruyenww.com")
-    var currentDomain = domains[0]
+object ApiClient {
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
 
-    suspend fun checkWorkingDomain() = withContext(Dispatchers.IO) {
-        for (d in domains) {
-            try {
-                val res = Jsoup.connect(d)
-                    .userAgent(UA)
-                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-                    .header("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7")
-                    .timeout(6000)
-                    .execute()
-                if (res.statusCode() == 200 && res.parse().select(".items .item, .comic-item").isNotEmpty()) {
-                    currentDomain = d
-                    break
-                }
-            } catch (_: Exception) {}
-        }
+    suspend fun getJson(url: String): String = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder().url(url).header("User-Agent", UA).build()
+            val res = client.newCall(req).execute()
+            if (res.isSuccessful) {
+                return@withContext res.body?.string().orEmpty()
+            }
+        } catch (_: Exception) {}
+        ""
     }
 }
 
-// Hàm tiện ích giúp kết nối Jsoup vượt qua các bộ lọc cơ bản
-fun connectSafe(url: String): Connection {
-    return Jsoup.connect(url)
-        .userAgent(UA)
-        .referrer(Sources.currentDomain)
-        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
-        .header("Accept-Language", "vi-VN,vi;q=0.9")
-        .header("Connection", "keep-alive")
-        .timeout(15000)
-        .followRedirects(true)
-}
-
 object Scraper {
-    suspend fun loadManga(query: String = "", genreUrl: String = "", isRanking: Boolean = false): List<Manga> = withContext(Dispatchers.IO) {
+    private const val API_BASE = "https://otruyenapi.com/v1/api"
+
+    suspend fun loadManga(query: String = "", genreSlug: String = "", isRanking: Boolean = false): List<Manga> = withContext(Dispatchers.IO) {
         val list = mutableListOf<Manga>()
-        val base = Sources.currentDomain
         try {
-            val targetUrl = when {
-                genreUrl.isNotBlank() -> genreUrl
-                query.isNotBlank() -> "$base/tim-truyen?keyword=${URLEncoder.encode(query, "UTF-8")}"
-                isRanking -> "$base/hot"
-                else -> "$base/trang-chu"
+            val url = when {
+                genreSlug.isNotBlank() -> "$API_BASE/the-loai/$genreSlug?page=1"
+                query.isNotBlank() -> "$API_BASE/tim-kiem?keyword=${URLEncoder.encode(query, "UTF-8")}"
+                isRanking -> "$API_BASE/danh-sach/truyen-hot?page=1"
+                else -> "$API_BASE/danh-sach/truyen-moi?page=1"
             }
 
-            val doc = connectSafe(targetUrl).get()
+            val jsonStr = ApiClient.getJson(url)
+            if (jsonStr.isBlank()) return@withContext emptyList()
 
-            for (item in doc.select(".items .item, .list-items .item, div.item, .comic-item")) {
-                val titleEl = item.select(".title a, h3 a, figcaption a, .comic-title a").first() ?: continue
-                val title = titleEl.text().trim()
-                var link = titleEl.attr("href")
-                if (!link.startsWith("http")) link = if (link.startsWith("/")) "$base$link" else "$base/$link"
+            val json = JSONObject(jsonStr)
+            val data = json.optJSONObject("data") ?: return@withContext emptyList()
+            val items = data.optJSONArray("items") ?: data.optJSONArray("data") ?: JSONArray()
+            val cdnImage = data.optString("APP_DOMAIN_CDN_IMAGE", "https://img.otruyenapi.com/uploads/comics")
 
-                val imgEl = item.select("img").first()
-                var img = imgEl?.attr("data-original").orEmpty().ifBlank { imgEl?.attr("data-src").orEmpty().ifBlank { imgEl?.attr("src").orEmpty() } }
-                if (img.startsWith("//")) img = "https:$img"
-                else if (img.isNotBlank() && !img.startsWith("http")) img = "$base/$img"
+            for (i in 0 until items.length()) {
+                val item = items.optJSONObject(i) ?: continue
+                val title = item.optString("name")
+                val slug = item.optString("slug")
+                val thumb = item.optString("thumb_url")
+                val cover = if (thumb.startsWith("http")) thumb else "$cdnImage/$thumb"
+                
+                val chaptersArr = item.optJSONArray("chaptersLatest")
+                val latestChap = if (chaptersArr != null && chaptersArr.length() > 0) {
+                    chaptersArr.optJSONObject(0)?.optString("chapter_name", "Mới") ?: "Mới"
+                } else "Mới"
 
-                val chap = item.select(".chapter a, .comic-item-chapter a, ul.list-chap li:first-child a").first()?.text()?.trim() ?: "Mới"
-                if (title.isNotBlank()) list.add(Manga(title, link, img, chap))
+                if (title.isNotBlank() && slug.isNotBlank()) {
+                    list.add(Manga(title, slug, cover, "Chap $latestChap"))
+                }
             }
         } catch (_: Exception) {}
         list
@@ -151,31 +140,29 @@ object Scraper {
 
     suspend fun loadGenres(): List<Genre> = withContext(Dispatchers.IO) {
         val genres = mutableListOf<Genre>()
-        val base = Sources.currentDomain
         try {
-            val doc = connectSafe(base).get()
-            val elements = doc.select(".nav-item.dropdown ul.dropdown-menu li a, .sub-menu li a, .genre-item a, ul.genre-list li a")
-            for (el in elements) {
-                val name = el.text().trim()
-                var href = el.attr("href")
-                if (href.isNotBlank() && name.isNotBlank()) {
-                    if (!href.startsWith("http")) href = if (href.startsWith("/")) "$base$href" else "$base/$href"
-                    if (genres.none { it.url == href }) {
-                        genres.add(Genre(name, href))
+            val jsonStr = ApiClient.getJson("$API_BASE/the-loai")
+            if (jsonStr.isNotBlank()) {
+                val json = JSONObject(jsonStr)
+                val items = json.optJSONObject("data")?.optJSONArray("items") ?: JSONArray()
+                for (i in 0 until items.length()) {
+                    val item = items.optJSONObject(i) ?: continue
+                    val name = item.optString("name")
+                    val slug = item.optString("slug")
+                    if (name.isNotBlank() && slug.isNotBlank()) {
+                        genres.add(Genre(name, slug))
                     }
                 }
             }
         } catch (_: Exception) {}
-        
+
         if (genres.isEmpty()) {
-            genres.add(Genre("Action", "$base/tim-truyen/action"))
-            genres.add(Genre("Adventure", "$base/tim-truyen/adventure"))
-            genres.add(Genre("Comedy", "$base/tim-truyen/comedy"))
-            genres.add(Genre("Drama", "$base/tim-truyen/drama"))
-            genres.add(Genre("Fantasy", "$base/tim-truyen/fantasy"))
-            genres.add(Genre("Romance", "$base/tim-truyen/romance"))
-            genres.add(Genre("Manhua", "$base/tim-truyen/manhua"))
-            genres.add(Genre("Manhwa", "$base/tim-truyen/manhwa"))
+            genres.add(Genre("Action", "action"))
+            genres.add(Genre("Adventure", "adventure"))
+            genres.add(Genre("Comedy", "comedy"))
+            genres.add(Genre("Drama", "drama"))
+            genres.add(Genre("Fantasy", "fantasy"))
+            genres.add(Genre("Romance", "romance"))
         }
         genres
     }
@@ -183,65 +170,26 @@ object Scraper {
     suspend fun loadDetails(manga: Manga): Pair<String, List<Chapter>> = withContext(Dispatchers.IO) {
         val chapters = mutableListOf<Chapter>()
         var desc = "Đang cập nhật giới thiệu..."
-        val base = Sources.currentDomain
         try {
-            val doc: Document = connectSafe(manga.link).get()
+            val jsonStr = ApiClient.getJson("$API_BASE/truyen/${manga.link}")
+            if (jsonStr.isBlank()) return@withContext Pair(desc, chapters)
+
+            val json = JSONObject(jsonStr)
+            val data = json.optJSONObject("data") ?: return@withContext Pair(desc, chapters)
+            val item = data.optJSONObject("item") ?: data
             
-            val descEl = doc.select(".detail-content p, .comic-description, .detail-summary, .summary-content").first()
-            if (descEl != null && descEl.text().isNotBlank()) {
-                desc = descEl.text().trim()
-            }
-
-            // Bóc tách ID truyện từ trang chi tiết để gọi thẳng vào API lấy full toàn bộ danh sách chương không bị giới hạn 20 chương
-            var comicId = ""
-            val ratingEl = doc.select("[data-id]").first()
-            if (ratingEl != null) {
-                comicId = ratingEl.attr("data-id")
-            }
-            if (comicId.isBlank()) {
-                for (script in doc.select("script")) {
-                    val text = script.html()
-                    if (text.contains("comicId") || text.contains("id_comic")) {
-                        val match = Regex("""(comicId|id_comic)\s*[:=]\s*(\d+)""").find(text)
-                        if (match != null) {
-                            comicId = match.groupValues[2]
-                            break
-                        }
-                    }
-                }
-            }
-
-            if (comicId.isNotBlank()) {
-                try {
-                    val apiLink = "$base/Comic/Chapter/ListChapter?comicId=$comicId"
-                    val apiDoc = connectSafe(apiLink).referrer(manga.link).get()
-                    val apiRows = apiDoc.select("li, .row, a")
-                    for (el in apiRows) {
-                        val a = if (el.tagName() == "a") el else el.select("a").first() ?: continue
-                        val t = a.text().trim()
-                        var url = a.attr("href")
-                        if (url.isNotBlank()) {
-                            if (!url.startsWith("http")) url = if (url.startsWith("/")) "$base$url" else "$base/$url"
-                            if (t.isNotBlank() && chapters.none { it.link == url }) {
-                                chapters.add(Chapter(t, url))
-                            }
-                        }
-                    }
-                } catch (_: Exception) {}
-            }
-
-            // Dự phòng quét danh sách thông thường trên trang
-            if (chapters.isEmpty()) {
-                val rows: Elements = doc.select("#nt_listchapter li, .list-chapter li, ul.list-chapter li, .chapter-list div.row")
-                for (row: Element in rows) {
-                    val a: Element = row.select("a").first() ?: continue
-                    val t = a.text().trim()
-                    var url = a.attr("href")
-                    if (!url.startsWith("http")) {
-                        url = if (url.startsWith("/")) "$base$url" else "$base/$url"
-                    }
-                    if (t.isNotBlank() && chapters.none { it.link == url }) {
-                        chapters.add(Chapter(t, url))
+            desc = item.optString("content", "Đang cập nhật giới thiệu...").replace(Regex("<[^>]*>"), "")
+            
+            val serverData = item.optJSONArray("item_chapters") ?: JSONArray()
+            for (i in 0 until serverData.length()) {
+                val server = serverData.optJSONObject(i) ?: continue
+                val serverChapList = server.optJSONArray("server_data") ?: continue
+                for (j in 0 until serverChapList.length()) {
+                    val chap = serverChapList.optJSONObject(j) ?: continue
+                    val name = chap.optString("chapter_name")
+                    val apiServer = chap.optString("chapter_api_data")
+                    if (name.isNotBlank() && apiServer.isNotBlank()) {
+                        chapters.add(Chapter("Chap $name", apiServer))
                     }
                 }
             }
@@ -251,21 +199,20 @@ object Scraper {
 
     suspend fun loadPages(chapter: Chapter): List<String> = withContext(Dispatchers.IO) {
         val pages = mutableListOf<String>()
-        val base = Sources.currentDomain
         try {
-            val doc = connectSafe(chapter.link).get()
-            for (img in doc.select(".page-chapter img, .reading-detail img, .chapter-content img")) {
-                var src = img.attr("data-original").orEmpty().ifBlank {
-                    img.attr("data-src").orEmpty().ifBlank {
-                        img.attr("data-cdn").orEmpty().ifBlank { img.attr("src").orEmpty() }
-                    }
-                }
-                if (src.startsWith("//")) src = "https:$src"
-                else if (src.isNotBlank() && !src.startsWith("http")) src = "$base/$src"
+            val jsonStr = ApiClient.getJson(chapter.link)
+            if (jsonStr.isBlank()) return@withContext emptyList()
 
-                val lower = src.lowercase()
-                if (src.isNotBlank() && !lower.contains("banner") && !lower.contains("logo") && !lower.contains("icon")) {
-                    pages.add(src)
+            val json = JSONObject(jsonStr)
+            val data = json.optJSONObject("data") ?: return@withContext emptyList()
+            val domainCdn = data.optString("domain_cdn")
+            val chapterPath = data.optString("chapter_path")
+            val chapterImages = data.optJSONArray("chapter_image") ?: JSONArray()
+
+            for (i in 0 until chapterImages.length()) {
+                val img = chapterImages.optString(i)
+                if (img.isNotBlank()) {
+                    pages.add("$domainCdn/$chapterPath/$img")
                 }
             }
         } catch (_: Exception) {}
@@ -274,19 +221,7 @@ object Scraper {
 }
 
 fun buildCoilLoader(context: Context): ImageLoader {
-    val okHttpClient = OkHttpClient.Builder()
-        .addInterceptor { chain ->
-            val req = chain.request().newBuilder()
-                .header("User-Agent", UA)
-                .header("Referer", Sources.currentDomain)
-                .build()
-            chain.proceed(req)
-        }
-        .connectionPool(ConnectionPool(30, 5L, TimeUnit.MINUTES))
-        .build()
-
     return ImageLoader.Builder(context)
-        .okHttpClient(okHttpClient)
         .diskCachePolicy(CachePolicy.ENABLED)
         .memoryCachePolicy(CachePolicy.ENABLED)
         .crossfade(true)
@@ -298,47 +233,35 @@ fun MangaApp() {
     var curManga by remember { mutableStateOf<Manga?>(null) }
     var readingSession by remember { mutableStateOf<Pair<Chapter, List<Chapter>>?>(null) }
     var favorites by remember { mutableStateOf(setOf<String>()) }
-    var isInitialized by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        Sources.checkWorkingDomain()
-        isInitialized = true
-    }
 
     MaterialTheme(colorScheme = darkColorScheme(background = DarkBg, surface = CardBg)) {
         Surface(Modifier.fillMaxSize(), color = DarkBg) {
-            if (!isInitialized) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = AccentColor)
+            when {
+                readingSession != null && curManga != null -> {
+                    ReaderView(
+                        manga = curManga!!,
+                        chapter = readingSession!!.first,
+                        allChapters = readingSession!!.second,
+                        onBack = { readingSession = null },
+                        onSelectChapter = { newChap -> readingSession = Pair(newChap, readingSession!!.second) }
+                    )
                 }
-            } else {
-                when {
-                    readingSession != null && curManga != null -> {
-                        ReaderView(
-                            manga = curManga!!,
-                            chapter = readingSession!!.first,
-                            allChapters = readingSession!!.second,
-                            onBack = { readingSession = null },
-                            onSelectChapter = { newChap -> readingSession = Pair(newChap, readingSession!!.second) }
-                        )
-                    }
-                    curManga != null -> {
-                        DetailView(
-                            manga = curManga!!,
-                            isFav = favorites.contains(curManga!!.link),
-                            onToggleFav = {
-                                favorites = if (favorites.contains(curManga!!.link)) favorites - curManga!!.link else favorites + curManga!!.link
-                            },
-                            onRead = { chap, listChaps -> readingSession = Pair(chap, listChaps) },
-                            onBack = { curManga = null }
-                        )
-                    }
-                    else -> {
-                        HomeView(
-                            onSelectManga = { curManga = it },
-                            favorites = favorites
-                        )
-                    }
+                curManga != null -> {
+                    DetailView(
+                        manga = curManga!!,
+                        isFav = favorites.contains(curManga!!.link),
+                        onToggleFav = {
+                            favorites = if (favorites.contains(curManga!!.link)) favorites - curManga!!.link else favorites + curManga!!.link
+                        },
+                        onRead = { chap, listChaps -> readingSession = Pair(chap, listChaps) },
+                        onBack = { curManga = null }
+                    )
+                }
+                else -> {
+                    HomeView(
+                        onSelectManga = { curManga = it },
+                        favorites = favorites
+                    )
                 }
             }
         }
@@ -356,7 +279,7 @@ fun HomeView(
     var selectedGenre by remember { mutableStateOf<Genre?>(null) }
     var list by remember { mutableStateOf<List<Manga>>(emptyList()) }
     var genres by remember { mutableStateOf<List<Genre>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
+    var loading by remember { mutableStateOf(false) }
     val loader = remember { buildCoilLoader(context) }
 
     LaunchedEffect(tab, selectedGenre, query) {
@@ -366,7 +289,7 @@ fun HomeView(
         }
         list = when {
             tab == 1 -> Scraper.loadManga(isRanking = true)
-            tab == 2 && selectedGenre != null -> Scraper.loadManga(genreUrl = selectedGenre!!.url)
+            tab == 2 && selectedGenre != null -> Scraper.loadManga(genreSlug = selectedGenre!!.url)
             tab == 3 -> Scraper.loadManga(query).filter { favorites.contains(it.link) }
             else -> Scraper.loadManga(query)
         }
@@ -425,11 +348,7 @@ fun HomeView(
             )
         }
 
-        if (loading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AccentColor)
-            }
-        } else {
+        Box(Modifier.fillMaxSize()) {
             if (tab == 2 && selectedGenre == null) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
@@ -496,6 +415,15 @@ fun HomeView(
                             }
                         }
                     }
+                }
+            }
+
+            if (loading) {
+                Box(
+                    Modifier.fillMaxSize().background(DarkBg.copy(alpha = 0.4f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = AccentColor)
                 }
             }
         }

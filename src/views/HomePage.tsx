@@ -77,7 +77,8 @@ function SourceSection({ source }: { source: typeof SOURCES[number] }) {
             <h2 className="text-2xl font-display font-bold">
               <span className={`bg-gradient-to-r ${source.logoColor} bg-clip-text text-transparent`}>{source.name}</span>
             </h2>
-            <span className="chip">{items.length > 0 ? `${items.length} truyện` : source.id}</span>
+            <button onClick={()=>{setLoading(true);setError(null);setItems([]);
+              fetchHome(source.id as SourceId).then(r=>setItems(r.slice(0,18))).catch(e=>setError(e?.message||'Lỗi')).finally(()=>setLoading(false));}} className="chip hover:bg-ink-200 dark:hover:bg-ink-700 cursor-pointer">↻ Tải lại</button>
           </div>
           <p className="text-sm text-ink-500 mt-1">{source.description}</p>
         </div>
@@ -94,8 +95,8 @@ function SourceSection({ source }: { source: typeof SOURCES[number] }) {
           ))}
         </div>
       )}
-      {error && !loading && <Empty title="Không thể tải danh sách truyện" description="Kiểm tra kết nối mạng hoặc thử lại sau. Bạn vẫn có thể mở truyện bằng cách dán link."/>}
-      {!loading && !error && items.length === 0 && <Empty title="Không có truyện nào" description="Nguồn này tạm thời trống."/>}
+      {error && !loading && <Empty title="Không thể tải danh sách truyện" description={`${error}. Nếu bạn đang mở bản web trên máy tính bị chặn CORS, hãy dùng bản APK (trên điện thoại) sẽ hoạt động bình thường. Hoặc dán link truyện vào ô bên trên để mở ngay.`}/>}
+      {!loading && !error && items.length === 0 && <Empty title="Không có truyện nào" description="Nguồn này tạm thời trống hoặc không thể kết nối. Bấm ↻ Tải lại hoặc thử mở bằng link."/>}
       {!loading && items.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
           {items.map((m) => <MangaCard key={`${m.source}-${m.slug}`} manga={m}/>)}

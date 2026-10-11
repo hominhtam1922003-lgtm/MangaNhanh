@@ -37,42 +37,57 @@ export const CORS_PROXIES: Array<(url: string) => string> = [
 ];
 
 /**
- * Attempt to fetch a URL, using:
- *  1. Next.js server proxy /api/proxy if available (dev/preview on Vercel/etc.)
- *  2. Direct fetch (works on Capacitor native WebView where CORS is not enforced)
- *  3. Public CORS proxies in sequence as last-resort.
+ * Attempt to fetch a URL, choosing the best method based on environment:
+ *  - Capacitor/native webview  → direct fetch (CORS is not enforced in Android WebView)
+ *  - Next.js dev/prod server   → local /api/proxy server route
+ *  - Static host / preview     → public CORS proxies in sequence
  */
 export async function corsFetch(url: string, init?: RequestInit & { referer?: string }): Promise<string> {
   const headers: Record<string, string> = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'vi,en;q=0.9',
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
     ...(init?.headers as Record<string, string> || {})
   };
   if (init?.referer) headers['Referer'] = init.referer;
 
-  // 1) Local server proxy
-  try {
-    const probeResp = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`, { method: 'HEAD' }).catch(() => null);
-    if (probeResp && probeResp.ok) {
-      const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}${init?.referer ? '&referer='+encodeURIComponent(init.referer) : ''}`;
+  const isCapacitor = typeof window !== 'undefined' && (
+    (window as any).Capacitor || window.location.protocol === 'capacitor:' || window.location.protocol === 'file:'
+  );
+
+  // 1) On Capacitor / file:// – always direct first (no CORS)
+  if (isCapacitor) {
+    try {
+      const r = await fetch(url, { ...(init || {}), headers });
+      if (r.ok) {
+        const t = await r.text();
+        if (t && t.length > 200) return t;
+      }
+    } catch { /* fallthrough to proxies */ }
+  }
+
+  // 2) Try local server proxy via a quick fetch (won't throw if missing, just 404)
+  if (!isCapacitor) {
+    try {
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}${init?.referer ? '&referer=' + encodeURIComponent(init.referer) : ''}`;
       const r = await fetch(proxyUrl, { headers });
       if (r.ok) {
         const t = await r.text();
         if (t && t.length > 200) return t;
       }
-    }
-  } catch { /* fallthrough */ }
+    } catch { /* ignore */ }
+  }
 
-  // 2) Direct
+  // 3) Direct fetch attempt in normal browser (may fail CORS)
   try {
-    const r = await fetch(url, { ...(init||{}), headers });
+    const r = await fetch(url, { ...(init || {}), headers });
     if (r.ok) {
       const t = await r.text();
       if (t && t.length > 200) return t;
     }
-  } catch { /* fallthrough */ }
+  } catch { /* ignore */ }
 
-  // 3) Public proxies
+  // 4) Public CORS proxies as last resort
   let lastErr: unknown;
   for (let i = 0; i < CORS_PROXIES.length; i++) {
     const proxyUrl = CORS_PROXIES[i](url);
@@ -80,7 +95,6 @@ export async function corsFetch(url: string, init?: RequestInit & { referer?: st
       const r = await fetch(proxyUrl, { headers: { ...headers, ...(init?.headers || {}) } });
       if (!r.ok) throw new Error(`proxy ${i} -> HTTP ${r.status}`);
       let t = await r.text();
-      // allorigins /get returns JSON { contents: "..." }
       if (proxyUrl.includes('/get?')) {
         try { const j = JSON.parse(t); if (j.contents) t = j.contents; } catch { /* ignore */ }
       }
@@ -89,7 +103,7 @@ export async function corsFetch(url: string, init?: RequestInit & { referer?: st
       lastErr = e;
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error('Không thể tải trang (đã thử tất cả proxy)');
+  throw lastErr instanceof Error ? lastErr : new Error('Không thể tải trang. Kiểm tra kết nối mạng hoặc thử lại.');
 }
 
 /**

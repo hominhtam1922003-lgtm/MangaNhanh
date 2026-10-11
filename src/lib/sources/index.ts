@@ -36,6 +36,17 @@ export const CORS_PROXIES: Array<(url: string) => string> = [
   }
 ];
 
+/** timeout wrapper for fetch so it never hangs on skeleton forever */
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = 6000): Promise<Response> {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...(init || {}), signal: ctrl.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 /**
  * Attempt to fetch a URL, choosing the best method based on environment:
  *  - Capacitor/native webview  → direct fetch (CORS is not enforced in Android WebView)
@@ -55,55 +66,40 @@ export async function corsFetch(url: string, init?: RequestInit & { referer?: st
     (window as any).Capacitor || window.location.protocol === 'capacitor:' || window.location.protocol === 'file:'
   );
 
-  // 1) On Capacitor / file:// – always direct first (no CORS)
+  const tryOnce = async (u: string) => {
+    const r = await fetchWithTimeout(u, { ...(init || {}), headers }, 7000);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    let t = await r.text();
+    if (u.includes('allorigins.win/get?')) {
+      try { const j = JSON.parse(t); if (j.contents) t = j.contents; } catch { /* ignore */ }
+    }
+    if (!t || t.length < 200) throw new Error('Phản hồi trống');
+    return t;
+  };
+
+  const candidates: string[] = [];
   if (isCapacitor) {
-    try {
-      const r = await fetch(url, { ...(init || {}), headers });
-      if (r.ok) {
-        const t = await r.text();
-        if (t && t.length > 200) return t;
-      }
-    } catch { /* fallthrough to proxies */ }
+    candidates.push(url); // direct first
+  } else {
+    candidates.push(`/api/proxy?url=${encodeURIComponent(url)}${init?.referer ? '&referer='+encodeURIComponent(init.referer):''}`);
+    candidates.push(url);
   }
+  for (const make of CORS_PROXIES) candidates.push(make(url));
 
-  // 2) Try local server proxy via a quick fetch (won't throw if missing, just 404)
-  if (!isCapacitor) {
+  let lastErr: Error = new Error('Không có phương án fetch nào');
+  for (const u of candidates) {
     try {
-      const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}${init?.referer ? '&referer=' + encodeURIComponent(init.referer) : ''}`;
-      const r = await fetch(proxyUrl, { headers });
-      if (r.ok) {
-        const t = await r.text();
-        if (t && t.length > 200) return t;
-      }
-    } catch { /* ignore */ }
-  }
-
-  // 3) Direct fetch attempt in normal browser (may fail CORS)
-  try {
-    const r = await fetch(url, { ...(init || {}), headers });
-    if (r.ok) {
-      const t = await r.text();
-      if (t && t.length > 200) return t;
-    }
-  } catch { /* ignore */ }
-
-  // 4) Public CORS proxies as last resort
-  let lastErr: unknown;
-  for (let i = 0; i < CORS_PROXIES.length; i++) {
-    const proxyUrl = CORS_PROXIES[i](url);
-    try {
-      const r = await fetch(proxyUrl, { headers: { ...headers, ...(init?.headers || {}) } });
-      if (!r.ok) throw new Error(`proxy ${i} -> HTTP ${r.status}`);
-      let t = await r.text();
-      if (proxyUrl.includes('/get?')) {
-        try { const j = JSON.parse(t); if (j.contents) t = j.contents; } catch { /* ignore */ }
-      }
-      if (t && t.length > 200) return t;
+      return await tryOnce(u);
     } catch (e) {
-      lastErr = e;
+      lastErr = e instanceof Error ? e : new Error(String(e));
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error('Không thể tải trang. Kiểm tra kết nối mạng hoặc thử lại.');
+  throw new Error(
+    (isCapacitor
+      ? 'Không tải được dữ liệu. Kiểm tra kết nối mạng rồi thử lại.'
+      : 'Không tải được dữ liệu từ máy chủ web (có thể do CORS hoặc chặn mạng). Hãy cài APK về điện thoại để đọc truyện.')
+    + ' (' + lastErr.message + ')'
+  );
 }
 
 /**

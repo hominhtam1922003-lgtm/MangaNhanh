@@ -87,8 +87,9 @@ function weserv(u: string, ref: string) {
 export function imageCandidates(rawUrl: string, referer: string): Cand[] {
   let u = rawUrl.trim();
   if (u.startsWith('//')) u = 'https:' + u;
-  if (!/^https?:\/\//i.test(u)) u = 'https://nettruyen.gg' + (u.startsWith('/') ? u : '/' + u);
-  const ref = referer || 'https://nettruyen.gg/';
+  const BASE = 'https://truyenqqko.com';
+  if (!/^https?:\/\//i.test(u)) u = BASE + (u.startsWith('/') ? u : '/' + u);
+  const ref = referer || BASE + '/';
   return [
     { url: u, referer: ref },
     { url: wsrv(u, ref) },

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildHref, useHashRoute } from '@/lib/hash-router';
 import { useTheme } from './ThemeProvider';
 
@@ -24,30 +24,43 @@ function Header() {
   const { theme, toggleTheme } = useTheme();
   const [route, navigate] = useHashRoute();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [q, setQ] = useState('');
-  const source = 'truyenqq';
+  const desktopInputRef = useRef<HTMLInputElement>(null);
+  const mobileInputRef = useRef<HTMLInputElement>(null);
+  // Keep uncontrolled inputs synced with URL so navigating back/forward reflects q
+  useEffect(() => {
+    const qFromUrl = route.path === '/search' ? (route.query.q || '') : '';
+    if (desktopInputRef.current && document.activeElement !== desktopInputRef.current) {
+      desktopInputRef.current.value = qFromUrl;
+    }
+    if (mobileInputRef.current && document.activeElement !== mobileInputRef.current) {
+      mobileInputRef.current.value = qFromUrl;
+    }
+  }, [route.path, route.query.q]);
 
   useEffect(() => { setMobileOpen(false); }, [route.path]);
 
   const icon = theme === 'dark' ? <Moon className="w-5 h-5"/> : theme === 'light' ? <Sun className="w-5 h-5"/> : <Monitor className="w-5 h-5"/>;
 
-  const nav = [
+  const nav = useMemo(() => [
     { href: '/', label: 'Khám phá', active: route.path === '/' },
     { href: '/library', label: 'Thư viện', active: route.path.startsWith('/library') },
     { href: '/history', label: 'Lịch sử', active: route.path.startsWith('/history') },
     { href: '/download', label: 'Tải APK', active: route.path.startsWith('/download') },
     { href: '/about', label: 'Giới thiệu', active: route.path.startsWith('/about') }
-  ];
+  ], [route.path]);
 
-  const submitSearch = (e: React.FormEvent) => {
+  const submitSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!q.trim()) return;
-    navigate(`/search?q=${encodeURIComponent(q.trim())}&source=truyenqq`);
+    const input = (e.currentTarget.querySelector('input') as HTMLInputElement | null);
+    const v = (input?.value || '').trim();
+    if (!v) return;
+    navigate(`/search?q=${encodeURIComponent(v)}`);
     setMobileOpen(false);
+    input?.blur();
   };
 
   return (
-    <header className="sticky top-0 z-40 backdrop-blur-xl bg-white/70 dark:bg-ink-950/70 border-b border-ink-100 dark:border-ink-800">
+    <header className="sticky top-0 z-40 bg-white/90 dark:bg-ink-950/90 border-b border-ink-100 dark:border-ink-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-3">
         <a href={buildHref('/')} className="flex items-center gap-2 font-display font-bold text-xl">
           <span className="inline-flex w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-500 items-center justify-center text-white shadow-lg shadow-sky-500/30">
@@ -65,8 +78,8 @@ function Header() {
         </nav>
         <div className="flex-1"/>
         <form onSubmit={submitSearch} className="relative hidden sm:flex items-center gap-2 px-3 py-2 rounded-full bg-ink-100 dark:bg-ink-800/70 focus-within:ring-2 ring-brand-500 transition max-w-md w-full">
-          <svg viewBox="0 0 24 24" className="w-4 h-4 text-ink-500" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Tìm tên truyện..." className="flex-1 bg-transparent outline-none text-sm placeholder:text-ink-400" aria-label="Tìm truyện"/>
+          <svg viewBox="0 0 24 24" className="w-4 h-4 text-ink-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input ref={desktopInputRef} defaultValue={route.path === '/search' ? (route.query.q || '') : ''} type="search" inputMode="search" autoComplete="off" spellCheck={false} placeholder="Tìm tên truyện..." className="flex-1 bg-transparent outline-none text-sm placeholder:text-ink-400 min-w-0" aria-label="Tìm truyện"/>
         </form>
         <button onClick={toggleTheme} aria-label="Đổi theme" className="btn-icon" title="Chế độ giao diện">{icon}</button>
         <button className="md:hidden btn-icon" aria-label="Menu" onClick={() => setMobileOpen(o => !o)}>
@@ -76,7 +89,7 @@ function Header() {
       {mobileOpen && (
         <div className="md:hidden border-t border-ink-100 dark:border-ink-800 px-4 py-2 space-y-1">
           <form onSubmit={submitSearch} className="flex items-center gap-2 mb-2">
-            <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Tìm tên truyện..." className="flex-1 px-3 py-2 rounded-lg bg-ink-100 dark:bg-ink-800 outline-none text-sm"/>
+            <input ref={mobileInputRef} defaultValue={route.path === '/search' ? (route.query.q || '') : ''} type="search" inputMode="search" autoComplete="off" spellCheck={false} placeholder="Tìm tên truyện..." className="flex-1 px-3 py-2 rounded-lg bg-ink-100 dark:bg-ink-800 outline-none text-sm"/>
             <button className="btn-primary !py-2 !px-3 text-sm">Tìm</button>
           </form>
           {nav.map(n => (

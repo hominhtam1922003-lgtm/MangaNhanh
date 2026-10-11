@@ -35,6 +35,7 @@ DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
 COMPUTE = os.environ.get("WHISPER_COMPUTE", "int8")
 LT_URL = os.environ.get("LIBRETRANSLATE_URL", "").rstrip("/")
 LT_KEY = os.environ.get("LIBRETRANSLATE_API_KEY", "")
+PEXELS_KEY = os.environ.get("PEXELS_API_KEY", "")  # miễn phí tại https://www.pexels.com/api/
 MAX_BYTES = int(os.environ.get("SV_MAX_BYTES", str(1024 * 1024 * 1024)))  # 1 GB
 
 app = FastAPI(title="ShortVideo subtitle service")
@@ -171,3 +172,42 @@ def job_status(jid: str):
         if not j:
             raise HTTPException(404, "Không tìm thấy job")
         return {"id": jid, **{k: v for k, v in j.items() if k != "cues"}}
+
+
+@app.get("/api/search")
+def search_videos(q: str, limit: int = 12):
+    """Tìm video dọc miễn phí trên Pexels (giấy phép Pexels: dùng miễn phí, có thể ghi công)."""
+    if not PEXELS_KEY:
+        raise HTTPException(503, "Chưa cấu hình PEXELS_API_KEY ở backend (đăng ký miễn phí tại pexels.com/api)")
+    q = q.strip()[:100]
+    if not q:
+        raise HTTPException(400, "Thiếu từ khoá")
+    try:
+        r = httpx.get(
+            "https://api.pexels.com/videos/search",
+            params={"query": q, "per_page": max(1, min(limit, 30)), "orientation": "portrait"},
+            headers={"Authorization": PEXELS_KEY},
+            timeout=20,
+        )
+        r.raise_for_status()
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Pexels lỗi: {e}")
+    out = []
+    for v in r.json().get("videos", []):
+        files = [f for f in v.get("video_files", []) if f.get("file_type") == "video/mp4" and f.get("link")]
+        if not files:
+            continue
+        # chọn độ phân giải cao nhất nhưng không quá 1280px chiều cao (đỡ nặng trên điện thoại)
+        files.sort(key=lambda f: f.get("height") or 0)
+        small = [f for f in files if (f.get("height") or 0) <= 1280] or files
+        best = small[-1]
+        author = (v.get("user") or {}).get("name", "Pexels")
+        out.append({
+            "id": f"pexels-{v['id']}",
+            "title": f"{q} · {author}",
+            "url": best["link"],
+            "thumb": v.get("image"),
+            "tags": ["Pexels", q],
+            "credit": f"Video: {author} trên Pexels",
+        })
+    return {"items": out}

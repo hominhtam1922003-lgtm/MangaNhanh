@@ -6,6 +6,9 @@ on:
     paths: ['shortvideo/**', '.github/workflows/build-shortvideo-apk.yml']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -56,3 +59,15 @@ jobs:
           name: ShortVideo-APK
           path: shortvideo/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+
+      - name: Publish APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="shortvideo-${GITHUB_SHA::7}"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/ShortVideo-${GITHUB_SHA::7}.apk"
+          gh release create "$TAG" "$RUNNER_TEMP/ShortVideo-${GITHUB_SHA::7}.apk" \
+            --target "$GITHUB_SHA" \
+            --title "ShortVideo APK ${GITHUB_SHA::7}" \
+            --notes "APK debug build từ commit ${GITHUB_SHA}. Bật 'Cài ứng dụng không xác định' trên Android để cài." \
+            --prerelease

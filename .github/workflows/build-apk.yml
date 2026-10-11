@@ -23,17 +23,14 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./android/gradlew || true
+
       - name: Cache npm
         uses: actions/cache@v4
         with:
           path: ~/.npm
           key: npm-${{ hashFiles('package-lock.json') }}
-
-      - name: Install dependencies
-        run: npm ci || npm install
-
-      - name: Export static web (bypass API route; Capacitor doesn't need it)
-        run: npm run export
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -43,10 +40,14 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
 
-      - name: Add & sync Capacitor Android
-        run: |
-          npx cap add android || true
-          npx cap sync android
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Export static web (with API route hidden for static export)
+        run: npm run export
+
+      - name: Sync Capacitor assets (do NOT re-run `cap add android`)
+        run: npx cap sync android
 
       - name: Build APK
         working-directory: android

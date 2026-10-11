@@ -8,6 +8,10 @@ build
 .DS_Store
 *.log
 .vercel
-android
 ios
 *.apk
+android/.gradle
+android/app/build
+android/build
+android/local.properties
+android/captures

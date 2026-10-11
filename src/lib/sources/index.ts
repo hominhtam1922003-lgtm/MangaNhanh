@@ -62,12 +62,29 @@ export async function corsFetch(url: string, init?: RequestInit & { referer?: st
   };
   if (init?.referer) headers['Referer'] = init.referer;
 
+  const w = window as any;
   const isCapacitor = typeof window !== 'undefined' && (
-    (window as any).Capacitor || window.location.protocol === 'capacitor:' || window.location.protocol === 'file:'
+    w.Capacitor ||
+    window.location.protocol === 'capacitor:' ||
+    window.location.protocol === 'file:' ||
+    w.Capacitor?.isNativePlatform?.()
   );
 
   const tryOnce = async (u: string) => {
-    const r = await fetchWithTimeout(u, { ...(init || {}), headers }, 7000);
+    // In Capacitor native, use CapacitorHttp plugin if available (native fetch, 100% no CORS)
+    if (isCapacitor && w.Capacitor?.Plugins?.CapacitorHttp?.request) {
+      try {
+        const res = await w.Capacitor.Plugins.CapacitorHttp.request({
+          method: 'GET',
+          url: u,
+          headers: { ...headers, 'Accept': headers['Accept'] }
+        });
+        let t = res?.data ?? '';
+        if (typeof t === 'object') t = JSON.stringify(t);
+        if (t && t.length > 200) return t;
+      } catch { /* fall through */ }
+    }
+    const r = await fetchWithTimeout(u, { ...(init || {}), headers }, 15000);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     let t = await r.text();
     if (u.includes('allorigins.win/get?')) {
@@ -79,7 +96,7 @@ export async function corsFetch(url: string, init?: RequestInit & { referer?: st
 
   const candidates: string[] = [];
   if (isCapacitor) {
-    candidates.push(url); // direct first
+    candidates.push(url); // direct first (natively, no CORS)
   } else {
     candidates.push(`/api/proxy?url=${encodeURIComponent(url)}${init?.referer ? '&referer='+encodeURIComponent(init.referer):''}`);
     candidates.push(url);

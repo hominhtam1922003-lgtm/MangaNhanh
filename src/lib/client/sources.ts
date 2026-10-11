@@ -73,8 +73,7 @@ export async function fetchChapter(source: SourceId, mangaSlug: string, chapterS
   const html = await corsFetch(chapterUrl);
   const parsed = source === 'nettruyen' ? parseNettruyenChapter(html) : parseTruyenqqChapter(html);
 
-  const referer = src.baseUrl + '/';
-  // Resolve absolute URLs
+  const referer = chapterUrl; // Use chapter page URL as Referer (not just base) – CDN validates against that
   const images = parsed.images.map(u => absoluteUrl(src.baseUrl, u));
 
   return {
@@ -84,7 +83,8 @@ export async function fetchChapter(source: SourceId, mangaSlug: string, chapterS
     url: chapterUrl,
     source,
     mangaSlug,
-    chapterSlug
+    chapterSlug,
+    mangaTitle: parsed.mangaTitle || ''
   };
 }
 

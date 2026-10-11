@@ -98,8 +98,21 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
     return () => { cancel = true; };
   }, [source, slug]);
 
-  const goPrev = () => { if (!data?.prev) return; const cs = chapterSlugFromUrl(data.prev, source as SourceId); if (cs) navigate(`/read/${source}/${slug}/${cs}`); };
-  const goNext = () => { if (!data?.next) return; const cs = chapterSlugFromUrl(data.next, source as SourceId); if (cs) navigate(`/read/${source}/${slug}/${cs}`); };
+  // Chapters list is sorted NEWEST first (desc number); prev = lower number (older) = higher index
+  const curIdx = chapters.findIndex(c => c.slug === chapter);
+  const prevSlug = curIdx >= 0 && curIdx < chapters.length - 1 ? chapters[curIdx + 1].slug : null;
+  const nextSlug = curIdx > 0 ? chapters[curIdx - 1].slug : null;
+
+  const goPrev = () => {
+    if (data?.prev) { const cs = chapterSlugFromUrl(data.prev, source as SourceId); if (cs) { navigate(`/read/${source}/${slug}/${cs}`); return; } }
+    if (prevSlug) navigate(`/read/${source}/${slug}/${prevSlug}`);
+  };
+  const goNext = () => {
+    if (data?.next) { const cs = chapterSlugFromUrl(data.next, source as SourceId); if (cs) { navigate(`/read/${source}/${slug}/${cs}`); return; } }
+    if (nextSlug) navigate(`/read/${source}/${slug}/${nextSlug}`);
+  };
+  const hasPrev = !!(data?.prev || prevSlug);
+  const hasNext = !!(data?.next || nextSlug);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -125,9 +138,9 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
           </A>
           <div className="flex-1 min-w-0"><div className="font-semibold truncate">{displayTitle}</div><div className="text-xs text-ink-400 truncate">{src?.name}</div></div>
-          <button onClick={goPrev} disabled={!data?.prev} className="btn-icon !w-9 !h-9 disabled:opacity-30">‹</button>
+          <button onClick={goPrev} disabled={!hasPrev} className="btn-icon !w-9 !h-9 disabled:opacity-30">‹</button>
           <button onClick={()=>setShowChapters(s=>!s)} className="btn-ghost !px-3 !py-1.5 text-xs">Chương</button>
-          <button onClick={goNext} disabled={!data?.next} className="btn-icon !w-9 !h-9 disabled:opacity-30">›</button>
+          <button onClick={goNext} disabled={!hasNext} className="btn-icon !w-9 !h-9 disabled:opacity-30">›</button>
           <button onClick={()=>setShowSettings(s=>!s)} className="btn-icon !w-9 !h-9">⚙</button>
         </div>
         {loading && data && (
@@ -143,13 +156,13 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
           <>
             <button
               onClick={goPrev}
-              disabled={!data.prev}
+              disabled={!hasPrev}
               aria-label="Chương trước"
               className="fixed left-2 bottom-24 z-40 w-12 h-12 rounded-full bg-black/70 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 disabled:opacity-20"
             >‹</button>
             <button
               onClick={goNext}
-              disabled={!data.next}
+              disabled={!hasNext}
               aria-label="Chương sau"
               className="fixed right-2 bottom-24 z-40 w-12 h-12 rounded-full bg-black/70 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 disabled:opacity-20"
             >›</button>
@@ -172,9 +185,9 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
         )}
         {data && !loading && (
           <div className="flex items-center justify-center gap-3 my-8 pb-16">
-            <button onClick={goPrev} disabled={!data.prev} className="btn-primary disabled:opacity-40">Chap trước</button>
+            <button onClick={goPrev} disabled={!hasPrev} className="btn-primary disabled:opacity-40">Chap trước</button>
             <A href={`/manga/${source}/${slug}`} className="btn-ghost">Danh sách chương</A>
-            <button onClick={goNext} disabled={!data.next} className="btn-primary disabled:opacity-40">Chap sau</button>
+            <button onClick={goNext} disabled={!hasNext} className="btn-primary disabled:opacity-40">Chap sau</button>
           </div>
         )}
       </div>

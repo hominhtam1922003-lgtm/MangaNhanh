@@ -121,7 +121,7 @@ function QuickAddForm() {
     setErr('');
     try {
       const u = new URL(url.trim());
-      if (!/(^|\.)truyenqq(to)?\.(com|net|io)/i.test(u.hostname)) { setErr('Chỉ hỗ trợ link từ TruyenQQ (truyenqqto.com / truyenqq.com).'); return; }
+      if (!/(^|\.)truyenqq[a-z]{0,4}\.(com|net|io|co)/i.test(u.hostname)) { setErr('Chỉ hỗ trợ link từ TruyenQQ (truyenqqko.com / truyenqq.com.vn / các domain QQ).'); return; }
       const parts = u.pathname.split('/').filter(Boolean);
       const idx = parts.findIndex(p => p === 'truyen-tranh');
       if (idx < 0 || !parts[idx+1]) { setErr('Link không hợp lệ. Hãy dán link trang truyện.'); return; }
@@ -135,7 +135,7 @@ function QuickAddForm() {
       <h3 className="font-display font-bold text-lg">Mở nhanh bằng link</h3>
       <p className="text-sm text-ink-500 mt-1">Dán link truyện TruyenQQ để đọc ngay, ứng dụng sẽ tự tải toàn bộ chapters.</p>
       <form onSubmit={go} className="mt-4 flex flex-col sm:flex-row gap-2">
-        <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://truyenqqto.com/truyen-tranh/..." className="flex-1 px-4 py-3 rounded-xl bg-ink-100 dark:bg-ink-800 outline-none focus:ring-2 ring-brand-500 text-sm"/>
+        <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://truyenqqko.com/truyen-tranh/..." className="flex-1 px-4 py-3 rounded-xl bg-ink-100 dark:bg-ink-800 outline-none focus:ring-2 ring-brand-500 text-sm"/>
         <button className="btn-primary">Đọc ngay</button>
       </form>
       {err && <p className="mt-2 text-sm text-red-500">{err}</p>}

@@ -8,7 +8,16 @@ import {
 import type { Chapter, MangaBasic, MangaDetail, SourceId } from '../sources/types';
 
 const MAX_PAGES = 80;
-const TRUYENQQ_BASE = 'https://truyenqqto.com';
+const TRUYENQQ_BASE = 'https://truyenqqko.com';
+
+// TruyenQQ chapter pages use ?page=N; detect if next paginator page exists.
+function hasNextPage(html: string, currentPage: number): boolean {
+  // Tachiyomi-style selector: .page_redirect > a:nth-last-child(2) > p:not(.active) ; translated to regex:
+  if (/page_redirect[\s\S]{0,500}>(\d+)<[\s\S]{0,200}<\/a>\s*(<a[^>]*>)?\s*(›|»|Sau|Next|Tiếp)/i.test(html)) return true;
+  if (new RegExp(`/trang-${currentPage + 1}[^"'<>#?]*["']`, 'i').test(html)) return true;
+  if (new RegExp(`[?&]page=${currentPage + 1}`, 'i').test(html)) return true;
+  return false;
+}
 
 async function loadAllChapters(detailUrl: string, initialHtml: string, mangaSlug: string): Promise<Chapter[]> {
   const all = new Map<string, Chapter>();
@@ -18,8 +27,7 @@ async function loadAllChapters(detailUrl: string, initialHtml: string, mangaSlug
   let page = 2;
   let emptyStreak = 0;
   while (page <= MAX_PAGES) {
-    const sep = detailUrl.includes('?') ? '&' : '?';
-    const url = `${detailUrl}${sep}page=${page}`;
+    const url = `${detailUrl}?page=${page}`;
     let html: string;
     try { html = await corsFetch(url); } catch { break; }
     if (!html || html.length < 2000) break;
@@ -31,8 +39,8 @@ async function loadAllChapters(detailUrl: string, initialHtml: string, mangaSlug
       emptyStreak++;
       if (emptyStreak >= 2) break;
     } else emptyStreak = 0;
-    const hasNext = /class=["'][^"']*(?:next|last)[^"']*["']|page=${page + 1}|Sau\s*»|Trang\s*kế|›\s*<\/a>|>\s*\d+\s*<\/a>|pagination/i.test(html);
-    if (pageChapters.length < 5 && !hasNext) break;
+    if (pageChapters.length < 5 && !hasNextPage(html, page)) break;
+    if (!hasNextPage(html, page)) break;
     page++;
   }
   return Array.from(all.values()).sort((a, b) => b.number - a.number);
@@ -50,6 +58,7 @@ export async function fetchMangaDetail(_source: SourceId, mangaSlug: string): Pr
 
 export async function fetchChapter(_source: SourceId, mangaSlug: string, chapterSlug: string) {
   const src = SOURCES[0];
+  // TruyenQQ chapter URLs: /truyen-tranh/{mangaSlug}-{chapterSlug} (no .html suffix)
   const chapterUrl = `${src.baseUrl}/truyen-tranh/${mangaSlug}-${chapterSlug}`;
   const html = await corsFetch(chapterUrl);
   const parsed = parseTruyenqqChapter(html);
@@ -58,47 +67,70 @@ export async function fetchChapter(_source: SourceId, mangaSlug: string, chapter
   return { ...parsed, images, referer, url: chapterUrl, source: 'truyenqq' as SourceId, mangaSlug, chapterSlug, mangaTitle: parsed.mangaTitle || '' };
 }
 
+// Aggregate across MANY category pages for a large home library
+const CATEGORIES = [
+  { key: 'truyen-moi-cap-nhat', pages: 4 },
+  { key: 'truyen-yeu-thich',    pages: 3 },
+  { key: 'truyen-hot',          pages: 2 },
+  { key: 'truyen-moi',          pages: 2 },
+  { key: 'truyen-hoan-thanh',   pages: 2 },
+  { key: 'top-thang',           pages: 2 }
+];
+
 export async function fetchHome(): Promise<MangaBasic[]> {
   const src = SOURCES[0];
-  // Aggregate: home + "hot" + "newest" + "completed" for many comics on home screen
-  const urls = [
-    `${src.baseUrl}/truyen-moi-cap-nhat/trang-1.html`,
-    `${src.baseUrl}/truyen-hot/trang-1.html`,
-    `${src.baseUrl}/truyen-yeu-thich/trang-1.html`,
-    `${src.baseUrl}/truyen-moi/trang-1.html`,
-    `${src.baseUrl}/truyen-hoan-thanh/trang-1.html`
-  ];
   const seen = new Map<string, MangaBasic>();
-  await Promise.all(urls.map(async (u) => {
+  const urls: string[] = [];
+  // Also home /doc-truyen landing page
+  urls.push(`${src.baseUrl}/doc-truyen`);
+  urls.push(`${src.baseUrl}/`);
+  for (const c of CATEGORIES) {
+    for (let p = 1; p <= c.pages; p++) {
+      urls.push(`${src.baseUrl}/${c.key}${p > 1 ? '/trang-' + p : ''}`);
+    }
+  }
+  await Promise.allSettled(urls.map(async (u) => {
     try {
       const html = await corsFetch(u);
       parseTruyenqqHome(html, src.baseUrl).forEach(m => { if (!seen.has(m.slug)) seen.set(m.slug, m); });
-    } catch {}
+    } catch { /* skip */ }
   }));
-  return Array.from(seen.values()).slice(0, 48);
+  return Array.from(seen.values());
 }
 
 export async function fetchHomePage(pageNum = 1): Promise<MangaBasic[]> {
   const src = SOURCES[0];
-  const url = `${src.baseUrl}/truyen-moi-cap-nhat/trang-${pageNum}.html`;
+  const url = pageNum > 1 ? `${src.baseUrl}/truyen-moi-cap-nhat/trang-${pageNum}` : `${src.baseUrl}/doc-truyen`;
   const html = await corsFetch(url);
   return parseTruyenqqHome(html, src.baseUrl);
 }
 
 export async function searchManga(q: string): Promise<MangaBasic[]> {
   const src = SOURCES[0];
-  const searchUrl = `${src.baseUrl}/tim-kiem/trang-1.html?q=${encodeURIComponent(q)}`;
-  try {
-    const html = await corsFetch(searchUrl);
-    return parseTruyenqqHome(html, src.baseUrl);
-  } catch {
-    // Try alt path
+  const kw = q.trim();
+  if (!kw) return [];
+  // Primary: /tim-kiem?q=... per Tachiyomi source; paginate up to 3 pages, dedupe
+  const seen = new Map<string, MangaBasic>();
+  for (let page = 1; page <= 3; page++) {
+    const url = `${src.baseUrl}/tim-kiem${page > 1 ? '/trang-' + page : ''}?q=${encodeURIComponent(kw)}`;
     try {
-      const alt = `${src.baseUrl}/tim-kiem?tukhoa=${encodeURIComponent(q)}`;
-      const html2 = await corsFetch(alt);
-      return parseTruyenqqHome(html2, src.baseUrl);
-    } catch { return []; }
+      const html = await corsFetch(url);
+      const items = parseTruyenqqHome(html, src.baseUrl);
+      if (items.length === 0) break;
+      items.forEach(m => { if (!seen.has(m.slug)) seen.set(m.slug, m); });
+      if (!hasNextPage(html, page)) break;
+    } catch {
+      // first page fallback to advanced search (no query) to avoid empty
+      break;
+    }
   }
+  if (seen.size > 0) return Array.from(seen.values());
+  // Fallback: tukhoa param (old-style)
+  try {
+    const alt = `${src.baseUrl}/tim-kiem?tukhoa=${encodeURIComponent(kw)}`;
+    const html = await corsFetch(alt);
+    return parseTruyenqqHome(html, src.baseUrl);
+  } catch { return []; }
 }
 
 export function buildImageUrl(rawUrl: string, referer?: string) {

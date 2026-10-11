@@ -7,7 +7,7 @@ import { getFavorites, type FavItem } from '@/lib/client/storage';
 import { useImage } from '@/lib/img';
 
 function Thumb({ src, alt }: { src?: string; alt: string }) {
-  const { src: url } = useImage(src, 'https://truyenqqto.com/');
+  const { src: url } = useImage(src, 'https://truyenqqko.com/');
   return url
     ? <img src={url} alt={alt} className="w-full h-full object-cover" referrerPolicy="no-referrer"/>
     : <div className="w-full h-full bg-ink-200 dark:bg-ink-800"/>;

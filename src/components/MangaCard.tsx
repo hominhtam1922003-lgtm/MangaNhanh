@@ -4,7 +4,7 @@ import { useImage } from '@/lib/img';
 import type { MangaBasic } from '@/lib/sources/types';
 
 function Cover({ src, alt }: { src?: string; alt: string }) {
-  const ref = 'https://truyenqqto.com/';
+  const ref = 'https://truyenqqko.com/';
   const { src: imageUrl, loading } = useImage(src, ref);
   return (
     <div className="absolute inset-0 bg-ink-200 dark:bg-ink-800">

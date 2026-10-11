@@ -2,7 +2,7 @@ export const SOURCES = [
   {
     id: 'truyenqq' as const,
     name: 'TruyenQQ',
-    baseUrl: 'https://truyenqqto.com',
+    baseUrl: 'https://truyenqqko.com',
     logoColor: 'from-sky-500 to-indigo-500',
     description: 'Kho truyện tranh lớn, nhiều bản dịch hay, cập nhật nhanh, đọc mượt.'
   }

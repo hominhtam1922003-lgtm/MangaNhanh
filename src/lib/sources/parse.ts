@@ -134,7 +134,7 @@ export function parseTruyenqqChapters(html: string, mangaSlug: string): Chapter[
   const chapters: Chapter[] = [];
   const seen = new Set<string>();
   // Only scan chapter-list container (avoid "cùng thể loại" section)
-  let scope = $('#nt_listchapter, .chapter-list, .list-chapter, .works-chapter-list, ul.chapter-list, .chapter, .story-chapter-list').first();
+  let scope = $('#nt_listchapter, .chapter-list, .list-chapter, .works-chapter-list, ul.chapter-list, .chapter, .story-chapter-list, div.works-chapter-list').first();
   if (!scope.length) scope = $(document as any);
   scope.find('a[href*="-chap-"]').each((_, el) => {
     const href = $(el).attr('href') || '';
@@ -188,15 +188,17 @@ export function parseTruyenqqDetail(html: string, mangaSlug: string): MangaDetai
 export function parseTruyenqqChapter(html: string): { title: string; images: string[]; prev?: string; next?: string; mangaTitle?: string } {
   const $ = cheerio.load(html);
   const images: string[] = [];
-  const deny = /logo|icon|favicon|banner|ads|quangcao|loader|spinner|popup|notif/i;
+  const deny = /logo|icon|favicon|banner|ads|quangcao|loader|spinner|popup|notif|stress\.gif/i;
   const adText = /truy cập|truyện hay|chapter mới|đón xem|theo dõi|nhé!|sớm nhất|truyenqqno|truyenqq\.com/i;
-  const hosts = ['truyenvua.com', 'hinhhinh.com', 'truyenqq', 'qq.', 'hinh.'];
-  $('.chapter-content img, .story-see-content img, .reading-detail .page-chapter img, #chapter_content img, .reading-detail img').each((_, el) => {
+  const hosts = ['truyenvua.com', 'hinhhinh.com', 'truyenqq', 'qq.', 'hinh.', 'upload.'];
+  // Tachiyomi uses ".page-chapter img" (no stress.gif) - this is the most reliable selector.
+  $('.page-chapter img').each((_, el) => {
     const e = $(el);
-    const raw = e.attr('data-original') || e.attr('data-src') || e.attr('data-lazy-src') || e.attr('src') || '';
+    const raw = e.attr('data-original') || e.attr('data-src') || e.attr('data-lazy-src') || e.attr('data-cdn') || e.attr('src') || '';
     const src = raw.trim();
     if (!src) return;
     if (deny.test(src) || deny.test(e.attr('class')||'')) return;
+    // CDN hosts OR real image extension
     if (!hosts.some(h => src.includes(h)) && !/\.(jpg|jpeg|png|webp)(\?|$)/i.test(src)) return;
     const w = parseFloat(e.attr('width')||'0'), h = parseFloat(e.attr('height')||'0');
     if (w && w < 200) return;
@@ -205,32 +207,52 @@ export function parseTruyenqqChapter(html: string): { title: string; images: str
     if (adText.test(alt)) return;
     images.push(src);
   });
+  // Fallback if empty: scan all images in reading content
+  if (images.length === 0) {
+    $('.chapter-content img, .story-see-content img, .reading-detail img, #chapter_content img, .reading-content img').each((_, el) => {
+      const e = $(el);
+      const raw = e.attr('data-original') || e.attr('data-src') || e.attr('src') || '';
+      const src = raw.trim();
+      if (!src) return;
+      if (deny.test(src)) return;
+      if (hosts.some(h => src.includes(h)) || /\.(jpg|jpeg|png|webp)(\?|$)/i.test(src)) images.push(src);
+    });
+  }
   const normalized = images.map(u => u.startsWith('//') ? 'https:' + u : u).map(u => u.startsWith('http') ? u : absoluteUrl('https://truyenqqko.com', u));
   const title = $('h1, h2.name-chap, .chapter-title').first().text().trim();
-  let mangaTitle = $('.block-breadcrumb a[href*="/truyen-tranh/"], .breadcrumb a[href*="/truyen-tranh/"], .path a[href*="/truyen-tranh/"]').last().text().trim();
-  if (!mangaTitle) { const t = $('title').text(); const m = t.match(/Đọc truyện\s+(.+?)\s+(?:-|trực tuyến)/i); if (m) mangaTitle = m[1].trim(); }
-  // TruyenQQ uses many classes for prev/next; collect all of them + fallback to reading buttons & title area
-  const prevCandidates = $(
-    'a.prev-chapter, a.chap-prev, a[rel="prev"], ' +
-    '.chapter-nav a:first-child, .nav_chapter a:first-child, ' +
-    '#chapter-nav a.prev, .reading-control a.prev, .navi a:first-child, ' +
-    'a[title*="trước"], a[title*="Prev"], a[title*="prev"], ' +
-    'a:contains("Chương trước"), a:contains("Chap trước"), a:contains("<<"), a:contains("‹")'
-  );
-  const nextCandidates = $(
-    'a.next-chapter, a.chap-next, a[rel="next"], ' +
-    '.chapter-nav a:last-child, .nav_chapter a:last-child, ' +
-    '#chapter-nav a.next, .reading-control a.next, .navi a:last-child, ' +
-    'a[title*="sau"], a[title*="Next"], a[title*="next"], ' +
-    'a:contains("Chương sau"), a:contains("Chap sau"), a:contains(">>"), a:contains("›")'
-  );
-  let prevHref = prevCandidates.first().attr('href');
-  let nextHref = nextCandidates.first().attr('href');
-  // Deduplicate: if both prev and next resolve to the same href, discard
+  let mangaTitle = $('.block-breadcrumb a[href*="/truyen-tranh/"], .breadcrumb a[href*="/truyen-tranh/"], .path a[href*="/truyen-tranh/"], .crumb a[href*="/truyen-tranh/"]').last().text().trim();
+  if (!mangaTitle) {
+    // Try <title>: "Tên truyện - Chapter X Next Chap Y Tiếng Việt"
+    const t = $('title').text();
+    const m = t.match(/^(.+?)\s*-\s*Chapter\s+\d+/i) || t.match(/Đọc truyện\s+(.+?)\s+(?:-|trực tuyến)/i);
+    if (m) mangaTitle = m[1].trim();
+  }
+
+  // Prev/next navigation: gather every anchor whose visible text or title says
+  // "Chap trước"/"Chap sau"/"Chương trước"/"Chương sau"/‹/›/‹‹/››/Next/Prev.
+  // Keep the FIRST prev and FIRST next whose href looks like a chapter URL (-chap-N).
+  let prevHref: string | undefined;
+  let nextHref: string | undefined;
+  $('a').each((_, el) => {
+    const a = $(el);
+    const href = (a.attr('href') || '').trim();
+    if (!href || /^#|^javascript/i.test(href)) return;
+    if (!/-chap-/.test(href)) return; // must point to a chapter
+    const text = a.text().replace(/\s+/g, ' ').trim();
+    const tattr = (a.attr('title') || '').toLowerCase();
+    const isPrev = /chư(?:ơ|a)ng\s*trước|chap\s*trước|prev|‹\s*$|<<|«/i.test(text)
+      || /trước|prev/i.test(tattr)
+      || a.is('[rel="prev"]') || a.is('.prev-chapter') || a.is('.chap-prev');
+    const isNext = /chư(?:ơ|a)ng\s*sau|chap\s*sau|next|›\s*$|>>|»/i.test(text)
+      || /sau|next/i.test(tattr)
+      || a.is('[rel="next"]') || a.is('.next-chapter') || a.is('.chap-next');
+    if (isPrev && !prevHref) prevHref = href;
+    if (isNext && !nextHref) nextHref = href;
+  });
+
+  // Deduplicate / reject same href
   if (prevHref && nextHref && prevHref === nextHref) { prevHref = undefined; nextHref = undefined; }
-  // Reject javascript:void(0) and # links
-  if (prevHref && /^#|^javascript/i.test(prevHref)) prevHref = undefined;
-  if (nextHref && /^#|^javascript/i.test(nextHref)) nextHref = undefined;
+
   return { title: title.replace(/\s+/g, ' ').trim(), images: normalized, prev: prevHref, next: nextHref, mangaTitle: mangaTitle || undefined };
 }
 
@@ -295,7 +317,13 @@ export function parseTruyenqqHome(html: string, baseUrl: string): MangaBasic[] {
   const $ = cheerio.load(html);
   const items: MangaBasic[] = [];
   const seen = new Set<string>();
-  const selectors = ['.story-item','.list-stories .story-item','.grid-stories .item','ul.list_story li','.list_grid_out li','.book-list li','.list-manga li','.truyen-list .story-item'];
+  // Tachiyomi-confirmed layout: ul.grid > li with .book_info .qtip a and .book_avatar img
+  // Plus fallbacks for older layouts.
+  const selectors = [
+    'ul.grid > li',
+    '.story-item','.list-stories .story-item','.grid-stories .item',
+    'ul.list_story li','.list_grid_out li','.book-list li','.list-manga li','.truyen-list .story-item'
+  ];
   let candidates = $(selectors.join(', '));
   if (candidates.length === 0) {
     candidates = $('a[href*="/truyen-tranh/"]').filter(function() {
@@ -305,22 +333,32 @@ export function parseTruyenqqHome(html: string, baseUrl: string): MangaBasic[] {
   }
   candidates.each((_, el) => {
     const $el = $(el);
-    const anchor = $el.is('a') ? $el : $el.find('a[href*="/truyen-tranh/"]').first();
+    // Title anchor: try explicit .book_info .qtip a first (Tachiyomi selector)
+    let anchor: any = $el.find('.book_info .qtip a').first();
+    if (!anchor.length) anchor = $el.is('a') ? $el : $el.find('a[href*="/truyen-tranh/"]').first();
     const href = anchor.attr('href') || '';
     if (/\/chuong-/.test(href)) return;
-    const m = href.match(/\/truyen-tranh\/([^/#?]+?)-(\d+)(?:\/|$)/);
+    // Reject chapter links (contain -chap-)
+    if (/-chap-/.test(href)) return;
+    const m = href.match(/\/truyen-tranh\/([^/#?]+?)-(\d+)(?:\/|$|#|\?)/);
     if (!m) return;
     const slug = `${m[1]}-${m[2]}`;
     if (seen.has(slug)) return;
     seen.add(slug);
     let title = anchor.attr('title')
-      || $el.find('h3 a, h2 a, .title a, .book_name a, .story-title a').first().attr('title')
-      || $el.find('h3, h2, .title, .book_name, .story-title, .name').first().text().trim()
+      || $el.find('h3 a, h2 a, .title a, .book_name a, .story-title a, .qtip a').first().attr('title')
+      || $el.find('h3, h2, .title, .book_name, .story-title, .name, .qtip').first().text().trim()
       || anchor.text().trim() || m[1];
     title = title.replace(/\s+/g, ' ').trim();
-    const thumb = pickCover($el, $);
-    const latestChapter = $el.find('a[href*="-chap-"]').first().text().trim();
-    const updatedAt = $el.find('.time, .updated-at, .last-chapter small, [class*="date"]').first().text().trim();
+    // Thumbnail: Tachiyomi uses .book_avatar img
+    let thumb = '';
+    const imgEl = $el.find('.book_avatar img, .book_info img, img').first();
+    if (imgEl.length) thumb = getImgSrc(imgEl[0], $);
+    if (!thumb) thumb = pickCover($el, $);
+    // Latest chapter: first -chap- link's text
+    const chapterAnchor = $el.find('a[href*="-chap-"]').first();
+    const latestChapter = chapterAnchor.text().trim();
+    const updatedAt = $el.find('.time, .updated-at, .last-chapter small, [class*="date"], .last-chap-time, .timechap, .chapter-time').first().text().trim();
     items.push({ source: 'truyenqq', slug, title, thumbnail: absoluteUrl(baseUrl, thumb), latestChapter, updatedAt });
   });
   return items;

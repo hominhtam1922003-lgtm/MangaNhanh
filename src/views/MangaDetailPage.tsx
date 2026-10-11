@@ -11,7 +11,7 @@ import { toggleFavorite, isFavorite, getLastRead, upsertHistory } from '@/lib/cl
 import { useImage } from '@/lib/img';
 
 function CoverImg({ src, alt, className }: { src?: string; alt: string; className?: string }) {
-  const { src: url } = useImage(src, 'https://truyenqqto.com/');
+  const { src: url } = useImage(src, 'https://truyenqqko.com/');
   if (!src) return <div className={className + ' bg-ink-200 dark:bg-ink-800'}/>;
   return url
     ? <img src={url} alt={alt} className={className} referrerPolicy="no-referrer"/>

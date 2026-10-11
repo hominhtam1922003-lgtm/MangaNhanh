@@ -14,16 +14,15 @@ export function getSource(id: SourceId) {
   return SOURCES.find(s => s.id === id)!;
 }
 
+// Only WORKING public CORS proxies (2026). corsproxy.io now requires API key, htmldriven is 404.
+// Ordered by observed reliability/speed.
 export const CORS_PROXIES: Array<(url: string) => string> = [
-  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
   (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  (url) => `https://cors-proxy.htmldriven.com/?url=${encodeURIComponent(url)}`,
-  (url) => `https://proxy.cors.sh/${url}`,
-  (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  (url) => `https://proxy.corsfix.com/?${encodeURIComponent(url)}`
 ];
 
-async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = 15000): Promise<Response> {
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = 8000): Promise<Response> {
   const ctrl = new AbortController();
   const id = setTimeout(() => ctrl.abort(), timeoutMs);
   try { return await fetch(input, { ...(init || {}), signal: ctrl.signal }); }
@@ -44,34 +43,38 @@ export async function corsFetch(url: string, init?: RequestInit & { referer?: st
     w.Capacitor || window.location.protocol === 'capacitor:' || window.location.protocol === 'file:' || w.Capacitor?.isNativePlatform?.()
   );
 
-  const tryOnce = async (u: string) => {
-    if (isCapacitor && w.Capacitor?.Plugins?.CapacitorHttp?.request) {
-      try {
-        const res = await w.Capacitor.Plugins.CapacitorHttp.request({
-          method: 'GET', url: u,
-          headers: { ...headers, 'Accept': headers['Accept'] }
-        });
-        let t = res?.data ?? '';
-        if (typeof t === 'object') t = JSON.stringify(t);
-        if (t && t.length > 200) return t;
-      } catch { /* fall through */ }
+  const tryOnce = async (u: string, useNative = false): Promise<string> => {
+    if (useNative && w.Capacitor?.Plugins?.CapacitorHttp?.request) {
+      const res = await w.Capacitor.Plugins.CapacitorHttp.request({
+        method: 'GET', url: u, headers: { ...headers, 'Accept': headers['Accept'] }
+      });
+      let t = res?.data ?? '';
+      if (typeof t === 'object') t = JSON.stringify(t);
+      if (t && t.length > 500) return t;
+      throw new Error('native empty');
     }
-    const r = await fetchWithTimeout(u, { ...(init || {}), headers }, 15000);
+    const r = await fetchWithTimeout(u, { ...(init || {}), headers }, 8000);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     let t = await r.text();
     if (u.includes('allorigins.win/get?')) {
       try { const j = JSON.parse(t); if (j.contents) t = j.contents; } catch {}
     }
-    if (!t || t.length < 200) throw new Error('Phản hồi trống');
+    if (!t || t.length < 500) throw new Error('Phản hồi trống');
     return t;
   };
 
-  const candidates: string[] = [];
-  if (isCapacitor) candidates.push(url);
-  else {
-    candidates.push(`/api/proxy?url=${encodeURIComponent(url)}${init?.referer ? '&referer='+encodeURIComponent(init.referer):''}`);
-    candidates.push(url);
+  // On Android (Capacitor), call DIRECTLY. No CORS, no proxy, no long retry chain — fastest path.
+  if (isCapacitor) {
+    try { return await tryOnce(url, true); } catch {
+      try { return await tryOnce(url, false); }
+      catch { throw new Error('Không tải được dữ liệu. Kiểm tra kết nối mạng rồi thử lại.'); }
+    }
   }
+
+  // On web preview only: try local dev proxy, then direct, then public proxies.
+  const candidates: string[] = [];
+  candidates.push(`/api/proxy?url=${encodeURIComponent(url)}${init?.referer ? '&referer='+encodeURIComponent(init.referer):''}`);
+  candidates.push(url);
   for (const make of CORS_PROXIES) candidates.push(make(url));
 
   let lastErr: Error = new Error('Không có phương án fetch nào');
@@ -79,10 +82,5 @@ export async function corsFetch(url: string, init?: RequestInit & { referer?: st
     try { return await tryOnce(u); }
     catch (e) { lastErr = e instanceof Error ? e : new Error(String(e)); }
   }
-  throw new Error(
-    (isCapacitor
-      ? 'Không tải được dữ liệu. Kiểm tra kết nối mạng rồi thử lại.'
-      : 'Không tải được dữ liệu từ máy chủ web. Hãy cài APK về điện thoại để đọc truyện.')
-    + ' (' + lastErr.message + ')'
-  );
+  throw new Error('Không tải được dữ liệu từ máy chủ web. Hãy cài APK về điện thoại để đọc truyện. (' + lastErr.message + ')');
 }

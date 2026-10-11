@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import A from '@/components/A';
 import { buildHref, useHashRoute } from '@/lib/hash-router';
 import type { SourceId } from '@/lib/sources/types';
 import { getSource } from '@/lib/sources';
@@ -8,6 +9,12 @@ import { fetchMangaDetail } from '@/lib/client/sources';
 import type { MangaDetail } from '@/lib/sources/types';
 import { Empty, Skeleton } from '@/components/Loading';
 import { toggleFavorite, isFavorite, getLastRead, upsertHistory } from '@/lib/client/storage';
+
+function coverProxy(src: string, source: string): string {
+  if (!src) return '';
+  const ref = source === 'truyenqq' ? 'https://truyenqqko.com/' : 'https://nettruyen.gg/';
+  return `https://wsrv.nl/?url=${encodeURIComponent(src)}&referer=${encodeURIComponent(ref)}&af`;
+}
 
 export default function MangaDetailPage({ source, slug }: { source: string; slug: string }) {
   const src = getSource(source as SourceId);
@@ -63,13 +70,20 @@ export default function MangaDetailPage({ source, slug }: { source: string; slug
         <>
           <div className="relative rounded-3xl overflow-hidden">
             <div className="absolute inset-0">
-              <img src={detail.thumbnail} alt="" className="w-full h-full object-cover blur-2xl opacity-30 scale-110" referrerPolicy="no-referrer"/>
+              <img src={coverProxy(detail.thumbnail, source)} alt="" className="w-full h-full object-cover blur-2xl opacity-30 scale-110" referrerPolicy="no-referrer"/>
               <div className="absolute inset-0 bg-gradient-to-b from-white/60 to-white/95 dark:from-ink-950/60 dark:to-ink-950"/>
             </div>
             <div className="relative p-5 sm:p-8 flex flex-col md:flex-row gap-6">
               <div className="flex-shrink-0 mx-auto md:mx-0">
-                <div className="w-48 h-72 rounded-2xl overflow-hidden shadow-2xl bg-ink-100 dark:bg-ink-900">
-                  <img src={detail.thumbnail} alt={detail.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e)=>((e.target as HTMLImageElement).src=`https://wsrv.nl/?url=${encodeURIComponent(detail.thumbnail)}&af`)}/>
+                <div className="w-48 h-72 rounded-2xl overflow-hidden shadow-2xl bg-ink-100 dark:bg-ink-900 relative">
+                  <img
+                    src={coverProxy(detail.thumbnail, source)}
+                    data-fallback={detail.thumbnail}
+                    alt={detail.title}
+                    className="w-full h-full object-cover absolute inset-0"
+                    referrerPolicy="no-referrer"
+                    onError={(e)=>{ const t = e.currentTarget; if (t.dataset.fallback) { t.src = t.dataset.fallback; t.removeAttribute('data-fallback'); } }}
+                  />
                 </div>
               </div>
               <div className="flex-1">

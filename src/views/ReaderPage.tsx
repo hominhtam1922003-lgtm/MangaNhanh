@@ -1,16 +1,19 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import A from '@/components/A';
 import { buildHref, useHashRoute } from '@/lib/hash-router';
-import { fetchChapter, buildImageUrl } from '@/lib/client/sources';
+import { fetchChapter } from '@/lib/client/sources';
 import { getSource } from '@/lib/sources';
 import type { SourceId } from '@/lib/sources/types';
 import { Empty, Spinner } from '@/components/Loading';
 import { useTheme } from '@/components/ThemeProvider';
 import { upsertHistory } from '@/lib/client/storage';
-import { useNativeImage } from '@/lib/useNativeImage';
 
-interface ChapterData { title: string; images: string[]; prev?: string; next?: string; url: string; referer: string; mangaTitle?: string; }
+interface ChapterData {
+  title: string; images: string[]; prev?: string; next?: string;
+  url: string; referer: string; mangaTitle?: string;
+}
 
 function chapterSlugFromUrl(href: string, source: SourceId): string | null {
   try {
@@ -20,12 +23,43 @@ function chapterSlugFromUrl(href: string, source: SourceId): string | null {
       const i = parts.findIndex(p => p.startsWith('chuong-'));
       if (i >= 0) return parts[i];
     } else {
-      const last = parts[parts.length-1];
+      const last = parts[parts.length - 1];
       const m = last.match(/-chap-(.+)$/);
       if (m) return 'chap-' + m[1];
     }
   } catch {}
   return null;
+}
+
+function buildImgCandidates(raw: string, referer: string): string[] {
+  const r = encodeURIComponent(referer || '');
+  return [
+    `https://wsrv.nl/?url=${encodeURIComponent(raw)}&referer=${r}&af`,
+    `https://images.weserv.nl/?url=${encodeURIComponent(raw.replace(/^https?:\/\//, ''))}&af&referrer=${r}`,
+    raw
+  ];
+}
+
+function ChapterImg({ src, referer, index, onLoad }: { src: string; referer: string; index: number; onLoad: () => void }) {
+  const [loaded, setLoaded] = useState(false);
+  const [idx, setIdx] = useState(0);
+  const cands = buildImgCandidates(src, referer);
+  const current = cands[Math.min(idx, cands.length - 1)];
+  return (
+    <div className={`reader-page ${loaded ? 'loaded' : ''}`}>
+      {!loaded && <div className="w-full max-w-3xl skeleton aspect-[2/3]"/>}
+      <img
+        src={current}
+        alt={`Trang ${index + 1}`}
+        referrerPolicy="no-referrer"
+        loading="lazy"
+        decoding="async"
+        onLoad={() => { setLoaded(true); onLoad(); }}
+        onError={() => { if (idx < cands.length - 1) { setLoaded(false); setIdx(idx + 1); } }}
+        className={`w-full h-auto block transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+      />
+    </div>
+  );
 }
 
 export default function ReaderPage({ source, slug, chapter }: { source: string; slug: string; chapter: string }) {
@@ -47,13 +81,14 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
     try {
       const d = await fetchChapter(source as SourceId, slug, chapter);
       setData(d);
+      if (d.mangaTitle) setMangaTitle(d.mangaTitle);
       upsertHistory({
         source, slug,
-        title: d.mangaTitle || mangaTitle || d.title.split('-')[0].trim() || slug,
+        title: d.mangaTitle || mangaTitle || slug,
         thumbnail: '',
         chapterSlug: chapter,
         chapterTitle: d.title,
-        chapterNumber: parseFloat(chapter.replace(/[^\d.]/g,''))||0,
+        chapterNumber: parseFloat(chapter.replace(/[^\d.]/g, '')) || 0,
         lastPage: 0
       });
     } catch (e: any) {
@@ -62,14 +97,15 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
   }, [source, slug, chapter, mangaTitle]);
 
   useEffect(() => { load(); }, [load]);
+
   useEffect(() => {
     let cancel = false;
     import('@/lib/client/sources').then(({ fetchMangaDetail }) => {
       fetchMangaDetail(source as SourceId, slug).then(d => {
         if (cancel) return;
         setChapters(d.chapters.map(c => ({ slug: c.slug, title: c.title, number: c.number })));
-        setMangaTitle(d.title);
-      }).catch(()=>{});
+        if (d.title) setMangaTitle(d.title);
+      }).catch(() => {});
     });
     return () => { cancel = true; };
   }, [source, slug]);
@@ -88,15 +124,15 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  const displayTitle = mangaTitle ? `${mangaTitle} - ${data?.title || ''}` : (data?.title||'Đang tải...');
+  const displayTitle = mangaTitle ? `${mangaTitle} — ${data?.title || ''}` : (data?.title || 'Đang tải...');
 
   return (
     <div className="bg-ink-950 text-ink-100 min-h-[calc(100vh-4rem)]">
       <div className="sticky top-0 z-30 bg-ink-900/80 backdrop-blur border-b border-ink-800">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3 text-sm">
-          <a href={buildHref(`/manga/${source}/${slug}`)} className="btn-icon !w-9 !h-9" aria-label="Quay lại">
+          <A href={`/manga/${source}/${slug}`} className="btn-icon !w-9 !h-9" aria-label="Quay lại">
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-          </a>
+          </A>
           <div className="flex-1 min-w-0"><div className="font-semibold truncate">{displayTitle}</div><div className="text-xs text-ink-400 truncate">{src?.name}</div></div>
           <button onClick={goPrev} disabled={!data?.prev} className="btn-icon !w-9 !h-9 disabled:opacity-30">‹</button>
           <button onClick={()=>setShowChapters(s=>!s)} className="btn-ghost !px-3 !py-1.5 text-xs">Chương</button>
@@ -104,7 +140,10 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
           <button onClick={()=>setShowSettings(s=>!s)} className="btn-icon !w-9 !h-9">⚙</button>
         </div>
         {loading && data && (
-          <div className="h-1 bg-ink-800"><div className="h-full bg-gradient-to-r from-brand-500 to-pink-500 transition-all" style={{width:`${Math.min(100,(loadedCount/Math.max(1,data.images.length))*100)}%`}}/></div>
+          <div className="h-1 bg-ink-800">
+            <div className="h-full bg-gradient-to-r from-brand-500 to-pink-500 transition-all"
+                 style={{ width: `${Math.min(100, (loadedCount / Math.max(1, data.images.length)) * 100)}%` }}/>
+          </div>
         )}
       </div>
       <div className="max-w-3xl mx-auto py-4 px-2 sm:px-0">
@@ -114,20 +153,14 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
         {data && data.images.length > 0 && (
           <div className={readMode === 'paged' ? 'flex flex-col items-center' : ''}>
             {data.images.map((img, i) => (
-              <PageImage
-                key={i}
-                index={i}
-                direct={img}
-                referer={data.referer}
-                onLoad={()=>setLoadedCount(c=>c+1)}
-              />
+              <ChapterImg key={i} index={i} src={img} referer={data.referer} onLoad={()=>setLoadedCount(c=>c+1)}/>
             ))}
           </div>
         )}
         {data && !loading && (
           <div className="flex items-center justify-center gap-3 my-8">
             <button onClick={goPrev} disabled={!data.prev} className="btn-primary disabled:opacity-40">Chap trước</button>
-            <a href={buildHref(`/manga/${source}/${slug}`)} className="btn-ghost">Danh sách chương</a>
+            <A href={`/manga/${source}/${slug}`} className="btn-ghost">Danh sách chương</A>
             <button onClick={goNext} disabled={!data.next} className="btn-primary disabled:opacity-40">Chap sau</button>
           </div>
         )}
@@ -138,8 +171,13 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
           <div className="w-full max-w-md bg-ink-900 border-l border-ink-800 h-full overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}>
             <div className="p-4 border-b border-ink-800 flex items-center justify-between"><div className="font-display font-bold">Danh sách chương</div><button onClick={()=>setShowChapters(false)} className="btn-icon !w-8 !h-8">✕</button></div>
             <div className="flex-1 overflow-y-auto p-2">
-              {chapters.length===0?<div className="text-center text-ink-400 text-sm py-10">Đang tải...</div>:
-              chapters.map(c=>(<button key={c.slug} onClick={()=>{setShowChapters(false);navigate(`/read/${source}/${slug}/${c.slug}`);}} className={`w-full text-left px-3 py-2 rounded-lg text-sm ${c.slug===chapter?'bg-brand-500 text-white':'hover:bg-ink-800 text-ink-200'}`}>{c.title}</button>))}
+              {chapters.length === 0
+                ? <div className="text-center text-ink-400 text-sm py-10">Đang tải...</div>
+                : chapters.map(c => (
+                    <button key={c.slug} onClick={()=>{setShowChapters(false); navigate(`/read/${source}/${slug}/${c.slug}`);}}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${c.slug===chapter ? 'bg-brand-500 text-white' : 'hover:bg-ink-800 text-ink-200'}`}>
+                      {c.title}
+                    </button>))}
             </div>
           </div>
         </div>
@@ -165,37 +203,6 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
             </div>
           </div>
         </div>
-      )}
-    </div>
-  );
-}
-
-function PageImage({ direct, referer, index, onLoad }: { direct: string; referer: string; index: number; onLoad: ()=>void }) {
-  const [loaded, setLoaded] = useState(false);
-  // Candidates: direct (native fetch with Referer), then wsrv proxies
-  const candidates = [
-    { src: direct, referer },
-    { src: `https://wsrv.nl/?url=${encodeURIComponent(direct)}&referer=${encodeURIComponent(referer)}` },
-    { src: `https://images.weserv.nl/?url=${encodeURIComponent(direct.replace(/^https?:\/\//, ''))}` }
-  ];
-  const { url } = useNativeImage(candidates);
-
-  return (
-    <div className={`reader-page ${loaded?'loaded':''}`}>
-      {!loaded && <div className="w-full max-w-3xl skeleton aspect-[2/3]"/>}
-      {url ? (
-        <img
-          src={url}
-          alt={`Trang ${index+1}`}
-          loading="lazy"
-          decoding="async"
-          onLoad={()=>{setLoaded(true);onLoad();}}
-          onError={()=>setLoaded(false)}
-          className={`w-full h-auto transition-opacity duration-300 ${loaded?'opacity-100':'opacity-0'}`}
-          style={{display:'block'}}
-        />
-      ) : (
-        <div className="w-full max-w-3xl py-20 text-center text-ink-500 text-sm">Không tải được trang {index+1}</div>
       )}
     </div>
   );

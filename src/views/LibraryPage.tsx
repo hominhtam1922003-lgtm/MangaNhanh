@@ -1,10 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import A from '@/components/A';
 import { Empty } from '@/components/Loading';
 import { getFavorites, type FavItem } from '@/lib/client/storage';
 import { SOURCES } from '@/lib/sources';
-import { buildHref } from '@/lib/hash-router';
+
+function coverOf(m: FavItem) {
+  if (!m.thumbnail) return '';
+  const ref = m.source === 'truyenqq' ? 'https://truyenqqko.com/' : 'https://nettruyen.gg/';
+  return `https://wsrv.nl/?url=${encodeURIComponent(m.thumbnail)}&referer=${encodeURIComponent(ref)}&af`;
+}
 
 export default function LibraryPage() {
   const [items, setItems] = useState<FavItem[]>([]);
@@ -18,13 +24,22 @@ export default function LibraryPage() {
           {items.map(m => {
             const s = SOURCES.find(x => x.id === m.source);
             return (
-              <a key={`${m.source}-${m.slug}`} href={buildHref(`/manga/${m.source}/${m.slug}`)} className="group block">
+              <A key={`${m.source}-${m.slug}`} href={`/manga/${m.source}/${m.slug}`} className="group block">
                 <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-ink-100 dark:bg-ink-900 shadow group-hover:shadow-xl transition-all group-hover:-translate-y-1">
-                  <img src={m.thumbnail} alt={m.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e)=>((e.target as HTMLImageElement).src=`https://wsrv.nl/?url=${encodeURIComponent(m.thumbnail)}&af`)}/>
+                  {m.thumbnail && (
+                    <img
+                      src={coverOf(m)}
+                      data-fb={m.thumbnail}
+                      alt={m.title}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={(e)=>{ const t=e.currentTarget; if(t.dataset.fb){ t.src=t.dataset.fb; t.removeAttribute('data-fb');} }}
+                    />
+                  )}
                   {s && <span className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-gradient-to-r ${s.logoColor}`}>{s.name}</span>}
                 </div>
                 <h3 className="mt-2 font-semibold text-sm line-clamp-2 group-hover:text-brand-500">{m.title}</h3>
-              </a>
+              </A>
             );
           })}
         </div>

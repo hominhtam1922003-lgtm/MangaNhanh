@@ -1,0 +1,73 @@
+name: Build ShortVideo APK
+
+on:
+  push:
+    branches: [arena/dbc97e7e-manganhanh]
+    paths: ['shortvideo/**', '.github/workflows/build-shortvideo-apk.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shortvideo
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: shortvideo/package-lock.json
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web
+        run: npm run build
+        env:
+          # Địa chỉ backend đã deploy (tuỳ chọn). Đặt trong Settings > Variables: SHORTVIDEO_API_BASE
+          VITE_API_BASE: ${{ vars.SHORTVIDEO_API_BASE }}
+
+      - name: Create Android project
+        run: npx cap add android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: shortvideo/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShortVideo-APK
+          path: shortvideo/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Publish APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="shortvideo-${GITHUB_SHA::7}"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/ShortVideo-${GITHUB_SHA::7}.apk"
+          gh release create "$TAG" "$RUNNER_TEMP/ShortVideo-${GITHUB_SHA::7}.apk" \
+            --target "$GITHUB_SHA" \
+            --title "ShortVideo APK ${GITHUB_SHA::7}" \
+            --notes "APK debug build từ commit ${GITHUB_SHA}. Bật 'Cài ứng dụng không xác định' trên Android để cài." \
+            --prerelease

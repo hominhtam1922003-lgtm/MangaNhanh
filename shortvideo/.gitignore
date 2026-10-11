@@ -1,0 +1,5 @@
+dist
+server/cache
+server/.venv
+__pycache__/
+android/

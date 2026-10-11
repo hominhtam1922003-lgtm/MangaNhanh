@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+dist
+build
+.env
+.env.local
+.DS_Store
+*.log
+.vercel
+ios
+*.apk
+android/.gradle
+android/app/build
+android/build
+android/local.properties
+android/captures

@@ -21,60 +21,84 @@ export function getSource(id: SourceId) {
   return SOURCES.find(s => s.id === id)!;
 }
 
-/**
- * Public CORS proxies used as fallbacks. The UI tries them in order.
- * These are free public services that may occasionally be down.
- */
-export const CORS_PROXIES = [
-  // AllOrigins raw
-  (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  // CorsProxy.io
-  (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  // CodeTabs CORS proxy
-  (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-  // ThingProxy (mirror)
-  (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
+/** Public CORS proxies used as fallbacks when our local API proxy isn't available. */
+export const CORS_PROXIES: Array<(url: string) => string> = [
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://cors-proxy.htmldriven.com/?url=${encodeURIComponent(url)}`,
+  (url) => `https://proxy.cors.sh/${url}`,
+  (url) => `https://cors-anywhere.herokuapp.com/${url}`,
+  (url) => {
+    // allorigins JSON
+    const u = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    return u;
+  }
 ];
 
-export async function corsFetch(url: string, init?: RequestInit): Promise<string> {
+/**
+ * Attempt to fetch a URL, using:
+ *  1. Next.js server proxy /api/proxy if available (dev/preview on Vercel/etc.)
+ *  2. Direct fetch (works on Capacitor native WebView where CORS is not enforced)
+ *  3. Public CORS proxies in sequence as last-resort.
+ */
+export async function corsFetch(url: string, init?: RequestInit & { referer?: string }): Promise<string> {
+  const headers: Record<string, string> = {
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'vi,en;q=0.9',
+    ...(init?.headers as Record<string, string> || {})
+  };
+  if (init?.referer) headers['Referer'] = init.referer;
+
+  // 1) Local server proxy
+  try {
+    const probeResp = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`, { method: 'HEAD' }).catch(() => null);
+    if (probeResp && probeResp.ok) {
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}${init?.referer ? '&referer='+encodeURIComponent(init.referer) : ''}`;
+      const r = await fetch(proxyUrl, { headers });
+      if (r.ok) {
+        const t = await r.text();
+        if (t && t.length > 200) return t;
+      }
+    }
+  } catch { /* fallthrough */ }
+
+  // 2) Direct
+  try {
+    const r = await fetch(url, { ...(init||{}), headers });
+    if (r.ok) {
+      const t = await r.text();
+      if (t && t.length > 200) return t;
+    }
+  } catch { /* fallthrough */ }
+
+  // 3) Public proxies
   let lastErr: unknown;
   for (let i = 0; i < CORS_PROXIES.length; i++) {
     const proxyUrl = CORS_PROXIES[i](url);
     try {
-      const resp = await fetch(proxyUrl, {
-        ...init,
-        headers: {
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'vi,en;q=0.9',
-          ...(init?.headers || {})
-        }
-      });
-      if (!resp.ok) throw new Error(`proxy ${i} -> HTTP ${resp.status}`);
-      const text = await resp.text();
-      // allorigins /get returns JSON
+      const r = await fetch(proxyUrl, { headers: { ...headers, ...(init?.headers || {}) } });
+      if (!r.ok) throw new Error(`proxy ${i} -> HTTP ${r.status}`);
+      let t = await r.text();
+      // allorigins /get returns JSON { contents: "..." }
       if (proxyUrl.includes('/get?')) {
-        try {
-          const j = JSON.parse(text);
-          if (j.contents) return j.contents as string;
-        } catch { /* fallthrough */ }
+        try { const j = JSON.parse(t); if (j.contents) t = j.contents; } catch { /* ignore */ }
       }
-      if (text && text.length > 200) return text;
+      if (t && t.length > 200) return t;
     } catch (e) {
       lastErr = e;
     }
   }
-  // Last resort: try direct (works when CORS headers exist, e.g. some servers)
-  try {
-    const r = await fetch(url, {
-      ...init,
-      headers: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        ...(init?.headers || {})
-      }
-    });
-    if (r.ok) return r.text();
-  } catch (e) {
-    lastErr = e;
-  }
-  throw lastErr instanceof Error ? lastErr : new Error('Không thể tải trang');
+  throw lastErr instanceof Error ? lastErr : new Error('Không thể tải trang (đã thử tất cả proxy)');
+}
+
+/**
+ * Fetch an image as a blob URL for use inside <img>.
+ * We go through our /api/proxy if available to avoid broken hotlinks.
+ */
+export async function fetchImageAsObjectUrl(src: string, referer?: string): Promise<string | null> {
+  if (typeof window === 'undefined') return src;
+  // Direct src always tried first by browser with no-referrer. We just return src;
+  // on error caller uses a wsrv.nl fallback which we always add.
+  return src;
 }

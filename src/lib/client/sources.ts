@@ -123,9 +123,20 @@ export async function searchManga(source: SourceId | 'all', q: string): Promise<
 }
 
 export function buildImageUrl(src: string, referer?: string) {
-  // Use wsrv.nl to bypass hotlink/CORS when needed
+  // Order of attempts:
+  //  1. Original src (with no-referrer)
+  //  2. Next.js server proxy /api/proxy?url=... (works on dev / preview)
+  //  3. wsrv.nl image proxy (worldwide, bypasses hotlink/CORS for images)
+  //  4. images.weserv.nl (mirror)
   const viaWsrv = (u: string) => `https://wsrv.nl/?url=${encodeURIComponent(u)}&af&n=-1`;
-  return { direct: src, referer: referer || '', proxied: viaWsrv(src) };
+  const viaWeserv = (u: string) => `https://images.weserv.nl/?url=${encodeURIComponent(u)}&af`;
+  return {
+    direct: src,
+    localProxy: `/api/proxy?url=${encodeURIComponent(src)}${referer ? '&referer='+encodeURIComponent(referer) : ''}`,
+    proxied: viaWsrv(src),
+    proxied2: viaWeserv(src),
+    referer: referer || ''
+  };
 }
 
 export function slugify(s: string) {

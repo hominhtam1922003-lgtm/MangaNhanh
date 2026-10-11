@@ -97,7 +97,7 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
         {data && !loading && data.images.length === 0 && <Empty title="Không tìm thấy ảnh"/>}
         {data && data.images.length > 0 && (
           <div className={readMode === 'paged' ? 'flex flex-col items-center' : ''}>
-            {data.images.map((img, i) => { const urls = buildImageUrl(img, data.referer); return <PageImage key={i} index={i} direct={urls.direct} proxied={urls.proxied} onLoad={()=>setLoadedCount(c=>c+1)}/>; })}
+            {data.images.map((img, i) => { const urls = buildImageUrl(img, data.referer); return <PageImage key={i} index={i} direct={urls.direct} localProxy={urls.localProxy} proxied={urls.proxied} proxied2={urls.proxied2} onLoad={()=>setLoadedCount(c=>c+1)}/>; })}
           </div>
         )}
         {data && !loading && (
@@ -146,17 +146,18 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
   );
 }
 
-function PageImage({ direct, proxied, index, onLoad }: { direct: string; proxied: string; index: number; onLoad: ()=>void }) {
-  const [src, setSrc] = useState(direct);
+function PageImage({ direct, localProxy, proxied, proxied2, index, onLoad }: { direct: string; localProxy: string; proxied: string; proxied2: string; index: number; onLoad: ()=>void }) {
+  const [srcIdx, setSrcIdx] = useState(0);
   const [loaded, setLoaded] = useState(false);
-  const [tried, setTried] = useState(0);
-  useEffect(()=>{ setSrc(direct); setLoaded(false); setTried(0); }, [direct]);
+  const sources = [direct, localProxy, proxied, proxied2];
+  useEffect(()=>{ setSrcIdx(0); setLoaded(false); }, [direct]);
+  const src = sources[srcIdx];
   return (
     <div className={`reader-page ${loaded?'loaded':''}`}>
       {!loaded && <div className="w-full max-w-3xl skeleton aspect-[2/3]"/>}
       <img src={src} alt={`Trang ${index+1}`} referrerPolicy="no-referrer" loading="lazy"
         onLoad={()=>{setLoaded(true);onLoad();}}
-        onError={()=>{ if (tried===0) { setTried(1); setSrc(proxied);} }}
+        onError={()=>{ if (srcIdx < sources.length - 1) setSrcIdx(srcIdx + 1); }}
         className={`transition-opacity duration-300 ${loaded?'opacity-100':'opacity-0 absolute'}`} style={{width:'100%'}}/>
     </div>
   );

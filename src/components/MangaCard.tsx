@@ -16,34 +16,32 @@ export function sourceBadge(source: string) {
 }
 
 export default function MangaCard({ manga }: { manga: MangaBasic }) {
+  const [srcIdx, setSrcIdx] = useState(0);
   const [loaded, setLoaded] = useState(false);
-  const [src, setSrc] = useState(manga.thumbnail);
-  const [err, setErr] = useState(false);
   const href = buildHref(`/manga/${manga.source}/${manga.slug}`);
+  const sources = [
+    manga.thumbnail,
+    `/api/proxy?url=${encodeURIComponent(manga.thumbnail)}`,
+    `https://wsrv.nl/?url=${encodeURIComponent(manga.thumbnail)}&af&n=-1`,
+    `https://images.weserv.nl/?url=${encodeURIComponent(manga.thumbnail)}&af`
+  ];
+  const src = sources[srcIdx];
 
   return (
     <a href={href} className="group block animate-slide-up">
       <div className="relative rounded-2xl overflow-hidden bg-ink-100 dark:bg-ink-900 aspect-[3/4] shadow group-hover:shadow-xl transition-all duration-300 group-hover:-translate-y-1">
-        {!loaded && !err && <div className="absolute inset-0 skeleton" />}
-        {!err ? (
-          <img
-            src={src}
-            alt={manga.title}
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            onLoad={() => setLoaded(true)}
-            onError={() => {
-              if (!err) {
-                setErr(true);
-                setSrc(`https://wsrv.nl/?url=${encodeURIComponent(manga.thumbnail)}&af`);
-                setTimeout(() => setErr(false), 50);
-              }
-            }}
-            className={`w-full h-full object-cover transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
-          />
-        ) : (
-          <div className="flex items-center justify-center w-full h-full text-ink-400 text-xs">Không có ảnh</div>
-        )}
+        {!loaded && <div className="absolute inset-0 skeleton" />}
+        <img
+          src={src}
+          alt={manga.title}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onLoad={() => setLoaded(true)}
+          onError={() => {
+            if (srcIdx < sources.length - 1) setSrcIdx(srcIdx + 1);
+          }}
+          className={`w-full h-full object-cover transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        />
         {sourceBadge(manga.source)}
         {manga.latestChapter && (
           <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-black/60 text-white backdrop-blur">

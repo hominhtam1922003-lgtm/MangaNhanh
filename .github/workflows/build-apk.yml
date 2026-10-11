@@ -33,11 +33,15 @@ jobs:
         run: npm ci || npm install
 
       - name: Export static web
-        run: npm run export
+        run: |
+          # On the GitHub Ubuntu runner, CORS isn't enforced by the Capacitor WebView
+          # on native HTTP, so we build the static export (no /api routes).
+          npm run export
+          echo "=== out/ size ==="
+          du -sh out/
 
       - name: Add & sync Capacitor Android
         run: |
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           echo "ANDROID_HOME=$ANDROID_HOME"
           npx cap add android || true
           npx cap sync android

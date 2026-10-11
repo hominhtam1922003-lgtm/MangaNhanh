@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+const isStatic = process.env.STATIC_EXPORT === '1';
 const nextConfig = {
   reactStrictMode: true,
   images: {
@@ -7,8 +8,10 @@ const nextConfig = {
   },
   experimental: {
     largePageDataBytes: 8 * 1024 * 1024
-  },
-  output: 'export'
+  }
 };
+if (isStatic) {
+  nextConfig.output = 'export';
+}
 
 export default nextConfig;

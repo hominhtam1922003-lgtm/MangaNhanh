@@ -58,16 +58,26 @@ function SourceSection({ source }: { source: typeof SOURCES[number] }) {
   const [items, setItems] = useState<MangaBasic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let cancel = false;
-    setLoading(true);
+    setLoading(true); setError(null);
     fetchHome(source.id as SourceId)
       .then((r) => { if (!cancel) setItems(r.slice(0, 18)); })
       .catch((e) => { if (!cancel) setError(e?.message || 'Lỗi tải dữ liệu'); })
       .finally(() => { if (!cancel) setLoading(false); });
     return () => { cancel = true; };
-  }, [source.id]);
+  }, [source.id, tick]);
+
+  // Auto-refresh when app comes to foreground
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'visible') setTick(t => t + 1);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
 
   return (
     <section className="mt-10">
@@ -77,8 +87,7 @@ function SourceSection({ source }: { source: typeof SOURCES[number] }) {
             <h2 className="text-2xl font-display font-bold">
               <span className={`bg-gradient-to-r ${source.logoColor} bg-clip-text text-transparent`}>{source.name}</span>
             </h2>
-            <button onClick={()=>{setLoading(true);setError(null);setItems([]);
-              fetchHome(source.id as SourceId).then(r=>setItems(r.slice(0,18))).catch(e=>setError(e?.message||'Lỗi')).finally(()=>setLoading(false));}} className="chip hover:bg-ink-200 dark:hover:bg-ink-700 cursor-pointer">↻ Tải lại</button>
+            <button onClick={()=>setTick(t=>t+1)} className="chip hover:bg-ink-200 dark:hover:bg-ink-700 cursor-pointer">↻ Tải lại</button>
           </div>
           <p className="text-sm text-ink-500 mt-1">{source.description}</p>
         </div>

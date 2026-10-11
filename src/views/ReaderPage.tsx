@@ -9,7 +9,7 @@ import type { SourceId } from '@/lib/sources/types';
 import { Empty, Spinner } from '@/components/Loading';
 import { useTheme } from '@/components/ThemeProvider';
 import { upsertHistory } from '@/lib/client/storage';
-import { useImage } from '@/lib/img';
+import { useImage, purgeImageCache } from '@/lib/img';
 
 interface ChapterData {
   title: string; images: string[]; prev?: string; next?: string;
@@ -17,23 +17,30 @@ interface ChapterData {
 }
 
 function chapterSlugFromUrl(href: string, source: SourceId): string | null {
+  if (!href) return null;
+  // Accept both absolute (https://nettruyen.gg/...) and relative (/truyen-tranh/...)
+  let path: string;
   try {
-    const u = new URL(href);
-    const parts = u.pathname.split('/').filter(Boolean);
-    if (source === 'nettruyen') {
-      const i = parts.findIndex(p => p.startsWith('chuong-'));
-      if (i >= 0) return parts[i];
-    } else {
-      const last = parts[parts.length - 1];
-      const m = last.match(/-chap-(.+)$/);
-      if (m) return 'chap-' + m[1];
-    }
-  } catch {}
+    path = new URL(href, 'https://x.invalid').pathname;
+  } catch {
+    const i = href.indexOf('/truyen-tranh/');
+    path = i >= 0 ? href.slice(i) : href;
+  }
+  const parts = path.split('/').filter(Boolean);
+  if (source === 'nettruyen') {
+    const i = parts.findIndex(p => p.startsWith('chuong-'));
+    if (i >= 0) return parts[i];
+  } else {
+    const last = parts[parts.length - 1];
+    const m = last.match(/-chap-(.+)$/);
+    if (m) return 'chap-' + m[1];
+    // Sometimes QQ uses just ?chap=...
+  }
   return null;
 }
 
-function ChapterImg({ src, referer, index, onLoad }: { src: string; referer: string; index: number; onLoad: () => void }) {
-  const { src: url, loading, error } = useImage(src, referer);
+function ChapterImg({ src, referer, index, priority, onLoad }: { src: string; referer: string; index: number; priority?: boolean; onLoad: () => void }) {
+  const { src: url, loading, error } = useImage(src, referer, !!priority);
   const [loaded, setLoaded] = useState(false);
   return (
     <div className={`reader-page ${loaded ? 'loaded' : ''}`}>
@@ -113,7 +120,10 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
       else if (e.key === 'Escape') { setShowChapters(false); setShowSettings(false); }
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      purgeImageCache(); // free big blobs when leaving reader
+    };
   });
 
   const displayTitle = mangaTitle ? `${mangaTitle} — ${data?.title || ''}` : (data?.title || 'Đang tải...');
@@ -145,7 +155,7 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
         {data && data.images.length > 0 && (
           <div className={readMode === 'paged' ? 'flex flex-col items-center' : ''}>
             {data.images.map((img, i) => (
-              <ChapterImg key={i} index={i} src={img} referer={data.referer} onLoad={()=>setLoadedCount(c=>c+1)}/>
+              <ChapterImg key={i} index={i} src={img} referer={data.referer} priority={i < 2} onLoad={()=>setLoadedCount(c=>c+1)}/>
             ))}
           </div>
         )}

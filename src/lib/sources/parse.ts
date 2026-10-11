@@ -121,19 +121,20 @@ export function parseNettruyenChapter(html: string): { title: string; images: st
   // We must NOT pick the watermark/logo NetTruyen image (logo in header/ads).
   // Strategy: walk every img inside containers with class containing "page-chapter" OR "page" within reading-detail.
   const hosts = ['kcgsbok.com', 'nettruyen', 'truyenvua', 'hinhhinh', 'upload', 'st.image', 'cdn.nt'];
-  const deny = /logo|icon|favicon|banner|ads|quangcao|loader|spinner|watermark/i;
+  const deny = /logo|icon|favicon|banner|ads|quangcao|loader|spinner|watermark|popup|notif/i;
+  const adText = /truy cập|truyện hay|chapter mới|đón xem|theo dõi|nhé!|sớm nhất|nettruyen\.com|truyenqq/i;
   $('.reading-detail .page-chapter img, .reading-detail .page_ads img, div.reading-detail > div > img, div.reading-detail img').each((_, el) => {
     const e = $(el);
     const raw = e.attr('data-original') || e.attr('data-src') || e.attr('data-lazy-src') || e.attr('src') || '';
     const src = raw.trim();
     if (!src) return;
     if (deny.test(src) || deny.test(e.attr('class')||'') || deny.test(e.attr('id')||'')) return;
-    // Must look like a CDN manga page
     if (!hosts.some(h => src.includes(h)) && !/\.(jpg|jpeg|png|webp)(\?|$)/i.test(src)) return;
-    // Reject tiny logo-looking sizes
     const w = parseFloat(e.attr('width')||'0'); const h = parseFloat(e.attr('height')||'0');
-    if (w && w < 100) return;
-    if (h && h < 100) return;
+    if (w && w < 200) return;
+    if (h && h < 200) return;
+    const alt = (e.attr('alt')||'') + ' ' + (e.parent().text()||'').slice(0, 120);
+    if (adText.test(alt)) return;
     images.push(src);
   });
   // Fallback: pick any img under #chapter_content or .reading-detail with CDN host
@@ -159,8 +160,15 @@ export function parseNettruyenChapter(html: string): { title: string; images: st
     if (m) mangaTitle = m[1].trim();
   }
 
-  const prevHref = $('a.prev-chapter, a.chap-prev, a[rel="prev"]').first().attr('href');
-  const nextHref = $('a.next-chapter, a.chap-next, a[rel="next"]').first().attr('href');
+  // Prev/next: try many selectors (NetTruyen uses various classes over time)
+  const prevHref =
+    $('a.prev-chapter, a.chap-prev, a[rel="prev"]').first().attr('href')
+    || $('#next_chap, #prev_chap, .navi_chapter a').eq(0).attr('href')
+    || $('a:contains("Chap sau"), a:contains("Chương sau"), a:has(i.next), a[title*="sau"], a[title*="Chap trước"]').first().attr('href');
+  const nextHref =
+    $('a.next-chapter, a.chap-next, a[rel="next"]').first().attr('href')
+    || $('#next_chap, .navi_chapter a').last().attr('href')
+    || $('a:contains("Chap sau"), a:contains("Chương sau"), a:has(i.next), a[title*="sau"]').first().attr('href');
 
   return { title: title.replace(/\s+/g, ' ').trim(), images: normalized, prev: prevHref, next: nextHref, mangaTitle: mangaTitle || undefined };
 }
@@ -225,10 +233,11 @@ export function parseTruyenqqDetail(html: string, mangaSlug: string): MangaDetai
 export function parseTruyenqqChapter(html: string): { title: string; images: string[]; prev?: string; next?: string; mangaTitle?: string } {
   const $ = cheerio.load(html);
   const images: string[] = [];
-  const deny = /logo|icon|favicon|banner|ads|quangcao|loader|spinner/i;
-  const hosts = ['truyenvua.com', 'hinhhinh.com', 'truyenqq', 'qq.'];
-  // Truyenqq puts pages under .chapter-content, .story-see-content, or .reading-detail .page-chapter
-  $('.chapter-content img, .story-see-content img, .reading-detail .page-chapter img, #chapter_content img').each((_, el) => {
+  const deny = /logo|icon|favicon|banner|ads|quangcao|loader|spinner|popup|notif/i;
+  const adText = /truy cập|truyện hay|chapter mới|đón xem|theo dõi|nhé!|sớm nhất|truyenqqno|truyenqq\.com/i;
+  const hosts = ['truyenvua.com', 'hinhhinh.com', 'truyenqq', 'qq.', 'hinh.'];
+  // Truyenqq pages under .chapter-content, .story-see-content, .reading-detail .page-chapter
+  $('.chapter-content img, .story-see-content img, .reading-detail .page-chapter img, #chapter_content img, .reading-detail img').each((_, el) => {
     const e = $(el);
     const raw = e.attr('data-original') || e.attr('data-src') || e.attr('data-lazy-src') || e.attr('src') || '';
     const src = raw.trim();
@@ -236,8 +245,10 @@ export function parseTruyenqqChapter(html: string): { title: string; images: str
     if (deny.test(src) || deny.test(e.attr('class')||'')) return;
     if (!hosts.some(h => src.includes(h)) && !/\.(jpg|jpeg|png|webp)(\?|$)/i.test(src)) return;
     const w = parseFloat(e.attr('width')||'0'); const h = parseFloat(e.attr('height')||'0');
-    if (w && w < 100) return;
-    if (h && h < 100) return;
+    if (w && w < 200) return;
+    if (h && h < 200) return;
+    const alt = (e.attr('alt')||'') + ' ' + (e.parent().text()||'').slice(0, 160);
+    if (adText.test(alt)) return;
     images.push(src);
   });
   if (images.length === 0) {
@@ -256,8 +267,14 @@ export function parseTruyenqqChapter(html: string): { title: string; images: str
     const m = t.match(/Đọc truyện\s+(.+?)\s+(?:-|trực tuyến)/i);
     if (m) mangaTitle = m[1].trim();
   }
-  const prevHref = $('a.prev-chapter, a.chap-prev').first().attr('href');
-  const nextHref = $('a.next-chapter, a.chap-next').first().attr('href');
+  const prevHref =
+    $('a.prev-chapter, a.chap-prev, a[rel="prev"]').first().attr('href')
+    || $('.chapter-nav a, .nav_chapter a').first().attr('href')
+    || $('a:contains("Chap trước"), a:contains("Chương trước")').first().attr('href');
+  const nextHref =
+    $('a.next-chapter, a.chap-next, a[rel="next"]').first().attr('href')
+    || $('.chapter-nav a, .nav_chapter a').last().attr('href')
+    || $('a:contains("Chap sau"), a:contains("Chương sau")').first().attr('href');
   return { title: title.replace(/\s+/g, ' ').trim(), images: normalized, prev: prevHref, next: nextHref, mangaTitle: mangaTitle || undefined };
 }
 

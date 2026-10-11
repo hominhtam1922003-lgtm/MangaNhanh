@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 
 const leaked = new Set<string>();
+const memCache = new Map<string, string>(); // url+ref -> object URL or proxy URL
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
     leaked.forEach(u => { try { URL.revokeObjectURL(u); } catch {} });
@@ -21,6 +22,17 @@ type Cand = { url: string; referer?: string };
 function isNative(): boolean {
   const w = window as any;
   return !!(w.Capacitor && (w.Capacitor.isNativePlatform?.() || w.Capacitor.isPluginAvailable?.('CapacitorHttp')));
+}
+
+// Parallel HEAD/get test using Image() – fast to know if a URL works in browser
+function imgLoads(u: string): Promise<boolean> {
+  return new Promise(resolve => {
+    const im = new Image();
+    im.onload = () => resolve(true);
+    im.onerror = () => resolve(false);
+    im.referrerPolicy = 'no-referrer';
+    im.src = u;
+  });
 }
 
 async function nativeFetch(c: Cand): Promise<string | null> {
@@ -38,26 +50,23 @@ async function nativeFetch(c: Cand): Promise<string | null> {
         'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36'
       }
     });
-    const blob: any = resp.data;
-    if (!blob) return null;
-    // Blob, ArrayBuffer, or base64
-    if (blob instanceof Blob) {
-      const u = URL.createObjectURL(blob);
-      leaked.add(u); return u;
-    }
+    const data: any = resp.data;
+    if (!data) return null;
     const ctype = resp.headers?.['content-type'] || resp.headers?.['Content-Type'] || guessType(c.url);
-    if (blob instanceof ArrayBuffer) {
-      const u = URL.createObjectURL(new Blob([blob], { type: ctype }));
-      leaked.add(u); return u;
-    }
-    if (typeof blob === 'string') {
-      const bin = atob(blob);
+    let blob: Blob | null = null;
+    if (data instanceof Blob) blob = data;
+    else if (data instanceof ArrayBuffer) blob = new Blob([data], { type: ctype });
+    else if (data.buffer instanceof ArrayBuffer) blob = new Blob([data.buffer], { type: ctype });
+    else if (typeof data === 'string') {
+      const bin = atob(data);
       const arr = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-      const u = URL.createObjectURL(new Blob([arr], { type: ctype }));
-      leaked.add(u); return u;
+      blob = new Blob([arr], { type: ctype });
     }
-    return null;
+    if (!blob) return null;
+    const u = URL.createObjectURL(blob);
+    leaked.add(u);
+    return u;
   } catch { return null; }
 }
 
@@ -75,62 +84,74 @@ function weserv(u: string, ref: string) {
   return `https://images.weserv.nl/?url=${encodeURIComponent(u.replace(/^https?:\/\//, ''))}&af&referrer=${encodeURIComponent(ref)}`;
 }
 
-/**
- * Build the full fallback chain for an image URL.
- * Ensures URLs start with https://.
- */
 export function imageCandidates(rawUrl: string, referer: string): Cand[] {
   let u = rawUrl.trim();
   if (u.startsWith('//')) u = 'https:' + u;
   if (!/^https?:\/\//i.test(u)) u = 'https://nettruyen.gg' + (u.startsWith('/') ? u : '/' + u);
   const ref = referer || 'https://nettruyen.gg/';
-  const out: Cand[] = [];
-  out.push({ url: u, referer: ref }); // native first
-  out.push({ url: wsrv(u, ref) });
-  out.push({ url: weserv(u, ref) });
-  return out;
+  return [
+    { url: u, referer: ref },
+    { url: wsrv(u, ref) },
+    { url: weserv(u, ref) }
+  ];
 }
 
-/** Hook: resolves an image URL to a loadable src (blob URL or proxy URL) */
-export function useImage(rawUrl: string | undefined | null, referer: string) {
+/** Hook: resolves an image URL to a loadable src (blob URL or proxy URL).
+ *  Set priority=true for above-the-fold images (loads immediately),
+ *  false for lazy ones (waits until enabled via IntersectionObserver). */
+export function useImage(rawUrl: string | undefined | null, referer: string, priority = false) {
   const [src, setSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(!!rawUrl);
   const [error, setError] = useState<string | null>(null);
+  const [enabled, setEnabled] = useState<boolean>(priority);
+
+  // Lazy: delay non-priority images slightly to let first paint finish, improving responsiveness.
+  useEffect(() => {
+    if (priority) return;
+    const t = setTimeout(() => setEnabled(true), 150);
+    return () => clearTimeout(t);
+  }, [priority, rawUrl]);
 
   useEffect(() => {
     if (!rawUrl) { setSrc(null); setLoading(false); setError('no url'); return; }
+    if (!enabled) return;
+    const cacheKey = rawUrl + '|' + referer;
+    if (memCache.has(cacheKey)) {
+      setSrc(memCache.get(cacheKey)!);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
-    let revoked: string | null = null;
 
     (async () => {
       setLoading(true); setError(null);
       const list = imageCandidates(rawUrl, referer);
-      // If native, try native first
+
+      // Native first on Capacitor
       if (isNative()) {
         const blob = await nativeFetch(list[0]);
         if (cancelled) { if (blob) { URL.revokeObjectURL(blob); leaked.delete(blob); } return; }
-        if (blob) { setSrc(blob); setLoading(false); return; }
+        if (blob) { memCache.set(cacheKey, blob); setSrc(blob); setLoading(false); return; }
       }
-      // Fallback: try each proxy by loading as an <img> (so we know which actually decodes)
+      // Proxies
       for (const c of list) {
-        const ok = await new Promise<boolean>(resolve => {
-          const im = new Image();
-          im.onload = () => resolve(true);
-          im.onerror = () => resolve(false);
-          im.referrerPolicy = 'no-referrer';
-          im.src = c.url;
-        });
+        const ok = await imgLoads(c.url);
         if (cancelled) return;
-        if (ok) { setSrc(c.url); setLoading(false); return; }
+        if (ok) { memCache.set(cacheKey, c.url); setSrc(c.url); setLoading(false); return; }
       }
       if (!cancelled) { setSrc(null); setError('failed'); setLoading(false); }
     })();
 
-    return () => {
-      cancelled = true;
-      if (revoked) { URL.revokeObjectURL(revoked); leaked.delete(revoked); }
-    };
-  }, [rawUrl, referer]);
+    return () => { cancelled = true; };
+  }, [rawUrl, referer, enabled]);
 
   return { src, loading, error };
+}
+
+/** Clear memory cache (e.g., when leaving reader page). */
+export function purgeImageCache() {
+  memCache.forEach((v, k) => {
+    if (v.startsWith('blob:')) { URL.revokeObjectURL(v); leaked.delete(v); }
+  });
+  memCache.clear();
 }

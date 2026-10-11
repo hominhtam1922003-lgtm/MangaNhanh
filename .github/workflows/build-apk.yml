@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [main, arena/**]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -12,7 +12,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -23,26 +23,11 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: 34
-          build-tools: '34.0.0'
-          components: platform-tools
-
       - name: Cache npm
         uses: actions/cache@v4
         with:
           path: ~/.npm
           key: npm-${{ hashFiles('package-lock.json') }}
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle-wrapper.properties') }}
 
       - name: Install dependencies
         run: npm ci || npm install
@@ -50,13 +35,20 @@ jobs:
       - name: Export static web
         run: npm run export
 
-      - name: Add Capacitor Android platform
+      - name: Add & sync Capacitor Android
         run: |
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROID_HOME=$ANDROID_HOME"
           npx cap add android || true
           npx cap sync android
 
-      - name: Accept Android licenses
-        run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
 
       - name: Build APK
         working-directory: android
@@ -67,7 +59,3 @@ jobs:
         with:
           name: MangaNhanh-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Prepare release APK
-        run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk public/manganhanh-app.apk || true

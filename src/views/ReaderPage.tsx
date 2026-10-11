@@ -9,6 +9,7 @@ import type { SourceId } from '@/lib/sources/types';
 import { Empty, Spinner } from '@/components/Loading';
 import { useTheme } from '@/components/ThemeProvider';
 import { upsertHistory } from '@/lib/client/storage';
+import { useImage } from '@/lib/img';
 
 interface ChapterData {
   title: string; images: string[]; prev?: string; next?: string;
@@ -31,33 +32,24 @@ function chapterSlugFromUrl(href: string, source: SourceId): string | null {
   return null;
 }
 
-function buildImgCandidates(raw: string, referer: string): string[] {
-  const r = encodeURIComponent(referer || '');
-  return [
-    `https://wsrv.nl/?url=${encodeURIComponent(raw)}&referer=${r}&af`,
-    `https://images.weserv.nl/?url=${encodeURIComponent(raw.replace(/^https?:\/\//, ''))}&af&referrer=${r}`,
-    raw
-  ];
-}
-
 function ChapterImg({ src, referer, index, onLoad }: { src: string; referer: string; index: number; onLoad: () => void }) {
+  const { src: url, loading, error } = useImage(src, referer);
   const [loaded, setLoaded] = useState(false);
-  const [idx, setIdx] = useState(0);
-  const cands = buildImgCandidates(src, referer);
-  const current = cands[Math.min(idx, cands.length - 1)];
   return (
     <div className={`reader-page ${loaded ? 'loaded' : ''}`}>
-      {!loaded && <div className="w-full max-w-3xl skeleton aspect-[2/3]"/>}
-      <img
-        src={current}
-        alt={`Trang ${index + 1}`}
-        referrerPolicy="no-referrer"
-        loading="lazy"
-        decoding="async"
-        onLoad={() => { setLoaded(true); onLoad(); }}
-        onError={() => { if (idx < cands.length - 1) { setLoaded(false); setIdx(idx + 1); } }}
-        className={`w-full h-auto block transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
-      />
+      {(!loaded || loading) && !error && <div className="w-full max-w-3xl skeleton aspect-[2/3]"/>}
+      {error && <div className="w-full max-w-3xl py-24 text-center text-ink-500 text-sm">Không tải được trang {index + 1}</div>}
+      {url && (
+        <img
+          src={url}
+          alt={`Trang ${index + 1}`}
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          decoding="async"
+          onLoad={() => { setLoaded(true); onLoad(); }}
+          className={`w-full h-auto block transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        />
+      )}
     </div>
   );
 }

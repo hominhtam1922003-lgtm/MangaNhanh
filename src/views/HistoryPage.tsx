@@ -5,11 +5,14 @@ import A from '@/components/A';
 import { Empty } from '@/components/Loading';
 import { getHistory, type HistoryItem } from '@/lib/client/storage';
 import { SOURCES } from '@/lib/sources';
+import { useImage } from '@/lib/img';
 
-function coverOf(h: HistoryItem) {
-  if (!h.thumbnail) return '';
-  const ref = h.source === 'truyenqq' ? 'https://truyenqqko.com/' : 'https://nettruyen.gg/';
-  return `https://wsrv.nl/?url=${encodeURIComponent(h.thumbnail)}&referer=${encodeURIComponent(ref)}&af`;
+function Thumb({ item }: { item: HistoryItem }) {
+  const ref = item.source === 'truyenqq' ? 'https://truyenqqko.com/' : 'https://nettruyen.gg/';
+  const { src: url } = useImage(item.thumbnail, ref);
+  return url
+    ? <img src={url} className="w-full h-full object-cover absolute inset-0" referrerPolicy="no-referrer"/>
+    : <div className="w-full h-full bg-ink-200 dark:bg-ink-800 absolute inset-0"/>;
 }
 
 export default function HistoryPage() {
@@ -26,7 +29,7 @@ export default function HistoryPage() {
             return (
               <A key={`${h.source}-${h.slug}-${h.chapterSlug}`} href={`/read/${h.source}/${h.slug}/${h.chapterSlug}`} className="flex items-center gap-3 p-3 hover:bg-ink-50 dark:hover:bg-ink-800/50 transition">
                 <div className="w-14 h-20 rounded-lg bg-ink-100 dark:bg-ink-800 overflow-hidden flex-shrink-0 relative">
-                  {h.thumbnail && <img src={coverOf(h)} data-fb={h.thumbnail} className="w-full h-full object-cover absolute inset-0" referrerPolicy="no-referrer" onError={(e)=>{const t=e.currentTarget; if(t.dataset.fb){t.src=t.dataset.fb; t.removeAttribute('data-fb');}}}/>}
+                  <Thumb item={h}/>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm truncate">{h.title}</div>

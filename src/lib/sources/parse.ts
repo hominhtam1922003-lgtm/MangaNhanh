@@ -117,23 +117,41 @@ export function parseNettruyenDetail(html: string, mangaSlug: string): MangaDeta
 export function parseNettruyenChapter(html: string): { title: string; images: string[]; prev?: string; next?: string; mangaTitle?: string } {
   const $ = cheerio.load(html);
   const images: string[] = [];
-  $('.reading-detail .page-chapter img, .reading img, #chapter-content img, div.reading-detail img, .page-chapter img').each((_, el) => {
-    const src = getImgSrc(el, $);
-    if (src && !/banner|ads|quangcao|loader/i.test(src)) images.push(src.trim());
+  // NetTruyen puts reader pages inside .reading-detail .page-chapter > img (or a container).
+  // We must NOT pick the watermark/logo NetTruyen image (logo in header/ads).
+  // Strategy: walk every img inside containers with class containing "page-chapter" OR "page" within reading-detail.
+  const hosts = ['kcgsbok.com', 'nettruyen', 'truyenvua', 'hinhhinh', 'upload', 'st.image', 'cdn.nt'];
+  const deny = /logo|icon|favicon|banner|ads|quangcao|loader|spinner|watermark/i;
+  $('.reading-detail .page-chapter img, .reading-detail .page_ads img, div.reading-detail > div > img, div.reading-detail img').each((_, el) => {
+    const e = $(el);
+    const raw = e.attr('data-original') || e.attr('data-src') || e.attr('data-lazy-src') || e.attr('src') || '';
+    const src = raw.trim();
+    if (!src) return;
+    if (deny.test(src) || deny.test(e.attr('class')||'') || deny.test(e.attr('id')||'')) return;
+    // Must look like a CDN manga page
+    if (!hosts.some(h => src.includes(h)) && !/\.(jpg|jpeg|png|webp)(\?|$)/i.test(src)) return;
+    // Reject tiny logo-looking sizes
+    const w = parseFloat(e.attr('width')||'0'); const h = parseFloat(e.attr('height')||'0');
+    if (w && w < 100) return;
+    if (h && h < 100) return;
+    images.push(src);
   });
+  // Fallback: pick any img under #chapter_content or .reading-detail with CDN host
   if (images.length === 0) {
-    $('img[data-original], img[data-src], img[src*="kcgsbok"], img[src*="nettruyen"]').each((_, el) => {
-      const src = getImgSrc(el, $);
-      if (src && /(\.jpg|\.png|\.webp|\.jpeg)/i.test(src)) images.push(src.trim());
+    $('#chapter_content img, .reading-detail img').each((_, el) => {
+      const src = ($(el).attr('data-original') || $(el).attr('data-src') || $(el).attr('src') || '').trim();
+      if (!src) return;
+      if (deny.test(src)) return;
+      if (hosts.some(h => src.includes(h))) images.push(src);
     });
   }
-  const normalized = images.map(u => u.startsWith('//') ? 'https:' + u : u).map(u => u.startsWith('http') ? u : absoluteUrl('https://nettruyen.gg', u));
+  const normalized = images.map(u => u.startsWith('//') ? 'https:' + u : u);
 
-  // chapter title
-  let title = $('h1.title-detail, h1.name-chap, .name-chap, .chapter-title, h1').first().text().trim();
-  if (!title) title = $('title').text().split(/[-|]/)[0].trim();
-
-  // manga title from header/breadcrumb
+  // title
+  let title = $('.name-chap, h1.name-chap, h1.title-detail, .chapter-title').first().text().trim();
+  if (!title) {
+    title = $('title').text().split(/[-|]/)[0].trim();
+  }
   let mangaTitle = $('.top .txt-info a[itemprop="item"], .breadcrumb a[href*="/truyen-tranh/"], .path a[href*="/truyen-tranh/"], .top a[href*="/truyen-tranh/"]').last().text().trim();
   if (!mangaTitle) {
     const t = $('title').text();
@@ -207,22 +225,35 @@ export function parseTruyenqqDetail(html: string, mangaSlug: string): MangaDetai
 export function parseTruyenqqChapter(html: string): { title: string; images: string[]; prev?: string; next?: string; mangaTitle?: string } {
   const $ = cheerio.load(html);
   const images: string[] = [];
-  $('.reading-detail .page-chapter img, .chapter-content img, .story-see-content img, div.reading img, #chapter_content img, .page-chapter img').each((_, el) => {
-    const src = getImgSrc(el, $);
-    if (src && !/banner|ads|quangcao|loader/i.test(src)) images.push(src.trim());
+  const deny = /logo|icon|favicon|banner|ads|quangcao|loader|spinner/i;
+  const hosts = ['truyenvua.com', 'hinhhinh.com', 'truyenqq', 'qq.'];
+  // Truyenqq puts pages under .chapter-content, .story-see-content, or .reading-detail .page-chapter
+  $('.chapter-content img, .story-see-content img, .reading-detail .page-chapter img, #chapter_content img').each((_, el) => {
+    const e = $(el);
+    const raw = e.attr('data-original') || e.attr('data-src') || e.attr('data-lazy-src') || e.attr('src') || '';
+    const src = raw.trim();
+    if (!src) return;
+    if (deny.test(src) || deny.test(e.attr('class')||'')) return;
+    if (!hosts.some(h => src.includes(h)) && !/\.(jpg|jpeg|png|webp)(\?|$)/i.test(src)) return;
+    const w = parseFloat(e.attr('width')||'0'); const h = parseFloat(e.attr('height')||'0');
+    if (w && w < 100) return;
+    if (h && h < 100) return;
+    images.push(src);
   });
   if (images.length === 0) {
-    $('img[src*="truyenvua.com"], img[src*="hinhhinh.com"], img[data-original], img[data-src]').each((_, el) => {
-      const src = getImgSrc(el, $);
-      if (src && /(\.jpg|\.png|\.webp|\.jpeg)/i.test(src) && !/banner|ads|quangcao/i.test(src)) images.push(src.trim());
+    $('img').each((_, el) => {
+      const src = ($(el).attr('data-original') || $(el).attr('data-src') || $(el).attr('src') || '').trim();
+      if (!src) return;
+      if (deny.test(src)) return;
+      if (hosts.some(h => src.includes(h))) images.push(src);
     });
   }
   const normalized = images.map(u => u.startsWith('//') ? 'https:' + u : u).map(u => u.startsWith('http') ? u : absoluteUrl('https://truyenqqko.com', u));
-  const title = $('h1, h2, .name-chap, .chapter-title').first().text().trim();
-  let mangaTitle = $('.block-breadcrumb a[href*="/truyen-tranh/"], .breadcrumb a[href*="/truyen-tranh/"], .path a[href*="/truyen-tranh/"], .top a[href*="/truyen-tranh/"]').last().text().trim();
+  const title = $('h1, h2.name-chap, .chapter-title').first().text().trim();
+  let mangaTitle = $('.block-breadcrumb a[href*="/truyen-tranh/"], .breadcrumb a[href*="/truyen-tranh/"], .path a[href*="/truyen-tranh/"]').last().text().trim();
   if (!mangaTitle) {
     const t = $('title').text();
-    const m = t.match(/Đọc truyện\s+(.+?)\s+(?:-|trực tuyến)/i) || t.match(/\|\s*(.+)$/);
+    const m = t.match(/Đọc truyện\s+(.+?)\s+(?:-|trực tuyến)/i);
     if (m) mangaTitle = m[1].trim();
   }
   const prevHref = $('a.prev-chapter, a.chap-prev').first().attr('href');
@@ -236,58 +267,79 @@ function pickTitle(a: cheerio.Cheerio<any>): string {
   return (a.attr('title') || a.find('h3, .title, .jtip, .name').first().text() || '').trim();
 }
 
+function isLikelyCover(src: string, cls: string): boolean {
+  if (!src) return false;
+  const deny = /logo|icon|favicon|avatar|emoji|sprite|svg(\?|$)/i;
+  if (deny.test(src) || deny.test(cls)) return false;
+  // Manga covers are jpg/png/webp with large CDN hosts
+  if (/(jpg|jpeg|png|webp)(\?|$)/i.test(src)) return true;
+  if (/(image|cdn|upload|comic|manga|cover|thumb|st\.image|truyen|nettruyen|qq)/i.test(src)) return true;
+  return false;
+}
+
+function pickCover($el: cheerio.Cheerio<any>, $: cheerio.CheerioAPI): string {
+  let thumb = '';
+  $el.find('img').each((_, img) => {
+    if (thumb) return;
+    const s = getImgSrc(img, $);
+    if (!s) return;
+    if (!isLikelyCover(s, $(img).attr('class')||'')) return;
+    thumb = s;
+  });
+  return thumb;
+}
+
 export function parseNettruyenHome(html: string, baseUrl: string): MangaBasic[] {
   const $ = cheerio.load(html);
   const items: MangaBasic[] = [];
   const seen = new Set<string>();
 
-  // NetTruyen home uses <div class="item"> or <article> with <a href="/truyen-tranh/{slug}">
-  // Try a broad selector: any figure/story block with a link to /truyen-tranh/
-  const candidates = $('div.item, article.item, .story-item, .item-manga, .grid .item, #ctl00_divCenter .item, .ModuleContent .item');
+  const selectors = [
+    '#ctl00_divCenter .items .item',
+    '#div_home .item',
+    '.ModuleContent .item',
+    'figure.item',
+    '.story-item',
+    '.item-manga',
+    '.list-manga .item',
+    '.grid .item'
+  ];
+  let candidates = $(selectors.join(', '));
   if (candidates.length === 0) {
-    // fallback: all thumbnail links
-    $('a[href*="/truyen-tranh/"]').each((_, a) => {
-      const $a = $(a);
-      const img = $a.find('img').first();
-      if (!img.length) return;
-      const href = $a.attr('href') || '';
-      const m = href.match(/\/truyen-tranh\/([^/#?]+)/);
-      if (!m) return;
-      const slug = m[1];
-      if (seen.has(slug)) return;
-      seen.add(slug);
-      const title = pickTitle($a) || slug;
-      const thumb = getImgSrc(img[0]!, $);
-      items.push({ source: 'nettruyen', slug, title, thumbnail: absoluteUrl(baseUrl, thumb), latestChapter: '', updatedAt: '' });
-    });
-  } else {
-    candidates.each((_, el) => {
-      const $el = $(el);
-      const a = $el.find('a[href*="/truyen-tranh/"]').first();
-      const href = a.attr('href') || '';
-      const m = href.match(/\/truyen-tranh\/([^/#?]+)/);
-      if (!m) return;
-      const slug = m[1];
-      if (seen.has(slug)) return;
-      seen.add(slug);
-      // Title: h3, .title, or the link's title attribute or figure caption
-      let title = pickTitle($el);
-      if (!title) {
-        title = $el.find('h3 a, h4 a, .title, .tentruyen, .jtip').first().attr('title')
-             || $el.find('h3, h4, .title, .tentruyen').first().text().trim()
-             || slug;
-      }
-      const thumb = getImgSrc($el.find('img').first()[0], $);
-      const latestChapter = $el.find('a[href*="/chuong-"]').first().text().trim();
-      const updatedAt = $el.find('.time-ago, .updated-at, .chapter-time').first().text().trim();
-      items.push({
-        source: 'nettruyen', slug,
-        title: title.replace(/\s+/g, ' ').trim() || slug,
-        thumbnail: absoluteUrl(baseUrl, thumb),
-        latestChapter, updatedAt
-      });
+    // Fallback: only anchor tags that contain an image AND whose href points to /truyen-tranh/{slug} (not a chapter)
+    candidates = $('a[href*="/truyen-tranh/"]').filter(function () {
+      const href = $(this).attr('href') || '';
+      return !/\/chuong-|-chap-/.test(href) && $(this).find('img').length > 0;
     });
   }
+
+  candidates.each((_, el) => {
+    const $el = $(el);
+    const anchor = $el.is('a') ? $el : $el.find('a[href*="/truyen-tranh/"]').first();
+    const href = anchor.attr('href') || '';
+    if (/chuong-|-chap-/.test(href)) return; // skip chapter links
+    const m = href.match(/\/truyen-tranh\/([^/#?]+)/);
+    if (!m) return;
+    const slug = m[1];
+    if (seen.has(slug)) return;
+    seen.add(slug);
+
+    let title = anchor.attr('title')
+      || $el.find('h3 a, h4 a, .title a, .tentruyen a, .jtip').first().attr('title')
+      || $el.find('h3, h4, .title, .tentruyen, .name').first().text().trim()
+      || anchor.text().trim()
+      || slug;
+    title = title.replace(/\s+/g, ' ').trim();
+
+    const thumb = pickCover($el, $);
+    const latestChapter = $el.find('a[href*="/chuong-"]').first().text().trim();
+    const updatedAt = $el.find('.time-ago, .updated-at, .chapter-time, time, .time').first().text().trim();
+    items.push({
+      source: 'nettruyen', slug, title,
+      thumbnail: absoluteUrl(baseUrl, thumb),
+      latestChapter, updatedAt
+    });
+  });
   return items;
 }
 
@@ -295,26 +347,47 @@ export function parseTruyenqqHome(html: string, baseUrl: string): MangaBasic[] {
   const $ = cheerio.load(html);
   const items: MangaBasic[] = [];
   const seen = new Set<string>();
-  const candidates = $('.story-item, .list-stories .story-item, .grid-stories .item, ul.list_story li, .list_grid_out li, .book-list li');
+  const selectors = [
+    '.story-item',
+    '.list-stories .story-item',
+    '.grid-stories .item',
+    'ul.list_story li',
+    '.list_grid_out li',
+    '.book-list li',
+    '.list-manga li',
+    '.truyen-list .story-item'
+  ];
+  let candidates = $(selectors.join(', '));
+  if (candidates.length === 0) {
+    candidates = $('a[href*="/truyen-tranh/"]').filter(function () {
+      const href = $(this).attr('href') || '';
+      return !/\/chuong-|-chap-/.test(href) && $(this).find('img').length > 0;
+    });
+  }
+
   candidates.each((_, el) => {
     const $el = $(el);
-    const a = $el.find('a[href*="/truyen-tranh/"]').first();
-    const href = a.attr('href') || '';
+    const anchor = $el.is('a') ? $el : $el.find('a[href*="/truyen-tranh/"]').first();
+    const href = anchor.attr('href') || '';
+    if (/\/chuong-/.test(href)) return;
     const m = href.match(/\/truyen-tranh\/([^/#?]+?)-(\d+)(?:\/|$)/);
     if (!m) return;
     const slug = `${m[1]}-${m[2]}`;
     if (seen.has(slug)) return;
     seen.add(slug);
-    const title = pickTitle($el)
-      || $el.find('h3 a, h2 a, .title, .book_name, .story-title').first().attr('title')
-      || $el.find('h3, h2, .title, .book_name, .story-title').first().text().trim()
+
+    let title = anchor.attr('title')
+      || $el.find('h3 a, h2 a, .title a, .book_name a, .story-title a').first().attr('title')
+      || $el.find('h3, h2, .title, .book_name, .story-title, .name').first().text().trim()
+      || anchor.text().trim()
       || m[1];
-    const thumb = getImgSrc($el.find('img').first()[0], $);
+    title = title.replace(/\s+/g, ' ').trim();
+
+    const thumb = pickCover($el, $);
     const latestChapter = $el.find('a[href*="-chap-"]').first().text().trim();
-    const updatedAt = $el.find('.time, .updated-at, .last-chapter small').first().text().trim();
+    const updatedAt = $el.find('.time, .updated-at, .last-chapter small, [class*="date"]').first().text().trim();
     items.push({
-      source: 'truyenqq', slug,
-      title: title.replace(/\s+/g, ' ').trim(),
+      source: 'truyenqq', slug, title,
       thumbnail: absoluteUrl(baseUrl, thumb),
       latestChapter, updatedAt
     });

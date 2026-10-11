@@ -9,11 +9,14 @@ import { fetchMangaDetail } from '@/lib/client/sources';
 import type { MangaDetail } from '@/lib/sources/types';
 import { Empty, Skeleton } from '@/components/Loading';
 import { toggleFavorite, isFavorite, getLastRead, upsertHistory } from '@/lib/client/storage';
+import { useImage } from '@/lib/img';
 
-function coverProxy(src: string, source: string): string {
-  if (!src) return '';
+function CoverImg({ src, source, alt, className }: { src?: string; source: string; alt: string; className?: string }) {
   const ref = source === 'truyenqq' ? 'https://truyenqqko.com/' : 'https://nettruyen.gg/';
-  return `https://wsrv.nl/?url=${encodeURIComponent(src)}&referer=${encodeURIComponent(ref)}&af`;
+  const { src: url } = useImage(src, ref);
+  return url
+    ? <img src={url} alt={alt} className={className} referrerPolicy="no-referrer"/>
+    : <div className={className + ' bg-ink-200 dark:bg-ink-800'}/>;
 }
 
 export default function MangaDetailPage({ source, slug }: { source: string; slug: string }) {
@@ -70,20 +73,13 @@ export default function MangaDetailPage({ source, slug }: { source: string; slug
         <>
           <div className="relative rounded-3xl overflow-hidden">
             <div className="absolute inset-0">
-              <img src={coverProxy(detail.thumbnail, source)} alt="" className="w-full h-full object-cover blur-2xl opacity-30 scale-110" referrerPolicy="no-referrer"/>
+              <CoverImg src={detail.thumbnail} source={source} alt="" className="w-full h-full object-cover blur-2xl opacity-30 scale-110"/>
               <div className="absolute inset-0 bg-gradient-to-b from-white/60 to-white/95 dark:from-ink-950/60 dark:to-ink-950"/>
             </div>
             <div className="relative p-5 sm:p-8 flex flex-col md:flex-row gap-6">
               <div className="flex-shrink-0 mx-auto md:mx-0">
                 <div className="w-48 h-72 rounded-2xl overflow-hidden shadow-2xl bg-ink-100 dark:bg-ink-900 relative">
-                  <img
-                    src={coverProxy(detail.thumbnail, source)}
-                    data-fallback={detail.thumbnail}
-                    alt={detail.title}
-                    className="w-full h-full object-cover absolute inset-0"
-                    referrerPolicy="no-referrer"
-                    onError={(e)=>{ const t = e.currentTarget; if (t.dataset.fallback) { t.src = t.dataset.fallback; t.removeAttribute('data-fallback'); } }}
-                  />
+                  <CoverImg src={detail.thumbnail} source={source} alt={detail.title} className="w-full h-full object-cover absolute inset-0"/>
                 </div>
               </div>
               <div className="flex-1">

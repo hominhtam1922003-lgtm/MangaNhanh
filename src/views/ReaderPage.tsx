@@ -148,7 +148,29 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
           </div>
         )}
       </div>
-      <div className="max-w-3xl mx-auto py-4 px-2 sm:px-0">
+      <div className="max-w-3xl mx-auto py-4 px-2 sm:px-0 relative">
+        {/* Floating prev/next buttons – always tapable while scrolling */}
+        {data && (
+          <>
+            <button
+              onClick={goPrev}
+              disabled={!data.prev}
+              aria-label="Chương trước"
+              className="fixed left-2 bottom-24 z-40 w-12 h-12 rounded-full bg-black/70 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 disabled:opacity-20"
+            >‹</button>
+            <button
+              onClick={goNext}
+              disabled={!data.next}
+              aria-label="Chương sau"
+              className="fixed right-2 bottom-24 z-40 w-12 h-12 rounded-full bg-black/70 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95 disabled:opacity-20"
+            >›</button>
+            <button
+              onClick={()=>setShowChapters(s=>!s)}
+              className="fixed right-2 bottom-8 z-40 w-12 h-12 rounded-full bg-brand-600/90 backdrop-blur text-white flex items-center justify-center shadow-lg active:scale-95"
+              aria-label="Danh sách chương"
+            >≡</button>
+          </>
+        )}
         {loading && !data && <div className="flex flex-col items-center py-24 gap-4 text-ink-400"><Spinner size="lg"/><div className="text-sm">Đang tải chương...</div></div>}
         {error && <Empty title="Không thể đọc chương này" description={error}/>}
         {data && !loading && data.images.length === 0 && <Empty title="Không tìm thấy ảnh" description="Có thể CDN chặn hoặc chương này chưa có ảnh."/>}
@@ -160,7 +182,7 @@ export default function ReaderPage({ source, slug, chapter }: { source: string; 
           </div>
         )}
         {data && !loading && (
-          <div className="flex items-center justify-center gap-3 my-8">
+          <div className="flex items-center justify-center gap-3 my-8 pb-16">
             <button onClick={goPrev} disabled={!data.prev} className="btn-primary disabled:opacity-40">Chap trước</button>
             <A href={`/manga/${source}/${slug}`} className="btn-ghost">Danh sách chương</A>
             <button onClick={goNext} disabled={!data.next} className="btn-primary disabled:opacity-40">Chap sau</button>

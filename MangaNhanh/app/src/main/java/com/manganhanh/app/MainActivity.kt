@@ -48,7 +48,6 @@ class MainActivity : ComponentActivity() {
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun MangaAppView() {
-    // 3 nguồn truyện chuẩn theo yêu cầu của bạn
     val sources = remember {
         listOf(
             MangaSource("TruyenQQ", "https://truyenqqko.com/doc-truyen"),
@@ -62,13 +61,11 @@ fun MangaAppView() {
     var canGoBack by remember { mutableStateOf(false) }
     var hasError by remember { mutableStateOf(false) }
 
-    // Bấm nút Back trên điện thoại để quay lại trang web trước đó
     BackHandler(enabled = canGoBack) {
         webViewInstance?.goBack()
     }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        // Tiêu đề ứng dụng
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -83,7 +80,6 @@ fun MangaAppView() {
             )
         }
 
-        // Thanh chọn nguồn trượt ngang hiện đại
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -117,7 +113,6 @@ fun MangaAppView() {
             }
         }
 
-        // Khung WebView tải siêu tốc, vượt tường lửa và dọn rác quảng cáo
         Box(Modifier.fillMaxWidth().weight(1f)) {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
@@ -133,12 +128,11 @@ fun MangaAppView() {
                             loadWithOverviewMode = true
                             useWideViewPort = true
                             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                            cacheMode = WebSettings.LOAD_DEFAULT // Sử dụng cache bộ nhớ giúp tải cực nhanh
+                            cacheMode = WebSettings.LOAD_DEFAULT
                             setSupportZoom(true)
                             builtInZoomControls = true
                             displayZoomControls = false
 
-                            // Chống popup mở tab quảng cáo rác
                             javaScriptCanOpenWindowsAutomatically = false
                             setSupportMultipleWindows(false)
                         }
@@ -158,15 +152,6 @@ fun MangaAppView() {
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 super.onPageFinished(view, url)
                                 canGoBack = view?.canGoBack() ?: false
-
-                                // Tiêm mã JavaScript ẩn bớt khung quảng cáo, banner rác giúp web load mượt và sạch
-                                val cleanScript = """
-                                    (function() {
-                                        var ads = document.querySelectorAll('iframe[src*="ads"], div[class*="ads"], div[id*="ads"], div[class*="banner"], ins.adsbygoogle');
-                                        ads.forEach(function(el) { el.remove(); });
-                                    })();
-                                """.trimIndent()
-                                view?.evaluateJavascript(cleanScript, null)
                             }
 
                             override fun onReceivedError(
@@ -185,7 +170,7 @@ fun MangaAppView() {
                                 handler: SslErrorHandler?,
                                 error: SslError?
                             ) {
-                                handler?.proceed() // Tự động bỏ qua lỗi chứng chỉ SSL
+                                handler?.proceed()
                             }
                         }
                         loadUrl(sources[selectedIndex].url)
@@ -197,7 +182,6 @@ fun MangaAppView() {
                 }
             )
 
-            // Màn hình thông báo dự phòng nếu bị nhà mạng chặn kết nối
             if (hasError) {
                 Box(
                     modifier = Modifier
@@ -210,14 +194,14 @@ fun MangaAppView() {
                         modifier = Modifier.padding(24.dp)
                     ) {
                         Text(
-                            text = "⚠️ Trang web có thể đang bị chặn!",
+                            text = "⚠️ Trang web có thể đang bị chặn mạng!",
                             color = AccentColor,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "Vui lòng bật ứng dụng 1.1.1.1 (Cloudflare WARP) trên điện thoại để vượt tường lửa nhà mạng và tiếp tục đọc truyện.",
+                            text = "Vui lòng bật ứng dụng 1.1.1.1 (Cloudflare WARP) trên điện thoại để tiếp tục truy cập mượt mà.",
                             color = TextSub,
                             fontSize = 13.sp,
                             modifier = Modifier.padding(bottom = 16.dp)

@@ -1,4 +1,5 @@
 import type { Cue } from './types';
+import { API_BASE } from './config';
 
 export type JobStatus = {
   id: string;
@@ -9,7 +10,7 @@ export type JobStatus = {
 
 /** Gửi video cho backend tự nhận dạng tiếng Trung. Trả về job id để hỏi trạng thái. */
 export async function startSubtitleJob(url: string, translate: boolean): Promise<JobStatus> {
-  const r = await fetch('/api/subtitles', {
+  const r = await fetch(`${API_BASE}/api/subtitles`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, translate }),
@@ -19,7 +20,7 @@ export async function startSubtitleJob(url: string, translate: boolean): Promise
 }
 
 export async function getSubtitleJob(id: string): Promise<JobStatus> {
-  const r = await fetch(`/api/subtitles/${id}`);
+  const r = await fetch(`${API_BASE}/api/subtitles/${id}`);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }

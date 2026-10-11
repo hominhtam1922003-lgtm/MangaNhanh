@@ -3,6 +3,7 @@ import type { Cue, Item, SubMode, WebResult } from './types';
 import { parseVtt, findCueIndex } from './subs';
 import { speak, stopSpeak, narrationSupported } from './narrate';
 import { getSubtitleJob, startSubtitleJob } from './api';
+import { API_BASE } from './config';
 
 const EXTRA_KEY = 'sv_extra_items';
 const PREF_KEY = 'sv_prefs';
@@ -115,14 +116,14 @@ export default function App() {
     try {
       if (tab === 'web') {
         // Tìm web qua Google Programmable Search (API chính thức)
-        const r = await fetch(`/api/web-search?q=${encodeURIComponent(q)}`);
+        const r = await fetch(`${API_BASE}/api/web-search?q=${encodeURIComponent(q)}`);
         const data = await r.json();
         if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
         setWebResults(data.items as WebResult[]);
         flash(`${data.items.length} kết quả web cho "${q}"`);
       } else {
         // Tìm video miễn phí (Pexels) qua backend
-        const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const r = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(q)}`);
         const data = await r.json();
         if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
         setFound(data.items as Item[]);

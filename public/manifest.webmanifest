@@ -1,0 +1,13 @@
+{
+  "name": "MangaNhanh",
+  "short_name": "MangaNhanh",
+  "description": "Đọc truyện tranh nhanh, ảnh nét, full chap từ NetTruyen & TruyenQQ",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0a0a12",
+  "theme_color": "#0a0a12",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

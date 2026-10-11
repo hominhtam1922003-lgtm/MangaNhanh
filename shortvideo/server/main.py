@@ -211,3 +211,41 @@ def search_videos(q: str, limit: int = 12):
             "credit": f"Video: {author} trên Pexels",
         })
     return {"items": out}
+
+
+GOOGLE_CSE_KEY = os.environ.get("GOOGLE_CSE_KEY", "")  # Google Programmable Search API key
+GOOGLE_CSE_CX = os.environ.get("GOOGLE_CSE_CX", "")    # Search engine ID (cx)
+
+
+@app.get("/api/web-search")
+def web_search(q: str, start: int = 1):
+    """Tìm web qua Google Programmable Search (API chính thức). Cần GOOGLE_CSE_KEY + GOOGLE_CSE_CX."""
+    if not (GOOGLE_CSE_KEY and GOOGLE_CSE_CX):
+        raise HTTPException(503, "Chưa cấu hình GOOGLE_CSE_KEY / GOOGLE_CSE_CX ở backend")
+    q = q.strip()[:200]
+    if not q:
+        raise HTTPException(400, "Thiếu từ khoá")
+    try:
+        r = httpx.get(
+            "https://www.googleapis.com/customsearch/v1",
+            params={"key": GOOGLE_CSE_KEY, "cx": GOOGLE_CSE_CX, "q": q,
+                    "num": 10, "start": max(1, min(start, 91))},
+            timeout=20,
+        )
+        r.raise_for_status()
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Google Search lỗi: {e}")
+    out = []
+    for it in r.json().get("items", []):
+        pm = it.get("pagemap") or {}
+        thumb = next(iter(pm.get("cse_thumbnail", [])), {}).get("src") or \
+            next(iter(pm.get("cse_image", [])), {}).get("src")
+        out.append({
+            "id": "web-" + hashlib.sha1(it["link"].encode()).hexdigest()[:12],
+            "title": it.get("title", ""),
+            "url": it["link"],
+            "snippet": it.get("snippet", ""),
+            "thumb": thumb,
+            "host": it.get("displayLink", ""),
+        })
+    return {"items": out}

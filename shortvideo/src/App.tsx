@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Cue, Item, SubMode } from './types';
+import type { Cue, Item, SubMode, WebResult } from './types';
 import { parseVtt, findCueIndex } from './subs';
 import { speak, stopSpeak, narrationSupported } from './narrate';
 import { getSubtitleJob, startSubtitleJob } from './api';
@@ -21,6 +21,8 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem(EXTRA_KEY) || '[]'); } catch { return []; }
   });
   const [found, setFound] = useState<Item[]>([]);
+  const [tab, setTab] = useState<'video' | 'web'>('video');
+  const [webResults, setWebResults] = useState<WebResult[]>([]);
   const [subsById, setSubsById] = useState<Record<string, Cue[]>>({});
   const [activeId, setActiveId] = useState('');
   const [prefs, setPrefs] = useState<Prefs>(() => loadJSON(PREF_KEY, DEFAULT_PREFS));
@@ -109,15 +111,24 @@ export default function App() {
       flash('Đã thêm video');
       return;
     }
-    // Tìm video miễn phí (Pexels) qua backend
     setLoading(true);
     try {
-      const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
-      setFound(data.items as Item[]);
+      if (tab === 'web') {
+        // Tìm web qua Google Programmable Search (API chính thức)
+        const r = await fetch(`/api/web-search?q=${encodeURIComponent(q)}`);
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+        setWebResults(data.items as WebResult[]);
+        flash(`${data.items.length} kết quả web cho "${q}"`);
+      } else {
+        // Tìm video miễn phí (Pexels) qua backend
+        const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+        setFound(data.items as Item[]);
+        flash(`Tìm thấy ${data.items.length} video cho "${q}"`);
+      }
       setInput('');
-      flash(`Tìm thấy ${data.items.length} video cho "${q}"`);
       feedRef.current?.scrollTo({ top: 0 });
     } catch (e) {
       flash('Tìm kiếm lỗi: ' + (e as Error).message, 5000);
@@ -149,6 +160,10 @@ export default function App() {
     <>
       <div className="top">
         <div className="brand">🎬 ShortVideo</div>
+        <div className="seg">
+          <button className={tab === 'video' ? 'on' : ''} onClick={() => setTab('video')}>Video</button>
+          <button className={tab === 'web' ? 'on' : ''} onClick={() => setTab('web')}>Web</button>
+        </div>
         <input
           placeholder="Tìm video (vd: ocean) hoặc dán link mp4…"
           value={input}
@@ -166,10 +181,25 @@ export default function App() {
       {status && <div className="status" role="status">{status}</div>}
 
       <div className="feed" ref={feedRef}>
-        {items.length === 0 && (
+        {tab === 'web' && (
+          webResults.length === 0
+            ? <div className="slide"><div className="empty">Nhập từ khoá ở trên để tìm trên web</div></div>
+            : webResults.map((r) => (
+              <div className="slide web" key={r.id}>
+                {r.thumb && <img className="poster" src={r.thumb} alt="" />}
+                <div className="webcard">
+                  <div className="host">{r.host}</div>
+                  <h3>{r.title}</h3>
+                  <p>{r.snippet}</p>
+                  <a href={r.url} target="_blank" rel="noopener noreferrer">Mở trang gốc ↗</a>
+                </div>
+              </div>
+            ))
+        )}
+        {tab === 'video' && items.length === 0 && (
           <div className="slide"><div className="empty">Đang tải danh sách video…</div></div>
         )}
-        {items.map((it, i) => (
+        {tab === 'video' && items.map((it, i) => (
           <Slide
             key={it.id}
             item={it}

@@ -16,3 +16,13 @@ export type Cue = {
 };
 
 export type SubMode = 'overlay' | 'parallel' | 'off';
+
+/** Kết quả tìm web (Google Programmable Search). */
+export type WebResult = {
+  id: string;
+  title: string;
+  url: string;
+  snippet: string;
+  thumb?: string;
+  host: string;
+};

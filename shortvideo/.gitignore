@@ -1,0 +1,4 @@
+dist
+server/cache
+server/.venv
+__pycache__/

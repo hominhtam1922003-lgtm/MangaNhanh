@@ -12,6 +12,8 @@ const nextConfig = {
 };
 if (isStatic) {
   nextConfig.output = 'export';
+  // In static export, we cannot use /api routes (they need a Node server).
+  // Capacitor Android doesn't need them anyway because WebView bypasses CORS.
 }
 
 export default nextConfig;

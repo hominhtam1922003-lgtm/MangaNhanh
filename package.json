@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3000 -H 0.0.0.0",
     "build": "next build",
-    "export": "STATIC_EXPORT=1 next build && node scripts/spa-fallback.mjs",
+    "export": "bash scripts/export.sh",
     "start": "next start -p 3000 -H 0.0.0.0",
     "lint": "next lint",
     "cap:sync": "npm run export && npx cap sync android",

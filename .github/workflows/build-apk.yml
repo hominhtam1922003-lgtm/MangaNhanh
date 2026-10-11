@@ -32,19 +32,8 @@ jobs:
       - name: Install dependencies
         run: npm ci || npm install
 
-      - name: Export static web
-        run: |
-          # On the GitHub Ubuntu runner, CORS isn't enforced by the Capacitor WebView
-          # on native HTTP, so we build the static export (no /api routes).
-          npm run export
-          echo "=== out/ size ==="
-          du -sh out/
-
-      - name: Add & sync Capacitor Android
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          npx cap add android || true
-          npx cap sync android
+      - name: Export static web (bypass API route; Capacitor doesn't need it)
+        run: npm run export
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -53,6 +42,11 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+
+      - name: Add & sync Capacitor Android
+        run: |
+          npx cap add android || true
+          npx cap sync android
 
       - name: Build APK
         working-directory: android

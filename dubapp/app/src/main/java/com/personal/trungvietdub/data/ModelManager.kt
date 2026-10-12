@@ -32,11 +32,12 @@ object ModelCatalog {
     private const val SHERPA = "https://github.com/k2-fsa/sherpa-onnx/releases/download"
     private const val HF_NLLB = "https://huggingface.co/Xenova/nllb-200-distilled-600M/resolve/main"
 
+    // SenseVoice int8: nhận diện tiếng Trung chính xác và nhanh, đầu ra có chấm câu và chuẩn hóa số
     val ASR = ModelSpec(
-        id = "asr-paraformer-zh-small",
-        title = "Nhận diện tiếng Trung (Paraformer small)",
-        approxMb = 78,
-        archiveUrl = "$SHERPA/asr-models/sherpa-onnx-paraformer-zh-small-2024-03-09.tar.bz2",
+        id = "asr-sensevoice-zh-int8",
+        title = "Nhận diện tiếng Trung (SenseVoice int8)",
+        approxMb = 166,
+        archiveUrl = "$SHERPA/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09.tar.bz2",
     )
     val TTS_VI = ModelSpec(
         id = "tts-vi-vais1000",

@@ -2,12 +2,12 @@ package com.personal.trungvietdub.pipeline
 
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
-import com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig
+import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.personal.trungvietdub.data.AsrFiles
 
-/** Nhận diện tiếng Trung offline bằng sherpa-onnx (Paraformer). Input: mono 16 kHz. */
+/** Nhận diện tiếng Trung offline bằng sherpa-onnx (SenseVoice). Input: mono 16 kHz. */
 class ChineseSpeechRecognizer(files: AsrFiles, threads: Int = Threads.inference) : AutoCloseable {
     private val recognizer: OfflineRecognizer
 
@@ -15,11 +15,14 @@ class ChineseSpeechRecognizer(files: AsrFiles, threads: Int = Threads.inference)
         val config = OfflineRecognizerConfig(
             featConfig = FeatureConfig(sampleRate = Segmenter.SR, featureDim = 80),
             modelConfig = OfflineModelConfig(
-                paraformer = OfflineParaformerModelConfig(model = files.model.absolutePath),
+                senseVoice = OfflineSenseVoiceModelConfig(
+                    model = files.model.absolutePath,
+                    language = "zh",
+                    useInverseTextNormalization = true,
+                ),
                 tokens = files.tokens.absolutePath,
                 numThreads = threads,
                 provider = "cpu",
-                modelType = "paraformer",
             ),
             decodingMethod = "greedy_search",
         )
@@ -31,7 +34,8 @@ class ChineseSpeechRecognizer(files: AsrFiles, threads: Int = Threads.inference)
         try {
             stream.acceptWaveform(samples, Segmenter.SR)
             recognizer.decode(stream)
-            return recognizer.getResult(stream).text.trim()
+            // Bỏ thẻ điều khiển nếu có, ví dụ <|zh|><|NEUTRAL|>
+            return recognizer.getResult(stream).text.replace(Regex("<\\|[^|]*\\|>"), "").trim()
         } finally {
             stream.release()
         }

@@ -31,12 +31,12 @@ data class ModelSpec(
 object ModelCatalog {
     private const val SHERPA = "https://github.com/k2-fsa/sherpa-onnx/releases/download"
 
-    // SenseVoice int8: nhận diện tiếng Trung chính xác và nhanh, đầu ra có chấm câu và chuẩn hóa số
+    // FireRedASR large (AED, int8): nhận diện tiếng Trung chính xác nhất trong các model offline của sherpa-onnx
     val ASR = ModelSpec(
-        id = "asr-sensevoice-zh-int8",
-        title = "Nhận diện tiếng Trung (SenseVoice int8)",
-        approxMb = 166,
-        archiveUrl = "$SHERPA/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09.tar.bz2",
+        id = "asr-firered-zh-large-int8",
+        title = "Nhận diện tiếng Trung (FireRedASR large, chính xác cao)",
+        approxMb = 1470,
+        archiveUrl = "$SHERPA/asr-models/sherpa-onnx-fire-red-asr-large-zh_en-2025-02-16.tar.bz2",
     )
     val TTS_VI = ModelSpec(
         id = "tts-vi-vais1000",
@@ -56,7 +56,7 @@ object ModelCatalog {
     val all = listOf(ASR, TTS_VI, UVR)
 }
 
-data class AsrFiles(val model: File, val tokens: File)
+data class AsrFiles(val encoder: File, val decoder: File, val tokens: File)
 data class TtsFiles(val model: File, val tokens: File, val espeakDataDir: File)
 
 class ModelManager(private val context: Context) {
@@ -73,10 +73,9 @@ class ModelManager(private val context: Context) {
         if (!isReady(ModelCatalog.ASR)) return null
         val tokens = rootOf(ModelCatalog.ASR).walkTopDown().firstOrNull { it.name == "tokens.txt" } ?: return null
         val dir = tokens.parentFile!!
-        val model = dir.listFiles()!!.firstOrNull { it.name == "model.int8.onnx" }
-            ?: dir.listFiles()!!.firstOrNull { it.name == "model.onnx" }
-            ?: return null
-        return AsrFiles(model, tokens)
+        val encoder = File(dir, "encoder.int8.onnx").takeIf { it.exists() } ?: return null
+        val decoder = File(dir, "decoder.int8.onnx").takeIf { it.exists() } ?: return null
+        return AsrFiles(encoder, decoder, tokens)
     }
 
     fun ttsFiles(): TtsFiles? {

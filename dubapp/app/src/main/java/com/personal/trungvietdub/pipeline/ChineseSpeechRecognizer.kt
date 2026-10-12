@@ -2,12 +2,12 @@ package com.personal.trungvietdub.pipeline
 
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
-import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig
+import com.k2fsa.sherpa.onnx.OfflineFireRedAsrModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.personal.trungvietdub.data.AsrFiles
 
-/** Nhận diện tiếng Trung offline bằng sherpa-onnx (SenseVoice). Input: mono 16 kHz. */
+/** Nhận diện tiếng Trung offline bằng sherpa-onnx (FireRedASR large, int8). Input: mono 16 kHz. */
 class ChineseSpeechRecognizer(files: AsrFiles, threads: Int = Threads.inference) : AutoCloseable {
     private val recognizer: OfflineRecognizer
 
@@ -15,10 +15,9 @@ class ChineseSpeechRecognizer(files: AsrFiles, threads: Int = Threads.inference)
         val config = OfflineRecognizerConfig(
             featConfig = FeatureConfig(sampleRate = Segmenter.SR, featureDim = 80),
             modelConfig = OfflineModelConfig(
-                senseVoice = OfflineSenseVoiceModelConfig(
-                    model = files.model.absolutePath,
-                    language = "zh",
-                    useInverseTextNormalization = true,
+                fireRedAsr = OfflineFireRedAsrModelConfig(
+                    encoder = files.encoder.absolutePath,
+                    decoder = files.decoder.absolutePath,
                 ),
                 tokens = files.tokens.absolutePath,
                 numThreads = threads,

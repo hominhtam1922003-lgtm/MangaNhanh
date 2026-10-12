@@ -17,6 +17,36 @@ object GeminiAsr {
 
     data class Seg(val startMs: Long, val endMs: Long, val text: String)
 
+    private const val PROMPT_SPANS =
+        "Đây là một đoạn audio tiếng Trung (phổ thông) gồm nhiều đoạn lời nói. Với MỖI đoạn trong danh sách, " +
+            "hãy chép lời nói trong khoảng [start, end] (giây) bằng chữ Hán giản thể, nguyên văn, KHÔNG dịch, " +
+            "KHÔNG thêm chú thích. Đoạn không có lời thì để chuỗi rỗng. Trả về JSON {\"items\": [{\"id\":..., \"text\":...}]} " +
+            "và phải có đủ mọi id trong danh sách. Bỏ qua nhạc nền và tiếng ồn."
+
+    private val SCHEMA_SPANS = JSONObject()
+        .put("type", "OBJECT")
+        .put(
+            "properties",
+            JSONObject().put(
+                "items",
+                JSONObject()
+                    .put("type", "ARRAY")
+                    .put(
+                        "items",
+                        JSONObject()
+                            .put("type", "OBJECT")
+                            .put(
+                                "properties",
+                                JSONObject()
+                                    .put("id", JSONObject().put("type", "INTEGER"))
+                                    .put("text", JSONObject().put("type", "STRING")),
+                            )
+                            .put("required", JSONArray(listOf("id", "text"))),
+                    ),
+            ),
+        )
+        .put("required", JSONArray(listOf("items")))
+
     private const val PROMPT =
         "Đây là một đoạn audio tiếng Trung (phổ thông). Hãy chép lời nói nguyên văn bằng chữ Hán giản thể, " +
             "KHÔNG dịch và KHÔNG thêm chú thích. Chia thành các câu hoặc cụm tự nhiên, mỗi đoạn kèm thời điểm " +
@@ -48,22 +78,30 @@ object GeminiAsr {
         )
         .put("required", JSONArray(listOf("segments")))
 
-    /** Nhận diện một khối audio 16 kHz mono. Thời gian trả về tính từ đầu khối. */
-    fun transcribe(apiKey: String, samples16k: FloatArray): List<Seg> {
+    /**
+     * Nhận diện một khối audio 16 kHz mono theo các đoạn VAD đã biết ([spans] = (startMs, endMs) tính từ đầu khối).
+     * Gemini chỉ chép lời cho từng id đoạn, nên lời luôn gắn đúng đoạn, không phụ thuộc mốc thời gian Gemini tự đoán.
+     * Trả về map: chỉ số đoạn trong khối -> lời (thiếu id thì không có trong map).
+     */
+    fun transcribeSpans(apiKey: String, samples16k: FloatArray, spans: List<Pair<Long, Long>>): Map<Int, String> {
+        if (spans.isEmpty()) return emptyMap()
         val b64 = Base64.encodeToString(wav16(samples16k, 16_000), Base64.NO_WRAP)
+        val list = JSONArray()
+        spans.forEachIndexed { k, sp ->
+            list.put(JSONObject().put("id", k).put("start", sp.first / 1000.0).put("end", sp.second / 1000.0))
+        }
+        val prompt = PROMPT_SPANS + "\nDanh sách đoạn (JSON): " + list.toString()
         val parts = JSONArray()
             .put(JSONObject().put("inline_data", JSONObject().put("mime_type", "audio/wav").put("data", b64)))
-            .put(JSONObject().put("text", PROMPT))
-        val json = JSONObject(GeminiApi.generateJson(apiKey, parts, SCHEMA))
-        val arr = json.optJSONArray("segments") ?: JSONArray()
-        return (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
-            Seg(
-                startMs = (o.getDouble("start") * 1000).toLong(),
-                endMs = (o.getDouble("end") * 1000).toLong(),
-                text = o.getString("text").trim(),
-            )
-        }.filter { it.text.isNotEmpty() }
+            .put(JSONObject().put("text", prompt))
+        val json = JSONObject(GeminiApi.generateJson(apiKey, parts, SCHEMA_SPANS))
+        val arr = json.optJSONArray("items") ?: JSONArray()
+        val out = HashMap<Int, String>()
+        for (n in 0 until arr.length()) {
+            val o = arr.getJSONObject(n)
+            out[o.getInt("id")] = o.optString("text", "").trim()
+        }
+        return out
     }
 
     /**

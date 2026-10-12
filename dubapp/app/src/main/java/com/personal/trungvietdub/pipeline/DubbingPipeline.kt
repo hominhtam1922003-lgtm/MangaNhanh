@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
+import org.json.JSONObject
 
 /**
  * Điều phối: giải mã → tách nhạc (tùy chọn) → tìm đoạn → nhận diện → dịch → TTS → ghép → xuất MP4.
@@ -132,29 +133,45 @@ class DubbingPipeline(private val context: Context) {
 
         // 4. Nhận diện tiếng Trung; kết quả lưu asr_<i>.txt cho từng đoạn VAD
         if (geminiKey.isNotEmpty()) {
-            // Gemini: gửi audio theo khối 4 phút, tuần tự để tránh vượt giới hạn tốc độ; mỗi khối lưu gem_<w>.json
+            // Gemini: mỗi khối 4 phút; các đoạn VAD thuộc khối được đưa kèm id và thời gian, Gemini chép lời theo id
             val win = GeminiAsr.WINDOW_SEC * Segmenter.SR
+            val winMs = GeminiAsr.WINDOW_SEC * 1000L
             val wins = (speech16.size + win - 1) / win
-            log("Nhận diện bằng Gemini: $wins khối ${GeminiAsr.WINDOW_SEC} giây")
-            val gemTodo = (0 until wins).filter { !st.has("gem_$it.json") }
+            val spansByWin: List<List<Int>> = (0 until wins).map { w ->
+                spans.indices.filter { spans[it].startMs / winMs == w.toLong() }
+            }
+            log("Nhận diện bằng Gemini: $wins khối ${GeminiAsr.WINDOW_SEC} giây, ${spans.size} đoạn")
+            val gemTodo = (0 until wins).filter { w -> spansByWin[w].isNotEmpty() && !st.has("gem_$w.json") }
             val gemDone = AtomicInteger(wins - gemTodo.size)
             runParallel(
                 2, gemTodo,
                 setup = { Unit },
                 teardown = { },
                 work = { _, w ->
+                    val idx = spansByWin[w]
                     val from = w * win
                     val to = minOf(speech16.size, from + win)
-                    val segs = withContext(Dispatchers.IO) { GeminiAsr.transcribe(geminiKey, speech16.copyOfRange(from, to)) }
-                    val offset = w * GeminiAsr.WINDOW_SEC * 1000L
-                    st.saveText("gem_$w.json", GeminiAsr.toJson(segs.map { it.copy(startMs = it.startMs + offset, endMs = it.endMs + offset) }))
+                    val local = idx.map { i -> (spans[i].startMs - w * winMs) to (spans[i].endMs - w * winMs) }
+                    val got = withContext(Dispatchers.IO) {
+                        GeminiAsr.transcribeSpans(geminiKey, speech16.copyOfRange(from, to), local)
+                    }
+                    val obj = JSONObject()
+                    idx.forEachIndexed { k, i -> obj.put(i.toString(), got[k] ?: "") }
+                    st.saveText("gem_$w.json", obj.toString())
                     report(Step.ASR, gemDone.incrementAndGet().toFloat() / wins, "Gemini ${gemDone.get()}/$wins")
                 },
             )
-            val all = (0 until wins).flatMap { GeminiAsr.fromJson(st.loadText("gem_$it.json")) }
-            val assigned = GeminiAsr.assign(all, spans.map { it.startMs to it.endMs })
-            spans.indices.forEach { st.saveText("asr_$it.txt", assigned[it]) }
-            log("Nhận diện Gemini xong: ${all.size} câu → ${spans.size} đoạn")
+            var missing = 0
+            for (w in 0 until wins) {
+                if (spansByWin[w].isEmpty()) continue
+                val obj = JSONObject(st.loadText("gem_$w.json"))
+                for (i in spansByWin[w]) {
+                    val t = obj.optString(i.toString(), "")
+                    if (t.isEmpty()) missing++
+                    st.saveText("asr_$i.txt", t)
+                }
+            }
+            log("Nhận diện Gemini xong: ${spans.size - missing}/${spans.size} đoạn có lời")
             report(Step.ASR, 1f, "")
         } else {
             // Offline: FireRedASR, song song theo worker
@@ -254,7 +271,7 @@ class DubbingPipeline(private val context: Context) {
                     val slot = spans[i].endMs - spans[i].startMs
                     val (pcm, src) = vs.synth(i, translated[i], slot)
                     if (src == "edge") edgeN.incrementAndGet() else vitsN.incrementAndGet()
-                    st.saveFloats("clip_$i.bin", pcm)
+                    st.saveFloats("clip_$i.bin", trimSilence(pcm))
                     report(Step.TTS, done.incrementAndGet().toFloat() / voiced.size, "")
                 },
             )

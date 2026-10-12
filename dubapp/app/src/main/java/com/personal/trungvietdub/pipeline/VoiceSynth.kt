@@ -10,6 +10,17 @@ import kotlin.math.roundToInt
  * Tạo giọng Việt cho một câu: ưu tiên giọng neural edge-tts (miễn phí, không cần key),
  * nếu lỗi mạng/dịch vụ thì dùng VITS offline. Mỗi worker có một instance riêng.
  */
+/** Cắt khoảng im lặng đầu/cuối clip TTS, giữ 20 ms đệm, để lời đọc bắt đầu đúng lúc với đoạn gốc. */
+internal fun trimSilence(x: FloatArray, sr: Int = Composer.OUT_RATE, thr: Float = 0.003f): FloatArray {
+    var a = 0
+    while (a < x.size && kotlin.math.abs(x[a]) < thr) a++
+    var b = x.size - 1
+    while (b > a && kotlin.math.abs(x[b]) < thr) b--
+    if (a > b) return x // toàn im lặng: giữ nguyên để bước kiểm tra peak báo lỗi
+    val pad = sr / 50
+    return x.copyOfRange(maxOf(0, a - pad), minOf(x.size, b + 1 + pad))
+}
+
 class VoiceSynth(
     private val context: Context,
     private val workDir: File,

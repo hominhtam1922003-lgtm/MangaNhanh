@@ -54,58 +54,66 @@ class DubbingPipeline(private val context: Context) {
         log("Mono 16 kHz: ${mono16.size} mẫu; ${memInfo()}")
         onProgress(Step.DECODE, 1f, "")
 
-        // 2. Âm thanh gốc: tách giọng (UVR) hoặc hạ âm lượng. Kết quả lưu lại để không chạy lại.
-        var effMode = requestedMode
-        var base = stereo44
-        when {
-            st.has("mode.txt") -> {
-                effMode = OriginalAudioMode.valueOf(st.loadText("mode.txt"))
-                base = if (effMode == OriginalAudioMode.SEPARATE) st.loadFloats("uvr_out.bin") else stereo44
-                log("Dùng kết quả âm thanh gốc đã lưu: ${effMode.name}")
-            }
-            requestedMode == OriginalAudioMode.SEPARATE && !st.has("uvr_started.txt") -> {
-                // Đánh dấu TRƯỚC khi chạy: nếu tiến trình chết giữa chừng, lần sau sẽ không thử tách giọng nữa
-                st.saveText("uvr_started.txt", "1")
-                onProgress(Step.SEPARATE, 0f, "")
-                log("Bắt đầu tách giọng (UVR)")
-                val uvr = mm.uvrFile() ?: error("Chưa tải model tách giọng")
+        // 2. Tách nhạc nền bằng UVR (luôn chạy để nhận diện lời trên giọng sạch).
+        //    Kết quả là nhạc nền (uvr_out.bin); giọng = gốc − nhạc nền.
+        var music: FloatArray? = if (st.has("uvr_out.bin")) st.loadFloats("uvr_out.bin") else null
+        if (music == null && !st.has("uvr_started.txt")) {
+            // Đánh dấu TRƯỚC khi chạy: nếu tiến trình chết giữa chừng, lần sau không thử lại UVR (tránh lặp lỗi)
+            st.saveText("uvr_started.txt", "1")
+            onProgress(Step.SEPARATE, 0f, "")
+            val uvr = mm.uvrFile()
+            if (uvr != null) {
+                log("Tách nhạc nền (UVR) để nhận diện lời trên giọng sạch")
                 try {
-                    base = UvrClient(context).separate(stereo44, uvr, dir, jobId) { f ->
+                    music = UvrClient(context).separate(stereo44, uvr, dir, jobId) { f ->
                         onProgress(Step.SEPARATE, f, "")
                     }
-                    effMode = OriginalAudioMode.SEPARATE
-                    log("Tách giọng xong; ${memInfo()}")
+                    log("Tách nhạc nền xong; ${memInfo()}")
                 } catch (e: Throwable) {
-                    log("Tách giọng lỗi, dùng hạ âm lượng: ${e.javaClass.simpleName}: ${e.message}")
-                    effMode = OriginalAudioMode.LOWER
-                    base = stereo44
+                    log("Tách nhạc nền lỗi, nhận diện trên audio gốc: ${e.javaClass.simpleName}: ${e.message}")
                 }
-                st.saveText("mode.txt", effMode.name)
-            }
-            else -> {
-                if (requestedMode == OriginalAudioMode.SEPARATE) {
-                    log("Tách giọng đã dừng ở lần trước; chuyển sang hạ âm lượng để tránh lặp lỗi")
-                    effMode = OriginalAudioMode.LOWER
-                }
-                base = stereo44
-                st.saveText("mode.txt", effMode.name)
+            } else {
+                log("Chưa có model tách nhạc; nhận diện trên audio gốc")
             }
         }
         onProgress(Step.SEPARATE, 1f, "")
+
+        val effMode = if (requestedMode == OriginalAudioMode.SEPARATE && music == null) {
+            log("Không tách được nhạc nền; chuyển sang hạ âm lượng audio gốc")
+            OriginalAudioMode.LOWER
+        } else requestedMode
+        val base: FloatArray = if (effMode == OriginalAudioMode.SEPARATE) music!! else stereo44
+
+        // Nguồn cho nhận diện: giọng đã tách nếu có, nếu không thì audio gốc
+        val m = music
+        val speech16: FloatArray = if (m != null) {
+            val vocals = FloatArray(stereo44.size) { k -> stereo44[k] - m[k] }
+            AudioIO.convert(AudioIO.Pcm(vocals, Composer.OUT_RATE, Composer.OUT_CH), Segmenter.SR, 1)
+        } else mono16
+        log("Nguồn nhận diện: ${if (m != null) "giọng đã tách" else "audio gốc"}; peak=${fmtPeak(speech16)}")
+
+        // Checkpoint cũ được tạo từ audio gốc; khi đổi sang giọng đã tách thì xóa để tính lại
+        if (!st.has("speech_v2.txt")) {
+            dir.listFiles()?.filter {
+                it.name == "spans.txt" || it.name == "texts.json" || it.name == "translated.json" ||
+                    it.name.startsWith("asr_") || it.name.startsWith("clip_")
+            }?.forEach { it.delete() }
+            st.saveText("speech_v2.txt", "1")
+        }
 
         // 3. Tìm đoạn có lời nói
         val spans: List<Segmenter.Span> = if (st.has("spans.txt")) {
             parseSpans(st.loadText("spans.txt"))
         } else {
             onProgress(Step.SEGMENT, 0f, "")
-            Segmenter.segment(mono16).also { list ->
+            Segmenter.segment(speech16).also { list ->
                 st.saveText("spans.txt", list.joinToString("\n") { "${it.startMs} ${it.endMs}" })
             }
         }
         log("Tìm đoạn: ${spans.size} đoạn")
         onProgress(Step.SEGMENT, 1f, "${spans.size} đoạn")
         if (spans.isEmpty()) {
-            error("Không tìm thấy đoạn có lời nói (peak=${fmtPeak(mono16)}). Xem nhật ký.")
+            error("Không tìm thấy đoạn có lời nói (peak=${fmtPeak(speech16)}). Xem nhật ký.")
         }
 
         // Số worker song song theo phần cứng (máy mạnh: 3). Mỗi worker chia đều số nhân CPU.
@@ -128,8 +136,8 @@ class DubbingPipeline(private val context: Context) {
                 work = { asr, i ->
                     val sp = spans[i]
                     val from = (sp.startMs * Segmenter.SR / 1000).toInt()
-                    val to = minOf(mono16.size, (sp.endMs * Segmenter.SR / 1000).toInt())
-                    st.saveText("asr_$i.txt", asr.transcribe(mono16.copyOfRange(from, to)))
+                    val to = minOf(speech16.size, (sp.endMs * Segmenter.SR / 1000).toInt())
+                    st.saveText("asr_$i.txt", asr.transcribe(speech16.copyOfRange(from, to)))
                     report(Step.ASR, done.incrementAndGet().toFloat() / spans.size, "")
                 },
             )

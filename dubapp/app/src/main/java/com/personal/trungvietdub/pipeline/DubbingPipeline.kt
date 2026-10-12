@@ -148,22 +148,28 @@ class DubbingPipeline(private val context: Context) {
         val transcript = spans.indices.joinToString("\n") { i -> "[${fmt(spans[i].startMs)}] ${texts[i]}" }
         onTranscript(transcript)
 
-        // 5. Dịch Trung → Việt bằng NLLB (một phiên, tuần tự), lưu từng câu
-        val translated = ArrayList(st.loadList("translated.json"))
-        if (translated.size < spans.size) {
+        // 5. Dịch Trung → Việt: 2 luồng dùng chung một phiên NLLB (ORT cho phép gọi song song), mỗi câu lưu tr_<i>.txt
+        val trTodo = spans.indices.filter { !st.has("tr_$it.txt") }
+        if (trTodo.isNotEmpty()) {
             val nllb = mm.nllbFiles()
-            log("Dịch từ câu ${translated.size + 1}/${spans.size}; NLLB: ${if (nllb != null) "có model" else "CHƯA có model"}")
+            log("Dịch ${trTodo.size} câu; NLLB: ${if (nllb != null) "có model" else "CHƯA có model"}")
             val translator: Translator = if (nllb != null) NllbTranslator(nllb) else UnavailableTranslator()
             translator.use { tr ->
-                while (translated.size < spans.size) {
-                    val i = translated.size
-                    translated += if (texts[i].isBlank()) "" else tr.translate(texts[i])
-                    st.saveList("translated.json", translated)
-                    report(Step.TRANSLATE, translated.size.toFloat() / spans.size, "")
-                }
+                val done = AtomicInteger(spans.size - trTodo.size)
+                runParallel(
+                    minOf(workers, 2), trTodo,
+                    setup = { tr },
+                    teardown = { },
+                    work = { t, i ->
+                        val out = if (texts[i].isBlank()) "" else t.translate(texts[i])
+                        st.saveText("tr_$i.txt", out)
+                        report(Step.TRANSLATE, done.incrementAndGet().toFloat() / spans.size, "")
+                    },
+                )
             }
             log("Dịch xong")
         }
+        val translated: List<String> = spans.indices.map { st.loadText("tr_$it.txt") }
         report(Step.TRANSLATE, 1f, "")
         val nonBlank = translated.count { it.isNotBlank() }
         val sample = translated.firstOrNull { it.isNotBlank() }?.take(80) ?: "(rỗng)"
@@ -172,25 +178,31 @@ class DubbingPipeline(private val context: Context) {
             error("Bản dịch rỗng: mô hình NLLB không sinh được chữ nào, nên không có giọng Việt. Xem nhật ký.")
         }
 
-        // 6. Giọng Việt song song; mỗi câu lưu thành clip_<i>.bin
+        // Phụ đề SRT tiếng Việt, lưu vào Download/TrungVietDub
+        val srtName = displayName.substringBeforeLast('.') + ".srt"
+        val srt = Subtitles.srt(spans.indices.map { Triple(spans[it].startMs, spans[it].endMs, translated[it]) })
+        log("Phụ đề tiếng Việt: ${Subtitles.save(context, srtName, srt)}")
+
+        // 6. Giọng Việt song song: edge-tts (neural, miễn phí) trước, VITS offline dự phòng khi lỗi
         val voiced = spans.indices.filter { translated[it].isNotBlank() }
         val todo = voiced.filter { !st.has("clip_$it.bin") }
         if (todo.isNotEmpty()) {
             val done = AtomicInteger(voiced.size - todo.size)
+            val edgeN = AtomicInteger(0)
+            val vitsN = AtomicInteger(0)
             runParallel(
                 workers, todo,
-                setup = { VietnameseTts(ttsFiles, threadsPer) },
+                setup = { VoiceSynth(context, dir, ttsFiles, threadsPer, speed) },
                 teardown = { it.close() },
-                work = { tts, i ->
+                work = { vs, i ->
                     val slot = spans[i].endMs - spans[i].startMs
-                    val wav = tts.speak(translated[i], slot, speed)
-                    st.saveFloats(
-                        "clip_$i.bin",
-                        AudioIO.convert(AudioIO.Pcm(wav, tts.sampleRate, 1), Composer.OUT_RATE, 1),
-                    )
+                    val (pcm, src) = vs.synth(i, translated[i], slot)
+                    if (src == "edge") edgeN.incrementAndGet() else vitsN.incrementAndGet()
+                    st.saveFloats("clip_$i.bin", pcm)
                     report(Step.TTS, done.incrementAndGet().toFloat() / voiced.size, "")
                 },
             )
+            log("Giọng: edge-tts ${edgeN.get()} câu, VITS dự phòng ${vitsN.get()} câu")
         }
         report(Step.TTS, 1f, "")
         val clipPeaks = voiced.map { i -> st.loadFloats("clip_$i.bin").maxOfOrNull { kotlin.math.abs(it) } ?: 0f }
@@ -223,7 +235,7 @@ class DubbingPipeline(private val context: Context) {
         items: List<Int>,
         setup: () -> W,
         teardown: (W) -> Unit,
-        work: (W, Int) -> Unit,
+        work: suspend (W, Int) -> Unit,
     ) {
         if (items.isEmpty()) return
         val next = AtomicInteger(0)

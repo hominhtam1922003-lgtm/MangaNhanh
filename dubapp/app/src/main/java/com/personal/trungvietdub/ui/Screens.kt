@@ -87,7 +87,8 @@ fun HomeScreen(
 
         Card { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Dữ liệu AI (tải một lần)", fontWeight = FontWeight.SemiBold)
-            ModelCatalog.all.forEach { spec ->
+            // Khi đã có khóa Gemini thì ẩn model FireRedASR offline (không cần tải)
+            ModelCatalog.all.filter { !(hasKey && it.id == ModelCatalog.ASR.id) }.forEach { spec ->
                 val dl = downloads[spec.id]
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.weight(1f)) {

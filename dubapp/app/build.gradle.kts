@@ -12,8 +12,10 @@ android {
         applicationId = "com.personal.trungvietdub"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // Mỗi lần CI build tăng versionCode theo số lần chạy, để cài đè và hiển thị đúng bản
+        val runNo = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = runNo
+        versionName = "1.0.$runNo"
         vectorDrawables { useSupportLibrary = true }
     }
 

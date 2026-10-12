@@ -124,6 +124,9 @@ fun HomeScreen(
         } }
 
         OutlinedButton(onClick = onOpenHistory, modifier = Modifier.fillMaxWidth()) { Text("Lịch sử") }
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        val version = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrDefault("?")
+        Text("Phiên bản $version", style = MaterialTheme.typography.bodySmall)
     }
 }
 

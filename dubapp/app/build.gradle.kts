@@ -19,9 +19,20 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    // Khóa ký cố định (keystore đi kèm repo): mọi bản build đều cùng chữ ký, nên cài đè được lên bản trước.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
         release {
             isMinifyEnabled = false

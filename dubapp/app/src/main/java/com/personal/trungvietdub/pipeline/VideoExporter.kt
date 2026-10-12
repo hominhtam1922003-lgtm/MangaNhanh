@@ -8,6 +8,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.media.MediaMuxer
+import android.os.Build
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
@@ -164,21 +165,31 @@ object VideoExporter {
         require(vCount > 0) { "Video không có khung hình nào được ghép" }
     }
 
-    /** Lưu file vào Movies/TrungVietDub qua MediaStore. Trả về content Uri. */
+    /** Lưu file vào Movies/TrungVietDub và trả về content Uri. Android 10+ dùng MediaStore không cần quyền; Android 9 trở xuống ghi trực tiếp vào thư mục (cần WRITE_EXTERNAL_STORAGE). */
     fun saveToGallery(context: Context, file: File, displayName: String): Uri {
+        val resolver = context.contentResolver
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, displayName)
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-            put(MediaStore.Video.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/TrungVietDub")
-            put(MediaStore.Video.Media.IS_PENDING, 1)
         }
-        val resolver = context.contentResolver
-        val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
-            ?: error("Không tạo được mục trong thư viện")
-        resolver.openOutputStream(uri)!!.use { out -> file.inputStream().use { it.copyTo(out) } }
-        values.clear()
-        values.put(MediaStore.Video.Media.IS_PENDING, 0)
-        resolver.update(uri, values, null, null)
-        return uri
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            values.put(MediaStore.Video.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/TrungVietDub")
+            values.put(MediaStore.Video.Media.IS_PENDING, 1)
+            val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+                ?: error("Không tạo được mục trong thư viện")
+            resolver.openOutputStream(uri)!!.use { out -> file.inputStream().use { it.copyTo(out) } }
+            values.clear()
+            values.put(MediaStore.Video.Media.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+            return uri
+        }
+        // Android 9 trở xuống: ghi file thật rồi đăng ký với MediaStore qua DATA
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "TrungVietDub")
+        if (!dir.exists() && !dir.mkdirs()) error("Không tạo được thư mục Movies/TrungVietDub (kiểm tra quyền lưu trữ)")
+        val dest = File(dir, displayName)
+        file.copyTo(dest, overwrite = true)
+        values.put(MediaStore.Video.Media.DATA, dest.absolutePath)
+        return resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+            ?: error("Không đăng ký được video vào thư viện")
     }
 }

@@ -2,6 +2,7 @@ package com.personal.trungvietdub
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -33,9 +34,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= 33) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        }
+        val needed = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) needed += Manifest.permission.POST_NOTIFICATIONS
+        // Android 9 trở xuống: cần quyền ghi bộ nhớ để lưu MP4 vào thư viện
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+        ) needed += Manifest.permission.WRITE_EXTERNAL_STORAGE
+        if (needed.isNotEmpty()) requestPermissions(needed.toTypedArray(), 1)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 Surface(Modifier.fillMaxSize()) {

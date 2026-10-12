@@ -136,9 +136,32 @@ class ModelManager(private val context: Context) {
         onProgress(1f)
     }
 
+    /** Tải có thử lại: lỗi tạm thời (5xx, 429, mất kết nối) được thử lại tối đa 4 lần với thời gian chờ tăng dần. */
     private fun downloadTo(url: String, dest: File, onProgress: (Float) -> Unit) {
+        var attempt = 0
+        while (true) {
+            attempt++
+            try {
+                downloadOnce(url, dest, onProgress)
+                return
+            } catch (e: DownloadException) {
+                if (!e.transient || attempt >= 4) throw IllegalStateException(e.message, e)
+            } catch (e: java.io.IOException) {
+                if (attempt >= 4) throw IllegalStateException("Mất kết nối khi tải: ${e.message}", e)
+            }
+            Thread.sleep(2000L * attempt)
+            onProgress(0f)
+        }
+    }
+
+    private class DownloadException(message: String, val transient: Boolean) : Exception(message)
+
+    private fun downloadOnce(url: String, dest: File, onProgress: (Float) -> Unit) {
         client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
-            if (!resp.isSuccessful) error("Tải thất bại (HTTP ${resp.code}): $url")
+            if (!resp.isSuccessful) {
+                val transient = resp.code >= 500 || resp.code == 429 || resp.code == 408
+                throw DownloadException("Tải thất bại (HTTP ${resp.code}, thử lại sau nếu là lỗi máy chủ): $url", transient)
+            }
             val body = resp.body ?: error("Phản hồi rỗng")
             val total = body.contentLength().takeIf { it > 0 } ?: 1L
             body.byteStream().use { input ->

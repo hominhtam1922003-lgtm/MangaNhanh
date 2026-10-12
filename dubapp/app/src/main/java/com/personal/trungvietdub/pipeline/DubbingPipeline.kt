@@ -54,8 +54,9 @@ class DubbingPipeline(private val context: Context) {
                 val uvr = mm.uvrFile() ?: error("Chưa tải model tách giọng")
                 log("Bắt đầu tách giọng (UVR)")
                 try {
-                    base = UvrSeparator(uvr).use { sep ->
-                        sep.separate(stereo44) { f -> onProgress(Step.SEPARATE, f, "") }
+                    // Chạy trong tiến trình riêng (:uvr) để native crash không làm sập app
+                    base = UvrClient(context).separate(stereo44, uvr, work) { f ->
+                        onProgress(Step.SEPARATE, f, "")
                     }
                     log("Tách giọng xong")
                     onProgress(Step.SEPARATE, 1f, "")

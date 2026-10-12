@@ -54,6 +54,12 @@
             </intent-filter>
         </activity>
 
+        <!-- UVR chạy trong tiến trình riêng: native crash không làm sập app chính -->
+        <service
+            android:name=".service.UvrService"
+            android:exported="false"
+            android:process=":uvr" />
+
         <service
             android:name=".service.DubForegroundService"
             android:exported="false"

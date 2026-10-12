@@ -51,9 +51,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         // App vừa mở lại sau khi bị văng/đóng: tự chạy tiếp các job còn dở (giới hạn MAX_ATTEMPTS).
-        repo.readAll()
-            .filter { it.status == JobStatus.RUNNING || it.status == JobStatus.QUEUED }
-            .forEach { onWorkerDied(it.id) }
+        val crashFile = java.io.File(app.filesDir, com.personal.trungvietdub.DubApp.CRASH_FILE)
+        if (crashFile.exists()) {
+            val text = runCatching { crashFile.readText() }.getOrDefault("")
+            crashFile.delete()
+            _error.value = "App đã dừng đột ngột lần trước. Chi tiết lỗi:\n" + text.take(1500)
+        }
+        runCatching {
+            repo.readAll()
+                .filter { it.status == JobStatus.RUNNING || it.status == JobStatus.QUEUED }
+                .forEach { onWorkerDied(it.id) }
+        }.onFailure { e ->
+            _error.value = (_error.value ?: "") + "\nKhông khởi động lại được job: ${e.message}"
+        }
         viewModelScope.launch {
             while (isActive) {
                 val list = repo.readAll()

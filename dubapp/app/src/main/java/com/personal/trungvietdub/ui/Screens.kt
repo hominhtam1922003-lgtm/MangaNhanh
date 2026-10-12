@@ -24,6 +24,15 @@ import com.personal.trungvietdub.data.ModelCatalog
 import com.personal.trungvietdub.data.OriginalAudioMode
 import com.personal.trungvietdub.data.Step
 import android.net.Uri
+import android.content.Intent
+import android.provider.Settings
+import android.Manifest
+import android.os.Build
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.personal.trungvietdub.notify.Notifications
 
 @Composable
 fun HomeScreen(
@@ -58,6 +67,8 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("LỒNG TIẾNG TRUNG → VIỆT", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+
+        NotificationCard()
 
         error?.let {
             Card { Column(Modifier.padding(12.dp)) {
@@ -206,4 +217,52 @@ fun HistoryScreen(jobs: List<Job>, onBack: () -> Unit, onOpen: (String) -> Unit)
             }
         }
     }
+}
+
+/** Trạng thái quyền thông báo: xin quyền, hoặc mở cài đặt nếu đã từ chối. */
+@Composable
+fun NotificationCard() {
+    val ctx = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var enabled by remember { mutableStateOf(Notifications.enabled(ctx)) }
+    var asked by rememberSaveable { mutableStateOf(false) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) enabled = Notifications.enabled(ctx)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val launcher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { enabled = Notifications.enabled(ctx) }
+
+    Card { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Thông báo tiến độ", fontWeight = FontWeight.SemiBold)
+        if (enabled) {
+            Text("✓ Đã bật. Thanh tiến độ hiện trên thanh thông báo, và báo khi xong hoặc lỗi.",
+                style = MaterialTheme.typography.bodySmall)
+        } else {
+            Text("Chưa bật: bạn sẽ không thấy tiến độ khi thu nhỏ app.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    asked = true
+                    if (Notifications.needsRuntimePermission) {
+                        launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        enabled = Notifications.enabled(ctx)
+                    }
+                }) { Text("Bật thông báo") }
+                if (asked) {
+                    OutlinedButton(onClick = {
+                        ctx.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                            putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        })
+                    }) { Text("Mở cài đặt") }
+                }
+            }
+        }
+    } }
 }

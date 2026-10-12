@@ -16,6 +16,12 @@ class DubApp : Application() {
             NotificationManager.IMPORTANCE_LOW
         ).apply { description = getString(R.string.notif_channel_desc) }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        val result = NotificationChannel(
+            RESULT_CHANNEL_ID,
+            "Kết quả lồng tiếng",
+            NotificationManager.IMPORTANCE_DEFAULT
+        ).apply { description = "Thông báo khi video lồng tiếng xong hoặc lỗi" }
+        getSystemService(NotificationManager::class.java).createNotificationChannel(result)
         installCrashRecorder()
     }
 
@@ -35,6 +41,7 @@ class DubApp : Application() {
 
     companion object {
         const val CHANNEL_ID = "dub_progress"
+        const val RESULT_CHANNEL_ID = "dub_result"
         const val CRASH_FILE = "last_crash.txt"
     }
 }

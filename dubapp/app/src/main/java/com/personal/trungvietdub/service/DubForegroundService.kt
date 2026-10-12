@@ -140,6 +140,12 @@ class DubForegroundService : Service() {
             )
         }
         repo.upsert(current)
+        com.personal.trungvietdub.notify.Notifications.postResult(
+            this, job.id, job.title,
+            ok = current.status == JobStatus.DONE,
+            text = if (current.status == JobStatus.DONE) "Đã lưu vào thư viện (Movies/TrungVietDub)"
+            else "Lỗi: ${current.error ?: "không rõ"}. Mở app để tiếp tục.",
+        )
     }
 
     private fun overall(step: Step, frac: Float): Float {

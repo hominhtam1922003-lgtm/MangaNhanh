@@ -42,6 +42,12 @@ jobs:
           tail -n 120 build.log
           exit $code
 
+      - name: Liệt kê thư viện native trong APK (kiểm tra ABI)
+        run: |
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep '\.so$' | awk '{print $4}' | sort | while read f; do
+            printf '::notice title=native-lib::%s\n' "$f"
+          done
+
       - uses: actions/upload-artifact@v4
         with:
           name: TrungVietDub-debug-apk

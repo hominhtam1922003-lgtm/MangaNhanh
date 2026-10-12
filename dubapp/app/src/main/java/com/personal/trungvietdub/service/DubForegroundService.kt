@@ -46,7 +46,9 @@ class DubForegroundService : Service() {
             this, NOTIF_ID, notification(job.title, 0f, "Đang chuẩn bị"),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
         )
-        scope.launch { process(job, mode) }
+        scope.launch {
+            try { process(job, mode) } finally { ServiceCompat.stopForeground(this@DubForegroundService, ServiceCompat.STOP_FOREGROUND_REMOVE); stopSelf() }
+        }
         return START_NOT_STICKY
     }
 
@@ -70,8 +72,12 @@ class DubForegroundService : Service() {
                 status = JobStatus.DONE, progress = 1f, step = "Hoàn tất",
                 outputUri = result.outputUri.toString(), transcript = result.transcript,
             )
-        } catch (e: Exception) {
-            current = current.copy(status = JobStatus.FAILED, error = e.message ?: e.javaClass.simpleName)
+        } catch (e: Throwable) {
+            // Bắt cả Error (UnsatisfiedLinkError, OutOfMemoryError) để job báo lỗi thay vì app bị đóng
+            current = current.copy(
+                status = JobStatus.FAILED,
+                error = "${e.javaClass.simpleName}: ${e.message ?: "không rõ"}",
+            )
         }
         repo.upsert(current)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)

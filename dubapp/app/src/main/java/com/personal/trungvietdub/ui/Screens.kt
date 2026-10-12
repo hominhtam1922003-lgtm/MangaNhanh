@@ -5,6 +5,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -39,11 +42,14 @@ fun HomeScreen(
     val picker = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
-        if (uri != null) {
-            picked = uri
-            pickedName = vm.displayName(uri)
-            minutes = vm.durationSeconds(uri) / 60
-        }
+        if (uri != null) picked = uri
+    }
+    // Đọc tên và thời lượng video ở luồng nền, tránh ANR
+    LaunchedEffect(picked) {
+        val u = picked ?: return@LaunchedEffect
+        val (name, mins) = withContext(Dispatchers.IO) { vm.displayName(u) to vm.durationSeconds(u) / 60 }
+        pickedName = name
+        minutes = mins
     }
     val ready2 = ModelCatalog.all.all { ready[it.id] == true }
 

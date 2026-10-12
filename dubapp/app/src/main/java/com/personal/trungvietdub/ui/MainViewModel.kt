@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -57,16 +59,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             crashFile.delete()
             _error.value = "App đã dừng đột ngột lần trước. Chi tiết lỗi:\n" + text.take(1500)
         }
-        runCatching {
-            repo.readAll()
-                .filter { it.status == JobStatus.RUNNING || it.status == JobStatus.QUEUED }
-                .forEach { onWorkerDied(it.id) }
-        }.onFailure { e ->
-            _error.value = (_error.value ?: "") + "\nKhông khởi động lại được job: ${e.message}"
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { repo.readAll() }
+                    .filter { it.status == JobStatus.RUNNING || it.status == JobStatus.QUEUED }
+                    .forEach { onWorkerDied(it.id) }
+            }.onFailure { e ->
+                _error.value = (_error.value ?: "") + "\nKhông khởi động lại được job: ${e.message}"
+            }
         }
         viewModelScope.launch {
             while (isActive) {
-                val list = repo.readAll()
+                val list = withContext(Dispatchers.IO) { repo.readAll() }
                 _jobs.value = list
                 list.forEach { j ->
                     if (j.status == JobStatus.DONE || j.status == JobStatus.FAILED) unwatch(j.id)
@@ -112,25 +116,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } catch (_: Exception) { /* một số nguồn không hỗ trợ quyền bền */ }
         val id = UUID.randomUUID().toString()
-        repo.upsert(
-            Job(
-                id = id, title = displayName(uri), sourceUri = uri.toString(),
-                mode = mode.name, speed = speed,
-            ),
-        )
-        DubForegroundService.start(app, id)
-        watch(id)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                repo.upsert(
+                    Job(
+                        id = id, title = displayName(uri), sourceUri = uri.toString(),
+                        mode = mode.name, speed = speed,
+                    ),
+                )
+            }
+            DubForegroundService.start(app, id)
+            watch(id)
+        }
         return id
     }
 
     /** Người dùng bấm Tiếp tục: chạy lại job từ các bước đã lưu, reset số lần thử. */
     fun resume(jobId: String) {
         val app = getApplication<Application>()
-        val job = repo.get(jobId) ?: return
-        repo.upsert(job.copy(status = JobStatus.RUNNING, attempts = 0, error = null))
-        JobLog.append(app, jobId, "Người dùng bấm Tiếp tục")
-        DubForegroundService.start(app, jobId)
-        watch(jobId)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                val job = repo.get(jobId) ?: return@withContext
+                repo.upsert(job.copy(status = JobStatus.RUNNING, attempts = 0, error = null))
+                JobLog.append(app, jobId, "Người dùng bấm Tiếp tục")
+            }
+            DubForegroundService.start(app, jobId)
+            watch(jobId)
+        }
     }
 
     fun job(id: String): Job? = repo.get(id)

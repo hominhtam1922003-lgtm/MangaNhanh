@@ -17,6 +17,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.personal.trungvietdub.data.JobLog
 import com.personal.trungvietdub.ui.HistoryScreen
 import com.personal.trungvietdub.ui.HomeScreen
@@ -67,7 +70,9 @@ class MainActivity : ComponentActivity() {
                         )
                         is Nav.Job -> JobScreen(
                             job = jobs.firstOrNull { it.id == current.id },
-                            log = remember(jobs) { JobLog.tail(this@MainActivity, current.id) },
+                            log = produceState("", jobs, current.id) {
+                                value = withContext(Dispatchers.IO) { JobLog.tail(this@MainActivity, current.id) }
+                            }.value,
                             onBack = { nav = "home" },
                             onOpenOutput = { uri -> openVideo(Uri.parse(uri)) },
                             onResume = { vm.resume(current.id) },

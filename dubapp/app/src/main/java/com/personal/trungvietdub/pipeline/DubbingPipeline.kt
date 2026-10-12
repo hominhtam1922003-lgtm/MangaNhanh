@@ -62,7 +62,8 @@ class DubbingPipeline(private val context: Context) {
         // 2. Tách nhạc nền bằng UVR (luôn chạy để nhận diện lời trên giọng sạch).
         //    Kết quả là nhạc nền (uvr_out.bin); giọng = gốc − nhạc nền.
         var music: FloatArray? = if (st.has("uvr_out.bin")) st.loadFloats("uvr_out.bin") else null
-        if (music == null && !st.has("uvr_started.txt")) {
+        // Chạy lại UVR nếu lần trước dừng giữa chừng nhưng đã có vị trí tiếp tục (uvr_out.part.pos)
+        if (music == null && (!st.has("uvr_started.txt") || st.has("uvr_out.part.pos"))) {
             // Đánh dấu TRƯỚC khi chạy: nếu tiến trình chết giữa chừng, lần sau không thử lại UVR (tránh lặp lỗi)
             st.saveText("uvr_started.txt", "1")
             onProgress(Step.SEPARATE, 0f, "")

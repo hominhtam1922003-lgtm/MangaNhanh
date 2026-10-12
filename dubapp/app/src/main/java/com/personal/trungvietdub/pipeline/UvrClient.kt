@@ -31,6 +31,8 @@ class UvrClient(private val context: Context) {
         onProgress: (Float) -> Unit,
     ): FloatArray {
         val inFile = File(workDir, "uvr_in.bin")
+        // Ghi ra file tạm .part, chỉ đổi tên thành uvr_out.bin khi xử lý xong hoàn toàn
+        val partFile = File(workDir, "uvr_out.part")
         val outFile = File(workDir, "uvr_out.bin")
         writeFloats(inFile, stereo44)
 
@@ -55,7 +57,7 @@ class UvrClient(private val context: Context) {
                     val msg = Message.obtain(null, UvrService.MSG_SEPARATE).apply {
                         data = Bundle().apply {
                             putString(UvrService.KEY_INPUT, inFile.absolutePath)
-                            putString(UvrService.KEY_OUTPUT, outFile.absolutePath)
+                            putString(UvrService.KEY_OUTPUT, partFile.absolutePath)
                             putString(UvrService.KEY_MODEL, model.absolutePath)
                             putString(UvrService.KEY_JOB, jobId)
                         }
@@ -80,6 +82,8 @@ class UvrClient(private val context: Context) {
             val err = withTimeoutOrNull(60 * 60_000L) { done.await() }
                 ?: "Hết thời gian tách giọng"
             check(err.isEmpty()) { err }
+            outFile.delete()
+            check(partFile.renameTo(outFile)) { "Không lưu được kết quả tách giọng" }
             return readFloats(outFile)
         } finally {
             runCatching { context.unbindService(conn) }

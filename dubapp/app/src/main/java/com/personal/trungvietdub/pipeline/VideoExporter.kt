@@ -20,6 +20,7 @@ object VideoExporter {
     private const val AAC = "audio/mp4a-latm"
 
     fun encodeAac(pcmStereo: FloatArray, sampleRate: Int, channels: Int, outFile: File) {
+        require(pcmStereo.isNotEmpty()) { "Không có âm thanh để mã hóa" }
         val fmt = MediaFormat.createAudioFormat(AAC, sampleRate, channels).apply {
             setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
             setInteger(MediaFormat.KEY_BIT_RATE, 160_000)
@@ -35,6 +36,8 @@ object VideoExporter {
         var inPos = 0
         var inputEos = false
         var done = false
+        var framesWritten = 0
+        var outBytes = 0L
 
         while (!done) {
             if (!inputEos) {
@@ -71,6 +74,8 @@ object VideoExporter {
                         ob.position(info.offset)
                         ob.limit(info.offset + info.size)
                         muxer.writeSampleData(track, ob, info)
+                        framesWritten++
+                        outBytes += info.size
                     }
                     codec.releaseOutputBuffer(oi, false)
                     if ((info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) done = true
@@ -78,7 +83,19 @@ object VideoExporter {
             }
         }
         codec.stop(); codec.release()
-        muxer.stop(); muxer.release()
+        try {
+            check(muxerStarted && framesWritten > 0) {
+                "Bộ mã hóa không tạo được khung AAC nào (started=$muxerStarted)"
+            }
+            muxer.stop()
+        } catch (e: IllegalStateException) {
+            throw IllegalStateException(
+                "Mã hóa AAC lỗi: ${e.message} (khung=$framesWritten, byte=$outBytes, mẫu=${pcmStereo.size}, " +
+                    "rate=$sampleRate, kênh=$channels)", e,
+            )
+        } finally {
+            muxer.release()
+        }
     }
 
     /** Ghép video gốc (copy) với file AAC mới, xen kẽ theo timestamp. */

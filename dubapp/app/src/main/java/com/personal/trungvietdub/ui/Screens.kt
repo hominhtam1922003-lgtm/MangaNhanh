@@ -129,7 +129,15 @@ fun JobScreen(job: Job?, log: String, onBack: () -> Unit, onOpenOutput: (String)
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Quay lại") }
             Text("Tiến trình", style = MaterialTheme.typography.titleLarge)
         }
-        if (job == null) { Text("Không tìm thấy job"); return@Column }
+        if (job == null) Text("Không tìm thấy job") else JobDetails(job, log, onResume, onOpenOutput)
+    }
+}
+
+/** Nội dung chi tiết của một job (tách riêng để tránh return sớm trong lambda của Column). */
+@Composable
+private fun ColumnScope.JobDetails(
+    job: Job, log: String, onResume: () -> Unit, onOpenOutput: (String) -> Unit,
+) {
         Text(job.title, fontWeight = FontWeight.SemiBold)
         LinearProgressIndicator(progress = { job.progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
         Text("${(job.progress * 100).toInt()}%  ${job.step}")
@@ -160,7 +168,6 @@ fun JobScreen(job: Job?, log: String, onBack: () -> Unit, onOpenOutput: (String)
         job.outputUri?.let { uri ->
             Button(onClick = { onOpenOutput(uri) }, modifier = Modifier.fillMaxWidth()) { Text("Mở video đã lưu") }
         }
-    }
 }
 
 @Composable

@@ -109,25 +109,42 @@ object VideoExporter {
 
         val buf = ByteBuffer.allocate(4 * 1024 * 1024)
         val info = MediaCodec.BufferInfo()
-        while (true) {
-            val vt = if (v.sampleTime >= 0) v.sampleTime else Long.MAX_VALUE
-            val at = if (a.sampleTime >= 0) a.sampleTime else Long.MAX_VALUE
-            if (vt == Long.MAX_VALUE && at == Long.MAX_VALUE) break
-            val fromVideo = vt <= at
-            val ex = if (fromVideo) v else a
-            buf.clear()
-            val n = ex.readSampleData(buf, 0)
-            if (n < 0) { ex.advance(); continue }
-            info.offset = 0
-            info.size = n
-            info.presentationTimeUs = ex.sampleTime
-            info.flags = if ((ex.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0)
-                MediaCodec.BUFFER_FLAG_KEY_FRAME else 0
-            muxer.writeSampleData(if (fromVideo) vTrack else aTrack, buf, info)
-            ex.advance()
+        // MediaMuxer yêu cầu timestamp của MỖI track tăng dần; video có khung B có thể không thỏa mãn.
+        var vCount = 0
+        var aCount = 0
+        var vLast = -1L
+        var aLast = -1L
+        try {
+            while (true) {
+                val vt = if (v.sampleTime >= 0) v.sampleTime else Long.MAX_VALUE
+                val at = if (a.sampleTime >= 0) a.sampleTime else Long.MAX_VALUE
+                if (vt == Long.MAX_VALUE && at == Long.MAX_VALUE) break
+                val fromVideo = vt <= at
+                val ex = if (fromVideo) v else a
+                buf.clear()
+                val n = ex.readSampleData(buf, 0)
+                if (n < 0) { ex.advance(); continue }
+                val pts = if (fromVideo) maxOf(ex.sampleTime, vLast + 1) else maxOf(ex.sampleTime, aLast + 1)
+                if (fromVideo) vLast = pts else aLast = pts
+                info.offset = 0
+                info.size = n
+                info.presentationTimeUs = pts
+                info.flags = if ((ex.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0)
+                    MediaCodec.BUFFER_FLAG_KEY_FRAME else 0
+                muxer.writeSampleData(if (fromVideo) vTrack else aTrack, buf, info)
+                if (fromVideo) vCount++ else aCount++
+                ex.advance()
+            }
+            muxer.stop()
+        } catch (e: IllegalStateException) {
+            throw IllegalStateException(
+                "Ghép MP4 lỗi: ${e.message} (mẫu hình=$vCount, mẫu tiếng=$aCount)", e
+            )
+        } finally {
+            muxer.release()
+            v.release(); a.release()
         }
-        muxer.stop(); muxer.release()
-        v.release(); a.release()
+        require(vCount > 0) { "Video không có khung hình nào được ghép" }
     }
 
     /** Lưu file vào Movies/TrungVietDub qua MediaStore. Trả về content Uri. */

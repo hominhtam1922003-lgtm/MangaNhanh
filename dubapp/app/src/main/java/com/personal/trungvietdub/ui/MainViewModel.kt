@@ -63,7 +63,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching {
                 withContext(Dispatchers.IO) { repo.readAll() }
                     .filter { it.status == JobStatus.RUNNING || it.status == JobStatus.QUEUED }
-                    .forEach { onWorkerDied(it.id) }
+                    .forEach { ensureRunning(it.id) }
             }.onFailure { e ->
                 _error.value = (_error.value ?: "") + "\nKhông khởi động lại được job: ${e.message}"
             }
@@ -137,7 +137,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 val job = repo.get(jobId) ?: return@withContext
-                repo.upsert(job.copy(status = JobStatus.RUNNING, attempts = 0, error = null))
+                repo.upsert(job.copy(status = JobStatus.QUEUED, attempts = 0, error = null))
                 JobLog.append(app, jobId, "Người dùng bấm Tiếp tục")
             }
             DubForegroundService.start(app, jobId)
@@ -168,28 +168,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { getApplication<Application>().unbindService(conn) }
     }
 
-    /** Worker chết giữa chừng (crash native, bị kill...). Tự khởi động lại tối đa MAX_ATTEMPTS lần. */
-    private fun onWorkerDied(jobId: String) {
+    /**
+     * Đảm bảo job đang được worker xử lý (hoặc đang xếp hàng). Worker tự bỏ qua job đã có trong hàng đợi,
+     * nên gọi lại khi mở app không làm tăng số lần thử. Số lần thử chỉ tăng khi worker chết giữa chừng (trong service).
+     */
+    private fun ensureRunning(jobId: String) {
         unwatch(jobId)
-        val app = getApplication<Application>()
         val job = repo.get(jobId) ?: return
         if (job.status == JobStatus.DONE || job.status == JobStatus.FAILED) return
-        val tries = job.attempts + 1
-        if (tries >= JobRepository.MAX_ATTEMPTS) {
-            JobLog.append(app, jobId, "Worker đã dừng $tries lần; dừng tự động, chờ người dùng bấm Tiếp tục")
-            repo.upsert(
-                job.copy(
-                    status = JobStatus.FAILED,
-                    attempts = tries,
-                    error = "Xử lý đã dừng $tries lần liên tiếp (thường do lỗi native hoặc thiếu bộ nhớ). " +
-                        "Bấm Tiếp tục để chạy lại từ các bước đã lưu.",
-                ),
-            )
-            return
-        }
-        repo.upsert(job.copy(status = JobStatus.RUNNING, attempts = tries))
-        JobLog.append(app, jobId, "Worker bị dừng; tự khởi động lại lần ${tries + 1}/${JobRepository.MAX_ATTEMPTS}")
-        DubForegroundService.start(app, jobId)
+        DubForegroundService.start(getApplication(), jobId)
         watch(jobId)
     }
+
+    /** Worker chết khi đang kết nối với app: xếp lại job vào hàng đợi worker. */
+    private fun onWorkerDied(jobId: String) = ensureRunning(jobId)
 }

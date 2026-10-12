@@ -82,6 +82,7 @@ fun HomeScreen(
         }
 
         NotificationCard()
+        BackgroundRunCard()
 
         GeminiKeyCard(hasKey) { hasKey = it }
         VoiceModeCard()
@@ -352,5 +353,40 @@ fun VoiceModeCard() {
                     Text(label)
                 }
             }
+    } }
+}
+
+/** Cho phép chạy nền không bị hệ thống tiết kiệm pin dừng giữa chừng (job vẫn chạy khi tắt màn hình). */
+@Composable
+fun BackgroundRunCard() {
+    val ctx = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val pm = ctx.getSystemService(android.os.PowerManager::class.java)
+    var exempt by remember { mutableStateOf(pm.isIgnoringBatteryOptimizations(ctx.packageName)) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) exempt = pm.isIgnoringBatteryOptimizations(ctx.packageName)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    SectionCard { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Chạy nền", fontWeight = FontWeight.SemiBold)
+        Text(
+            "Job chạy trong dịch vụ nền: bạn có thể thoát app hoặc tắt màn hình. Các job xếp hàng và chạy lần lượt.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (exempt) {
+            Text("✓ Đã cho phép chạy nền không hạn chế.", style = MaterialTheme.typography.bodySmall)
+        } else {
+            Text("Nên cho phép để Android không dừng job khi tắt màn hình.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            Button(onClick = {
+                ctx.startActivity(Intent(
+                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    android.net.Uri.parse("package:${ctx.packageName}"),
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }) { Text("Cho phép chạy nền") }
+        }
     } }
 }

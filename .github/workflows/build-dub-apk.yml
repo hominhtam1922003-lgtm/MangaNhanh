@@ -35,7 +35,7 @@ jobs:
           ./gradlew assembleDebug --no-daemon --stacktrace > build.log 2>&1
           code=$?
           # Đưa các dòng lỗi ra annotation để đọc được ngay trên GitHub/API
-          grep -E '^e: |What went wrong|Could not |Execution failed|^> |Caused by' build.log | head -60 | while IFS= read -r line; do
+          { grep -E '^e: |^w: .*Kotlin|What went wrong|Could not |Execution failed|^> (Could|Failed|Cannot|Build)|Caused by|error:' build.log | head -40; tail -n 40 build.log; } | while IFS= read -r line; do
             printf '::error title=build::%s\n' "$(printf '%s' "$line" | sed 's/%/%25/g')"
           done
           echo "----- tail -----"

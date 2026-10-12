@@ -157,6 +157,12 @@ class DubbingPipeline(private val context: Context) {
             log("Dịch xong")
         }
         report(Step.TRANSLATE, 1f, "")
+        val nonBlank = translated.count { it.isNotBlank() }
+        val sample = translated.firstOrNull { it.isNotBlank() }?.take(80) ?: "(rỗng)"
+        log("Kết quả dịch: $nonBlank/${spans.size} câu có nội dung. Ví dụ: $sample")
+        if (nonBlank == 0) {
+            error("Bản dịch rỗng: mô hình NLLB không sinh được chữ nào, nên không có giọng Việt. Xem nhật ký.")
+        }
 
         // 6. Giọng Việt song song; mỗi câu lưu thành clip_<i>.bin
         val voiced = spans.indices.filter { translated[it].isNotBlank() }
@@ -179,7 +185,11 @@ class DubbingPipeline(private val context: Context) {
             )
         }
         report(Step.TTS, 1f, "")
-        log("Tạo giọng Việt xong: ${voiced.size} câu")
+        val clipPeaks = voiced.map { i -> st.loadFloats("clip_$i.bin").maxOfOrNull { kotlin.math.abs(it) } ?: 0f }
+        log("Tạo giọng Việt xong: ${voiced.size} câu; peak giọng=${"%.4f".format(clipPeaks.maxOrNull() ?: 0f)}")
+        if ((clipPeaks.maxOrNull() ?: 0f) < 1e-4f) {
+            error("Giọng Việt tạo ra bị im lặng (model TTS lỗi). Xem nhật ký.")
+        }
 
         // 7. Ghép âm thanh gốc + giọng Việt
         report(Step.COMPOSE, 0f, "")

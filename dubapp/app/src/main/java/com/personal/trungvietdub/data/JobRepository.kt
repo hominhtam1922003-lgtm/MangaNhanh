@@ -28,7 +28,10 @@ class JobRepository private constructor(context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
     private val serializer = ListSerializer(Job.serializer())
 
-    private inline fun <T> locked(block: () -> T): T {
+    /** Khóa JVM trước (FileLock không cho hai luồng cùng tiến trình giữ cùng lúc), rồi mới khóa file giữa các tiến trình. */
+    private val jvmMonitor = Any()
+
+    private inline fun <T> locked(block: () -> T): T = synchronized(jvmMonitor) {
         val raf = RandomAccessFile(lockFile, "rw")
         try {
             val lock = raf.channel.lock()
@@ -37,7 +40,7 @@ class JobRepository private constructor(context: Context) {
             } finally {
                 lock.release()
             }
-            return result
+            result
         } finally {
             raf.close()
         }

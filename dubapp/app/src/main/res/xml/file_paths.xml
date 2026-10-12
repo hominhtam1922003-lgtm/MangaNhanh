@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path name="models" path="models/" />
+    <files-path name="work" path="work/" />
+    <files-path name="jobs" path="jobs/" />
+    <cache-path name="cache" path="." />
+    <external-files-path name="ext_files" path="." />
+</paths>

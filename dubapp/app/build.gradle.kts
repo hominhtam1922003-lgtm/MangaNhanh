@@ -61,6 +61,7 @@ android {
         }
         jniLibs {
             useLegacyPackaging = false
+            pickFirsts += setOf("lib/*/libonnxruntime.so")
         }
     }
 
@@ -93,6 +94,9 @@ dependencies {
     // sherpa-onnx (k2-fsa): ASR tiếng Trung (Paraformer), TTS tiếng Việt (VITS/Piper).
     // AAR không có trên Maven Central; workflow CI tải về app/libs/ từ GitHub Releases v1.13.8.
     implementation(files("libs/sherpa-onnx-1.13.8.aar"))
+    // ONNX Runtime Java API: dùng cho UVR (tách giọng) và NLLB (dịch).
+    // Lưu ý: sherpa AAR cũng đóng gói libonnxruntime.so; packaging.pickFirst bên dưới xử lý trùng tên.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.3")
     implementation("org.apache.commons:commons-compress:1.26.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")

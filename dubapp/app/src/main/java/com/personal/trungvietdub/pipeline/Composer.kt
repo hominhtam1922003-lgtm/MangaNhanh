@@ -10,19 +10,19 @@ object Composer {
     class Clip(val startMs: Long, val mono44k: FloatArray)
 
     fun mix(
-        original: FloatArray,            // stereo interleaved, OUT_RATE
+        base: FloatArray,                // stereo interleaved, OUT_RATE: nhạc đã tách, hoặc audio gốc
         clips: List<Clip>,
         mode: OriginalAudioMode,
-        originalGain: Float = 0.25f,     // khi LOWER: giữ ~25% âm lượng gốc (nhạc vẫn nghe được)
         voiceGain: Float = 1.0f,
     ): FloatArray {
-        val frames = original.size / OUT_CH
-        val out = FloatArray(original.size)
+        val frames = base.size / OUT_CH
+        val out = FloatArray(base.size)
         val gain = when (mode) {
-            OriginalAudioMode.LOWER -> originalGain
+            OriginalAudioMode.SEPARATE -> 1.0f   // base đã là nhạc nền (không còn giọng gốc)
+            OriginalAudioMode.LOWER -> 0.25f     // giữ ~25% audio gốc, vẫn còn lẫn giọng Trung
             OriginalAudioMode.MUTE -> 0f
         }
-        for (i in original.indices) out[i] = original[i] * gain
+        for (i in base.indices) out[i] = base[i] * gain
 
         for (clip in clips) {
             val startFrame = (clip.startMs * OUT_RATE / 1000).toInt()

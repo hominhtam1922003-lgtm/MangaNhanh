@@ -5,11 +5,12 @@ import kotlinx.serialization.Serializable
 enum class JobStatus { QUEUED, RUNNING, DONE, FAILED }
 
 enum class Step(val label: String, val weight: Float) {
-    DECODE("Tách audio", 0.10f),
+    DECODE("Tách audio", 0.05f),
+    SEPARATE("Tách giọng gốc, giữ nhạc nền", 0.20f),
     SEGMENT("Tìm đoạn có lời nói", 0.05f),
-    ASR("Nhận diện tiếng Trung", 0.30f),
+    ASR("Nhận diện tiếng Trung", 0.20f),
     TRANSLATE("Dịch sang tiếng Việt", 0.15f),
-    TTS("Tạo giọng Việt", 0.20f),
+    TTS("Tạo giọng Việt", 0.15f),
     COMPOSE("Ghép nhạc nền + giọng Việt", 0.10f),
     EXPORT("Xuất MP4 vào thư viện", 0.10f),
 }
@@ -30,6 +31,7 @@ data class Job(
 
 /** Tùy chọn xử lý âm thanh gốc. */
 enum class OriginalAudioMode(val label: String) {
-    LOWER("Hạ âm lượng lời gốc (giữ nguyên nhạc)"),
+    SEPARATE("Tách giọng gốc, giữ nhạc nền (khuyến nghị)"),
+    LOWER("Hạ âm lượng audio gốc (không tách)"),
     MUTE("Tắt toàn bộ audio gốc"),
 }

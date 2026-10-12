@@ -52,12 +52,11 @@ class DubForegroundService : Service() {
     private suspend fun process(job: Job, mode: OriginalAudioMode) {
         var current = job.copy(status = JobStatus.RUNNING)
         repo.upsert(current)
-        val pipeline = DubbingPipeline(this)
-        try {
-            val result = pipeline.run(
+                try {
+            val result = DubbingPipeline(this).run(
                 sourceUri = Uri.parse(job.sourceUri),
                 displayName = "dub_${job.id}.mp4",
-                mode = mode,
+                requestedMode = mode,
                 onProgress = { step, frac, note ->
                     val total = overall(step, frac)
                     current = current.copy(step = step.label + if (note.isNotEmpty()) " ($note)" else "", progress = total)

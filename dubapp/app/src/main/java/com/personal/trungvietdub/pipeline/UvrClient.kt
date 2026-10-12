@@ -27,6 +27,7 @@ class UvrClient(private val context: Context) {
         stereo44: FloatArray,
         model: File,
         workDir: File,
+        jobId: String,
         onProgress: (Float) -> Unit,
     ): FloatArray {
         val inFile = File(workDir, "uvr_in.bin")
@@ -56,6 +57,7 @@ class UvrClient(private val context: Context) {
                             putString(UvrService.KEY_INPUT, inFile.absolutePath)
                             putString(UvrService.KEY_OUTPUT, outFile.absolutePath)
                             putString(UvrService.KEY_MODEL, model.absolutePath)
+                            putString(UvrService.KEY_JOB, jobId)
                         }
                         replyTo = replyMessenger
                     }

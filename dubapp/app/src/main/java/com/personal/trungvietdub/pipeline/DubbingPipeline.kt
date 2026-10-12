@@ -56,7 +56,7 @@ class DubbingPipeline(private val context: Context) {
                 log("Bắt đầu tách giọng (UVR)")
                 try {
                     // Chạy trong tiến trình riêng (:uvr) để native crash không làm sập app
-                    base = UvrClient(context).separate(stereo44, uvr, work) { f ->
+                    base = UvrClient(context).separate(stereo44, uvr, work, jobId) { f ->
                         onProgress(Step.SEPARATE, f, "")
                     }
                     log("Tách giọng xong; ${memInfo()}")

@@ -29,6 +29,7 @@ class UvrService : Service() {
         const val KEY_MODEL = "model"
         const val KEY_ERROR = "error"
         const val KEY_PROGRESS = "progress"
+        const val KEY_JOB = "job"
     }
 
     private lateinit var messenger: Messenger
@@ -40,8 +41,9 @@ class UvrService : Service() {
                 val input = msg.data.getString(KEY_INPUT)!!
                 val output = msg.data.getString(KEY_OUTPUT)!!
                 val model = msg.data.getString(KEY_MODEL)!!
+                val jobId = msg.data.getString(KEY_JOB) ?: ""
                 val reply = msg.replyTo
-                Thread { run(input, output, model, reply) }.start()
+                Thread { run(input, output, model, reply, jobId) }.start()
             }
             true
         })
@@ -49,7 +51,15 @@ class UvrService : Service() {
 
     override fun onBind(intent: Intent?): IBinder = messenger.binder
 
-    private fun run(input: String, output: String, model: String, reply: Messenger?) {
+    private fun memLine(): String {
+        val rt = Runtime.getRuntime()
+        return "heap ${(rt.totalMemory() - rt.freeMemory()) / 1048576}MB/${rt.maxMemory() / 1048576}MB"
+    }
+
+    private fun run(input: String, output: String, model: String, reply: Messenger?, jobId: String) {
+        fun log(m: String) { if (jobId.isNotEmpty()) com.personal.trungvietdub.data.JobLog.append(this, jobId, "[:uvr] $m") }
+        log("bắt đầu tách giọng; ${memLine()}")
+        var lastDecile = -1
         fun send(what: Int, data: Bundle? = null) {
             try {
                 reply?.send(Message.obtain(null, what).apply { this.data = data ?: Bundle() })
@@ -60,11 +70,15 @@ class UvrService : Service() {
         try {
             UvrSeparator(File(model)).use { sep ->
                 sep.separateFile(File(input), File(output)) { f ->
+                    val decile = (f * 10).toInt()
+                    if (decile != lastDecile) { lastDecile = decile; log("tiến độ ${decile * 10}%") }
                     send(MSG_PROGRESS, Bundle().apply { putFloat(KEY_PROGRESS, f) })
                 }
             }
+            log("xong; ${memLine()}")
             send(MSG_DONE)
         } catch (e: Throwable) {
+            log("LỖI: ${e.javaClass.name}: ${e.message}")
             send(MSG_ERROR, Bundle().apply {
                 putString(KEY_ERROR, "${e.javaClass.simpleName}: ${e.message ?: "không rõ"}")
             })

@@ -1,6 +1,9 @@
 package com.personal.trungvietdub.pipeline
 
+import ai.onnxruntime.OnnxJavaType
 import ai.onnxruntime.OnnxTensor
+import ai.onnxruntime.OrtException
+import ai.onnxruntime.TensorInfo
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import com.personal.trungvietdub.data.NllbFiles
@@ -161,18 +164,35 @@ class NllbTranslator(files: NllbFiles) : Translator {
             repeat(maxLen) {
                 val seq = LongArray(generated.size) { generated[it].toLong() }
                 val feeds = HashMap<String, OnnxTensor>()
+                // Tensor tạo mới trong vòng này (đóng cuối vòng). hiddenT và mask là tensor dùng chung, KHÔNG đóng ở đây.
                 val created = ArrayList<OnnxTensor>()
-                fun add(name: String, t: OnnxTensor) { feeds[name] = t; created.add(t) }
                 try {
-                    add("input_ids", OnnxTensor.createTensor(env, LongBuffer.wrap(seq), longArrayOf(1, seq.size.toLong())))
-                    add("encoder_hidden_states", hiddenT)
-                    add("encoder_attention_mask", mask)
-                    if (hasCacheBranch) add("use_cache_branch", OnnxTensor.createTensor(env, booleanArrayOf(false)))
-                    for (p in pastNames) {
-                        add(p, OnnxTensor.createTensor(env, FloatBuffer.allocate(0),
-                            longArrayOf(1, heads.toLong(), 0, headDim.toLong())))
+                    val seqShape = longArrayOf(1, seq.size.toLong())
+                    for ((name, node) in decoder.inputInfo) {
+                        val want = (node.info as TensorInfo).type
+                        when {
+                            name == "input_ids" -> feeds[name] = OnnxTensor.createTensor(env, LongBuffer.wrap(seq), seqShape)
+                                .also { created.add(it) }
+                            name == "encoder_hidden_states" -> feeds[name] = hiddenT
+                            name == "encoder_attention_mask" ->
+                                if (want == OnnxJavaType.FLOAT) feeds[name] = OnnxTensor.createTensor(
+                                    env, FloatBuffer.wrap(FloatArray(n) { 1f }), srcShape,
+                                ).also { created.add(it) }
+                                else feeds[name] = mask
+                            name == "use_cache_branch" -> feeds[name] = OnnxTensor.createTensor(env, booleanArrayOf(false))
+                                .also { created.add(it) }
+                            name.startsWith("past_key_values") -> feeds[name] = OnnxTensor.createTensor(
+                                env, FloatBuffer.allocate(0), longArrayOf(1, heads.toLong(), 0, headDim.toLong()),
+                            ).also { created.add(it) }
+                            else -> error("Decoder có input chưa hỗ trợ: $name ($want)")
+                        }
                     }
-                    val next = decoder.run(feeds).use { res ->
+                    val next = (try {
+                        decoder.run(feeds)
+                    } catch (e: OrtException) {
+                        val sig = decoder.inputInfo.entries.joinToString { "${it.key}:${(it.value.info as TensorInfo).type}" }
+                        throw IllegalStateException("${e.message}\nDecoder inputs: $sig", e)
+                    }).use { res ->
                         val logits = res.get(0) as OnnxTensor
                         val v = logits.info.shape[2].toInt()
                         val t = logits.info.shape[1].toInt()

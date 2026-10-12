@@ -11,8 +11,11 @@ import java.util.concurrent.TimeUnit
 
 /** Lớp gọi Gemini generateContent dùng chung: trả JSON theo schema, tự thử lại và đổi model khi cần. */
 object GeminiApi {
-    /** Model ưu tiên theo thứ tự (model cũ có thể bị Google ngừng cấp cho người dùng mới, khi đó 404 và chuyển model sau). */
+    /** Model ưu tiên theo thứ tự (model cũ có thể bị ngừng cấp cho người dùng mới, khi đó 404 và chuyển model sau). */
     private val MODELS = listOf("gemini-3.8-flash", "gemini-3.5-flash", "gemini-2.5-pro")
+
+    /** Model đã trả lời thành công lần gần nhất: các lần sau bắt đầu từ đó để không tốn lượt gọi lỗi 404. */
+    @Volatile private var preferred: String? = null
 
     private class HttpError(val code: Int, msg: String) : Exception(msg)
 
@@ -20,28 +23,38 @@ object GeminiApi {
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(300, TimeUnit.SECONDS)
         .callTimeout(600, TimeUnit.SECONDS)
+        .connectionPool(okhttp3.ConnectionPool(8, 5, TimeUnit.MINUTES))
         .build()
 
     /** [parts]: các phần nội dung (text / inline_data). Trả về chuỗi JSON do model sinh ra. */
     fun generateJson(apiKey: String, parts: JSONArray, schema: JSONObject): String {
-        val body = JSONObject()
-            .put("contents", JSONArray().put(JSONObject().put("parts", parts)))
-            .put(
-                "generationConfig",
-                JSONObject()
-                    .put("temperature", 0)
-                    .put("responseMimeType", "application/json")
-                    .put("responseSchema", schema),
-            )
-            .toString()
+        val models = listOfNotNull(preferred) + MODELS.filter { it != preferred }
         var last: Exception? = null
-        for (model in MODELS) {
-            for (attempt in 1..3) {
+        for (model in models) {
+            val body = JSONObject()
+                .put("contents", JSONArray().put(JSONObject().put("parts", parts)))
+                .put(
+                    "generationConfig",
+                    JSONObject()
+                        .put("temperature", 0)
+                        .put("responseMimeType", "application/json")
+                        .put("responseSchema", schema)
+                        .apply {
+                            // Model Flash 3.x: suy luận mức thấp để giảm độ trễ (không ảnh hưởng nhiều tới chép lời/dịch)
+                            if (model.contains("flash") && !model.startsWith("gemini-2")) {
+                                put("thinkingConfig", JSONObject().put("thinkingLevel", "LOW"))
+                            }
+                        },
+                )
+                .toString()
+            for (attempt in 1..4) {
                 try {
-                    return call(apiKey, model, body)
+                    val out = call(apiKey, model, body)
+                    preferred = model
+                    return out
                 } catch (e: HttpError) {
                     last = e
-                    if (e.code == 429 && attempt < 3) { Thread.sleep(20_000L * attempt); continue }
+                    if (e.code == 429 && attempt < 4) { Thread.sleep(15_000L * attempt); continue }
                     if (e.code == 404 || e.code == 429 || e.code >= 500) break
                     throw IllegalStateException(e.message, e)
                 } catch (e: IOException) {

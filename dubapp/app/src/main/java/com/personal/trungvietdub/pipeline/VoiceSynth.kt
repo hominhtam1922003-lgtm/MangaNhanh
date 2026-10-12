@@ -27,6 +27,7 @@ class VoiceSynth(
     private val ttsFiles: TtsFiles,
     private val threads: Int,
     private val speed: Float,
+    private val voice: String = EdgeTts.VOICE_FEMALE,
 ) : AutoCloseable {
     private var vits: VietnameseTts? = null
 
@@ -44,14 +45,14 @@ class VoiceSynth(
 
     private fun edge(index: Int, text: String, slotMs: Long): FloatArray {
         val baseRate = ((speed - 1f) * 100f).roundToInt()
-        var pcm = decodeMp3(index, EdgeTts.synthesize(text, EdgeTts.VOICE_FEMALE, EdgeTts.rateFor(speed)))
+        var pcm = decodeMp3(index, EdgeTts.synthesize(text, voice, EdgeTts.rateFor(speed)))
         val durMs = pcm.size * 1000L / Composer.OUT_RATE
         if (slotMs > 0 && durMs > slotMs * 1.05) {
             // Câu dài hơn khung gốc: tăng tốc để vừa khung, tối đa +60%
             val extra = ((durMs.toDouble() / slotMs - 1.0) * 100.0).roundToInt()
             val pct = (baseRate + extra).coerceIn(baseRate, 60)
             val rate = if (pct >= 0) "+$pct%" else "$pct%"
-            pcm = decodeMp3(index, EdgeTts.synthesize(text, EdgeTts.VOICE_FEMALE, rate))
+            pcm = decodeMp3(index, EdgeTts.synthesize(text, voice, rate))
         }
         return pcm
     }

@@ -14,38 +14,12 @@ import java.nio.ByteOrder
 object GeminiAsr {
     /** Độ dài mỗi khối gửi đi (giây). Khối 4 phút ≈ 7.7 MB WAV, nằm trong giới hạn 20 MB của inline audio. */
     const val WINDOW_SEC = 240
+    /** Số giây audio ngữ cảnh đặt trước mỗi khối (không xuất kết quả). */
+    const val CONTEXT_SEC = 12
+    /** Số khối gọi Gemini song song (I/O bound, giới hạn bởi hạn mức của khóa). */
+    const val PARALLEL = 3
 
     data class Seg(val startMs: Long, val endMs: Long, val text: String)
-
-    private const val PROMPT_SPANS =
-        "Đây là một đoạn audio tiếng Trung (phổ thông) gồm nhiều đoạn lời nói. Với MỖI đoạn trong danh sách, " +
-            "hãy chép lời nói trong khoảng [start, end] (giây) bằng chữ Hán giản thể, nguyên văn, KHÔNG dịch, " +
-            "KHÔNG thêm chú thích. Đoạn không có lời thì để chuỗi rỗng. Trả về JSON {\"items\": [{\"id\":..., \"text\":...}]} " +
-            "và phải có đủ mọi id trong danh sách. Bỏ qua nhạc nền và tiếng ồn."
-
-    private val SCHEMA_SPANS = JSONObject()
-        .put("type", "OBJECT")
-        .put(
-            "properties",
-            JSONObject().put(
-                "items",
-                JSONObject()
-                    .put("type", "ARRAY")
-                    .put(
-                        "items",
-                        JSONObject()
-                            .put("type", "OBJECT")
-                            .put(
-                                "properties",
-                                JSONObject()
-                                    .put("id", JSONObject().put("type", "INTEGER"))
-                                    .put("text", JSONObject().put("type", "STRING")),
-                            )
-                            .put("required", JSONArray(listOf("id", "text"))),
-                    ),
-            ),
-        )
-        .put("required", JSONArray(listOf("items")))
 
     private const val PROMPT =
         "Đây là một đoạn audio tiếng Trung (phổ thông). Hãy chép lời nói nguyên văn bằng chữ Hán giản thể, " +
@@ -78,28 +52,90 @@ object GeminiAsr {
         )
         .put("required", JSONArray(listOf("segments")))
 
+    /** Kết quả cho một đoạn VAD: lời gốc, bản dịch tiếng Việt, và giới tính người nói ("f", "m" hoặc "u" = chưa rõ). */
+    data class Line(val zh: String, val vi: String, val gender: String)
+
+    private const val PROMPT_WINDOW =
+        "Đây là audio tiếng Trung (phổ thông) lồng tiếng cho một video. Đầu audio có thể có một đoạn ngữ cảnh " +
+            "(không có trong danh sách): hãy nghe để hiểu mạch nhưng KHÔNG xuất kết quả cho đoạn đó. " +
+            "Với MỖI đoạn trong danh sách (id, start, end, maxSyl tính bằng giây): " +
+            "1) zh: chép nguyên văn lời trong khoảng [start, end] bằng chữ Hán giản thể, không thêm chú thích; " +
+            "để chuỗi rỗng nếu không có lời. " +
+            "2) vi: dịch sang tiếng Việt tự nhiên, đúng ngữ cảnh của cả video, giữ cách xưng hô nhất quán giữa các đoạn; " +
+            "số âm tiết tiếng Việt KHÔNG vượt quá maxSyl để khớp thời lượng lồng tiếng; không thêm chú thích. " +
+            "3) g: giới tính người nói của đoạn: f (nữ), m (nam), hoặc u (không rõ). " +
+            "Bỏ qua nhạc nền và tiếng ồn. Trả về JSON dạng items là mảng gồm id, zh, vi, g " +
+            "và phải có đủ mọi id trong danh sách."
+
+    private val SCHEMA_WINDOW = JSONObject()
+        .put("type", "OBJECT")
+        .put(
+            "properties",
+            JSONObject().put(
+                "items",
+                JSONObject()
+                    .put("type", "ARRAY")
+                    .put(
+                        "items",
+                        JSONObject()
+                            .put("type", "OBJECT")
+                            .put(
+                                "properties",
+                                JSONObject()
+                                    .put("id", JSONObject().put("type", "INTEGER"))
+                                    .put("zh", JSONObject().put("type", "STRING"))
+                                    .put("vi", JSONObject().put("type", "STRING"))
+                                    .put(
+                                        "g",
+                                        JSONObject().put("type", "STRING").put("enum", JSONArray(listOf("f", "m", "u"))),
+                                    ),
+                            )
+                            .put("required", JSONArray(listOf("id", "zh", "vi", "g"))),
+                    ),
+            ),
+        )
+        .put("required", JSONArray(listOf("items")))
+
     /**
-     * Nhận diện một khối audio 16 kHz mono theo các đoạn VAD đã biết ([spans] = (startMs, endMs) tính từ đầu khối).
-     * Gemini chỉ chép lời cho từng id đoạn, nên lời luôn gắn đúng đoạn, không phụ thuộc mốc thời gian Gemini tự đoán.
-     * Trả về map: chỉ số đoạn trong khối -> lời (thiếu id thì không có trong map).
+     * Nhận diện + dịch trong MỘT lượt gọi cho cả khối (giảm số lượt API so với nhận diện rồi dịch riêng).
+     * [audio]: đoạn audio 16 kHz mono gồm cả ngữ cảnh ở đầu; [ids]: chỉ số đoạn VAD cần xử lý;
+     * [spans]: (startMs, endMs) của từng id, tính từ đầu [audio]; [slotsMs]: độ dài khung gốc của từng id.
+     * Trả về map: id -> Line (thiếu id thì không có trong map).
      */
-    fun transcribeSpans(apiKey: String, samples16k: FloatArray, spans: List<Pair<Long, Long>>): Map<Int, String> {
-        if (spans.isEmpty()) return emptyMap()
-        val b64 = Base64.encodeToString(wav16(samples16k, 16_000), Base64.NO_WRAP)
+    fun transcribeAndTranslate(
+        apiKey: String,
+        audio: FloatArray,
+        ids: List<Int>,
+        spans: List<Pair<Long, Long>>,
+        slotsMs: List<Long>,
+    ): Map<Int, Line> {
+        if (ids.isEmpty()) return emptyMap()
+        val b64 = Base64.encodeToString(wav16(audio, 16_000), Base64.NO_WRAP)
         val list = JSONArray()
-        spans.forEachIndexed { k, sp ->
-            list.put(JSONObject().put("id", k).put("start", sp.first / 1000.0).put("end", sp.second / 1000.0))
+        ids.forEachIndexed { k, id ->
+            // Khoảng 4,5 âm tiết mỗi giây ở tốc độ thường; cho thêm 1 âm tiết để tránh cắt lời
+            val maxSyl = maxOf(2, Math.round(slotsMs[k] / 1000.0 * 4.5).toInt() + 1)
+            list.put(
+                JSONObject().put("id", id)
+                    .put("start", spans[k].first / 1000.0)
+                    .put("end", spans[k].second / 1000.0)
+                    .put("maxSyl", maxSyl),
+            )
         }
-        val prompt = PROMPT_SPANS + "\nDanh sách đoạn (JSON): " + list.toString()
+        val prompt = PROMPT_WINDOW + "\nDanh sách đoạn (JSON): " + list.toString()
         val parts = JSONArray()
             .put(JSONObject().put("inline_data", JSONObject().put("mime_type", "audio/wav").put("data", b64)))
             .put(JSONObject().put("text", prompt))
-        val json = JSONObject(GeminiApi.generateJson(apiKey, parts, SCHEMA_SPANS))
+        val json = JSONObject(GeminiApi.generateJson(apiKey, parts, SCHEMA_WINDOW))
         val arr = json.optJSONArray("items") ?: JSONArray()
-        val out = HashMap<Int, String>()
+        val out = HashMap<Int, Line>()
         for (n in 0 until arr.length()) {
             val o = arr.getJSONObject(n)
-            out[o.getInt("id")] = o.optString("text", "").trim()
+            out[o.getInt("id")] = Line(
+                o.optString("zh", "").trim(),
+                o.optString("vi", "").replace('\n', ' ').trim(),
+                o.optString("g", "u"),
+            )
         }
         return out
     }

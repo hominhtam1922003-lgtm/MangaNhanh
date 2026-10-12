@@ -84,6 +84,7 @@ fun HomeScreen(
         NotificationCard()
 
         GeminiKeyCard(hasKey) { hasKey = it }
+        VoiceModeCard()
 
         error?.let {
             SectionCard { Column(Modifier.padding(12.dp)) {
@@ -331,5 +332,25 @@ fun GeminiKeyCard(hasKey: Boolean, onChanged: (Boolean) -> Unit) {
                 enabled = text.trim().length > 10,
             ) { Text("Lưu khóa") }
         }
+    } }
+}
+
+/** Chọn giọng đọc lồng tiếng: theo giọng gốc (Gemini nhận giới tính), hoặc cố định nữ/nam. */
+@Composable
+fun VoiceModeCard() {
+    val ctx = LocalContext.current
+    var mode by remember { mutableStateOf(AppSettings.voiceMode(ctx)) }
+    SectionCard { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Giọng đọc tiếng Việt", fontWeight = FontWeight.SemiBold)
+        listOf("auto" to "Theo giọng gốc (Gemini nhận nam/nữ)", "female" to "Giọng nữ", "male" to "Giọng nam")
+            .forEach { (value, label) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = mode == value, onClick = {
+                        mode = value
+                        AppSettings.setVoiceMode(ctx, value)
+                    })
+                    Text(label)
+                }
+            }
     } }
 }

@@ -13,4 +13,14 @@ object AppSettings {
     fun setGeminiKey(context: Context, key: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_GEMINI, key.trim()).apply()
     }
+
+    private const val KEY_VOICE = "voice_mode"
+
+    /** "auto" (theo giọng gốc), "female" hoặc "male". */
+    fun voiceMode(context: Context): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_VOICE, "auto") ?: "auto"
+
+    fun setVoiceMode(context: Context, mode: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_VOICE, mode).apply()
+    }
 }

@@ -133,45 +133,65 @@ class DubbingPipeline(private val context: Context) {
 
         // 4. Nhận diện tiếng Trung; kết quả lưu asr_<i>.txt cho từng đoạn VAD
         if (geminiKey.isNotEmpty()) {
-            // Gemini: mỗi khối 4 phút; các đoạn VAD thuộc khối được đưa kèm id và thời gian, Gemini chép lời theo id
+            // Gemini: mỗi khối 4 phút, MỘT lượt gọi cho cả khối gồm nhận diện + dịch + giới tính người nói.
+            // Khối có kèm ngữ cảnh 12 giây audio trước đó (không xuất kết quả) để giữ mạch lời mà không phải chờ khối trước.
             val win = GeminiAsr.WINDOW_SEC * Segmenter.SR
             val winMs = GeminiAsr.WINDOW_SEC * 1000L
+            val ctxSamples = GeminiAsr.CONTEXT_SEC * Segmenter.SR
             val wins = (speech16.size + win - 1) / win
             val spansByWin: List<List<Int>> = (0 until wins).map { w ->
                 spans.indices.filter { spans[it].startMs / winMs == w.toLong() }
             }
-            log("Nhận diện bằng Gemini: $wins khối ${GeminiAsr.WINDOW_SEC} giây, ${spans.size} đoạn")
-            val gemTodo = (0 until wins).filter { w -> spansByWin[w].isNotEmpty() && !st.has("gem_$w.json") }
+            log("Gemini: $wins khối ${GeminiAsr.WINDOW_SEC} giây, ${spans.size} đoạn, nhận diện + dịch trong một lượt")
+            val gemTodo = (0 until wins).filter { w -> spansByWin[w].isNotEmpty() && !st.has("gem2_$w.json") }
             val gemDone = AtomicInteger(wins - gemTodo.size)
             runParallel(
-                2, gemTodo,
+                GeminiAsr.PARALLEL, gemTodo,
                 setup = { Unit },
                 teardown = { },
                 work = { _, w ->
                     val idx = spansByWin[w]
                     val from = w * win
                     val to = minOf(speech16.size, from + win)
-                    val local = idx.map { i -> (spans[i].startMs - w * winMs) to (spans[i].endMs - w * winMs) }
+                    val ctxFrom = maxOf(0, from - ctxSamples)
+                    val ctxFromMs = ctxFrom * 1000L / Segmenter.SR
+                    val local = idx.map { i -> (spans[i].startMs - ctxFromMs) to (spans[i].endMs - ctxFromMs) }
+                    val slots = idx.map { spans[it].endMs - spans[it].startMs }
                     val got = withContext(Dispatchers.IO) {
-                        GeminiAsr.transcribeSpans(geminiKey, speech16.copyOfRange(from, to), local)
+                        GeminiAsr.transcribeAndTranslate(
+                            geminiKey, speech16.copyOfRange(ctxFrom, to), idx, local, slots,
+                        )
                     }
                     val obj = JSONObject()
-                    idx.forEachIndexed { k, i -> obj.put(i.toString(), got[k] ?: "") }
-                    st.saveText("gem_$w.json", obj.toString())
+                    for (i in idx) {
+                        val l = got[i]
+                        obj.put(i.toString(), JSONObject()
+                            .put("zh", l?.zh ?: "").put("vi", l?.vi ?: "").put("g", l?.gender ?: "u"))
+                    }
+                    st.saveText("gem2_$w.json", obj.toString())
                     report(Step.ASR, gemDone.incrementAndGet().toFloat() / wins, "Gemini ${gemDone.get()}/$wins")
                 },
             )
             var missing = 0
+            var translatedByGemini = 0
             for (w in 0 until wins) {
                 if (spansByWin[w].isEmpty()) continue
-                val obj = JSONObject(st.loadText("gem_$w.json"))
+                val obj = JSONObject(st.loadText("gem2_$w.json"))
                 for (i in spansByWin[w]) {
-                    val t = obj.optString(i.toString(), "")
-                    if (t.isEmpty()) missing++
-                    st.saveText("asr_$i.txt", t)
+                    val o = obj.getJSONObject(i.toString())
+                    val zh = o.optString("zh", "")
+                    val vi = o.optString("vi", "")
+                    if (zh.isEmpty()) missing++
+                    st.saveText("asr_$i.txt", zh)
+                    st.saveText("vg_$i.txt", o.optString("g", "u"))
+                    // Chỉ lưu bản dịch khi có; câu thiếu bản dịch sẽ được dịch lại ở bước dịch
+                    if (vi.isNotBlank()) {
+                        st.saveText("tg_$i.txt", vi)
+                        translatedByGemini++
+                    }
                 }
             }
-            log("Nhận diện Gemini xong: ${spans.size - missing}/${spans.size} đoạn có lời")
+            log("Gemini xong: ${spans.size - missing}/${spans.size} đoạn có lời, $translatedByGemini câu đã dịch")
             report(Step.ASR, 1f, "")
         } else {
             // Offline: FireRedASR, song song theo worker
@@ -259,13 +279,15 @@ class DubbingPipeline(private val context: Context) {
         // 6. Giọng Việt song song: edge-tts (neural, miễn phí) trước, VITS offline dự phòng khi lỗi
         val voiced = spans.indices.filter { translated[it].isNotBlank() }
         val todo = voiced.filter { !st.has("clip_$it.bin") }
+        val voice = pickVoice(AppSettings.voiceMode(context), voiced.map { st.loadText("vg_$it.txt") })
+        log("Giọng đọc: ${if (voice == EdgeTts.VOICE_MALE) "nam" else "nữ"} (${AppSettings.voiceMode(context)})")
         if (todo.isNotEmpty()) {
             val done = AtomicInteger(voiced.size - todo.size)
             val edgeN = AtomicInteger(0)
             val vitsN = AtomicInteger(0)
             runParallel(
                 workers, todo,
-                setup = { VoiceSynth(context, dir, ttsFiles, threadsPer, speed) },
+                setup = { VoiceSynth(context, dir, ttsFiles, threadsPer, speed, voice) },
                 teardown = { it.close() },
                 work = { vs, i ->
                     val slot = spans[i].endMs - spans[i].startMs
@@ -327,6 +349,17 @@ class DubbingPipeline(private val context: Context) {
                     }
                 }
             }
+        }
+    }
+
+    /** Chọn giọng: "female"/"male" cố định; "auto" lấy giới tính đa số do Gemini nhận ra (mặc định nữ nếu không rõ). */
+    private fun pickVoice(mode: String, genders: List<String>): String = when (mode) {
+        "male" -> EdgeTts.VOICE_MALE
+        "female" -> EdgeTts.VOICE_FEMALE
+        else -> {
+            val m = genders.count { it == "m" }
+            val f = genders.count { it == "f" }
+            if (m > f) EdgeTts.VOICE_MALE else EdgeTts.VOICE_FEMALE
         }
     }
 

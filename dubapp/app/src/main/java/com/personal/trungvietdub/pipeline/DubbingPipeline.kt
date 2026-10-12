@@ -49,7 +49,7 @@ class DubbingPipeline(private val context: Context) {
                         sep.separate(stereo44) { f -> onProgress(Step.SEPARATE, f, "") }
                     }
                     onProgress(Step.SEPARATE, 1f, "")
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     mode = OriginalAudioMode.LOWER
                     base = stereo44
                     onProgress(Step.SEPARATE, 1f, "lỗi tách giọng, dùng hạ âm lượng: ${e.message}")

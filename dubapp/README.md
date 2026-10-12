@@ -7,7 +7,7 @@ App Android: chọn video tiếng Trung (ưu tiên < 5 phút) → nhận diện 
 | Bước | Trạng thái |
 |---|---|
 | Tách audio, chọn video, xuất MP4, lịch sử, tiến trình | ✅ Đã viết |
-| Nhận diện tiếng Trung (sherpa-onnx Paraformer small) | ✅ Đã viết, API đối chiếu với mã sherpa-onnx v1.13.8 |
+| Nhận diện tiếng Trung (sherpa-onnx Paraformer small) | ✅ Đã viết, API đối chiếu với mã sherpa-onnx v1.12.20 |
 | Giọng Việt offline (sherpa-onnx VITS vais1000) | ✅ Đã viết, cần kiểm tra trên máy thật |
 | Dịch Trung → Việt (NLLB-200 600M, ONNX lượng tử hóa, tokenizer.json) | ⚠️ Đã viết, **chưa chạy thử**. Tên input decoder đọc động từ model; không dùng KV-cache (chậm hơn nhưng đơn giản) |
 | Tách giọng gốc, giữ nhạc nền (UVR MDX-NET Inst_HQ_3) | ⚠️ Đã viết, **chưa chạy thử**. Thuật toán chunk/STFT/ISTFT đã kiểm chứng bằng Python: tái tạo tín hiệu sai số ~1e-16, FFT 6144 sai số ~1e-13 |
@@ -17,7 +17,7 @@ App Android: chọn video tiếng Trung (ưu tiên < 5 phút) → nhận diện 
 - Tên tensor của decoder NLLB (`input_ids`, `encoder_hidden_states`, `encoder_attention_mask`, `use_cache_branch`, `past_key_values.*`) giả định theo convention của Xenova/optimum. Code chạy được với các tên đó.
 - Metadata trong `UVR-MDX-NET-Inst_HQ_3.onnx` (sample_rate, n_fft, dim_f, dim_t, dim_c, model_type=UVR, stems=2) giả định theo script `add_meta_data_and_quantize.py` của sherpa-onnx.
 - Cửa sổ Hann dùng công thức tuần hoàn `0.5-0.5·cos(2πn/N)`.
-- ONNX Runtime Java 1.17.3 và `libonnxruntime.so` đóng gói trong sherpa AAR có thể lệch phiên bản; nếu crash khi khởi tạo session, cần đồng bộ phiên bản.
+- ONNX Runtime Java 1.17.1 phải khớp với `libonnxruntime.so` đóng gói trong sherpa AAR 1.12.20 (cũng 1.17.1). Bản 1.13.8 dùng ORT 1.28.2 nên lệch và gây crash native (đã gặp khi tách giọng).
 - Tải model từ `huggingface.co` (NLLB) không kiểm tra được từ môi trường phát triển.
 
 Khi tách giọng lỗi, app tự chuyển sang "Hạ âm lượng audio gốc" và ghi lý do vào tiến trình, job vẫn hoàn tất.
@@ -33,15 +33,15 @@ Nguồn: GitHub Releases của [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sh
 
 ## Build APK (không cần Android Studio)
 
-Workflow `.github/workflows/build-dub-apk.yml` (ở root repo) tự tải `sherpa-onnx-1.13.8.aar` vào `app/libs/` rồi chạy `./gradlew assembleDebug`. APK nằm ở artifact `TrungVietDub-debug-apk`.
+Workflow `.github/workflows/build-dub-apk.yml` (ở root repo) tự tải `sherpa-onnx-1.12.20.aar` vào `app/libs/` rồi chạy `./gradlew assembleDebug`. APK nằm ở artifact `TrungVietDub-debug-apk`.
 
 Build thủ công:
 
 ```bash
 cd dubapp
 mkdir -p app/libs
-curl -fL -o app/libs/sherpa-onnx-1.13.8.aar \
-  https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar
+curl -fL -o app/libs/sherpa-onnx-1.12.20.aar \
+  https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.20/sherpa-onnx-1.12.20.aar
 ./gradlew assembleDebug
 ```
 

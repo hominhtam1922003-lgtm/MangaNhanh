@@ -22,11 +22,11 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Tải sherpa-onnx AAR (v1.13.8)
+      - name: Tải sherpa-onnx AAR (v1.12.20)
         run: |
           mkdir -p app/libs
-          curl -fL -o app/libs/sherpa-onnx-1.13.8.aar \
-            https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar
+          curl -fL -o app/libs/sherpa-onnx-1.12.20.aar \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.20/sherpa-onnx-1.12.20.aar
 
       - name: Build debug APK
         run: |

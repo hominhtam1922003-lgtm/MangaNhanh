@@ -92,11 +92,12 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
 
     // sherpa-onnx (k2-fsa): ASR tiếng Trung (Paraformer), TTS tiếng Việt (VITS/Piper).
-    // AAR không có trên Maven Central; workflow CI tải về app/libs/ từ GitHub Releases v1.13.8.
-    implementation(files("libs/sherpa-onnx-1.13.8.aar"))
+    // AAR không có trên Maven Central; workflow CI tải về app/libs/ từ GitHub Releases v1.12.20.
+    implementation(files("libs/sherpa-onnx-1.12.20.aar"))
     // ONNX Runtime Java API: dùng cho UVR (tách giọng) và NLLB (dịch).
-    // Lưu ý: sherpa AAR cũng đóng gói libonnxruntime.so; packaging.pickFirst bên dưới xử lý trùng tên.
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.3")
+    // QUAN TRỌNG: phiên bản ORT Java phải KHỚP với libonnxruntime.so mà sherpa AAR đóng gói
+    // (sherpa v1.12.20 dùng ONNX Runtime 1.17.1). Lệch phiên bản gây crash native khi tạo session.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.1")
     implementation("org.apache.commons:commons-compress:1.26.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")

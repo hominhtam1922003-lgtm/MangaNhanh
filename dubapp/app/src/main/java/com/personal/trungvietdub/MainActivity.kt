@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
                             log = remember(jobs) { JobLog.tail(this@MainActivity, current.id) },
                             onBack = { nav = "home" },
                             onOpenOutput = { uri -> openVideo(Uri.parse(uri)) },
+                            onResume = { vm.resume(current.id) },
                         )
                     }
                 }

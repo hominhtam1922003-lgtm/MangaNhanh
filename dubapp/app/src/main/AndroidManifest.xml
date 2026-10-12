@@ -63,6 +63,7 @@
         <service
             android:name=".service.DubForegroundService"
             android:exported="false"
+            android:process=":worker"
             android:foregroundServiceType="dataSync" />
 
         <provider

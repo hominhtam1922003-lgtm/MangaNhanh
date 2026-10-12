@@ -1,19 +1,22 @@
 package com.personal.trungvietdub.data
 
 import android.content.Context
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.RandomAccessFile
 
-/** Lưu lịch sử job dạng JSON trong filesDir/jobs.json. */
+/**
+ * Lịch sử job dạng JSON trong filesDir/jobs.json.
+ * Được dùng chung bởi tiến trình UI và tiến trình worker, nên mọi thao tác đọc/ghi đều khóa file.
+ */
 class JobRepository private constructor(context: Context) {
     companion object {
-        @Volatile private var instance: JobRepository? = null
+        const val MAX_ATTEMPTS = 3
 
-        /** Một instance duy nhất trong cả tiến trình: UI và service phải cùng thấy trạng thái job. */
+        @Volatile
+        private var instance: JobRepository? = null
+
         fun get(context: Context): JobRepository =
             instance ?: synchronized(this) {
                 instance ?: JobRepository(context.applicationContext).also { instance = it }
@@ -21,29 +24,70 @@ class JobRepository private constructor(context: Context) {
     }
 
     private val file = File(context.filesDir, "jobs.json")
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
+    private val lockFile = File(context.filesDir, "jobs.lock")
+    private val json = Json { ignoreUnknownKeys = true }
     private val serializer = ListSerializer(Job.serializer())
-    private val _jobs = MutableStateFlow(load())
-    val jobs: StateFlow<List<Job>> = _jobs.asStateFlow()
 
-    @Synchronized
-    fun upsert(job: Job) {
-        val current = _jobs.value.toMutableList()
-        val idx = current.indexOfFirst { it.id == job.id }
-        if (idx >= 0) current[idx] = job else current.add(0, job)
-        _jobs.value = current
-        file.writeText(json.encodeToString(serializer, current))
+    private inline fun <T> locked(block: () -> T): T {
+        val raf = RandomAccessFile(lockFile, "rw")
+        try {
+            val lock = raf.channel.lock()
+            val result = try {
+                block()
+            } finally {
+                lock.release()
+            }
+            return result
+        } finally {
+            raf.close()
+        }
     }
 
-    fun get(id: String): Job? = _jobs.value.firstOrNull { it.id == id }
+    private fun readUnlocked(): List<Job> {
+        if (!file.exists()) return emptyList()
+        return try {
+            json.decodeFromString(serializer, file.readText())
+        } catch (e: Exception) {
+            // File hỏng: giữ lại bản lỗi để xem sau, bắt đầu lại danh sách trống
+            file.renameTo(File(file.parentFile, "jobs.corrupt.json"))
+            emptyList()
+        }
+    }
 
-    private fun load(): List<Job> = try {
-        if (file.exists()) json.decodeFromString(serializer, file.readText())
-            // Job đang chạy khi app bị tắt thì đánh dấu lỗi.
-            .map { if (it.status == JobStatus.RUNNING || it.status == JobStatus.QUEUED)
-                it.copy(status = JobStatus.FAILED, error = "Bị gián đoạn khi app đóng") else it }
-        else emptyList()
-    } catch (e: Exception) {
-        emptyList()
+    private fun writeUnlocked(list: List<Job>) {
+        val tmp = File(file.parentFile, "jobs.json.tmp")
+        tmp.writeText(json.encodeToString(serializer, list))
+        if (!tmp.renameTo(file)) {
+            file.writeText(tmp.readText())
+            tmp.delete()
+        }
+    }
+
+    fun readAll(): List<Job> = locked { readUnlocked() }
+
+    fun get(id: String): Job? = readAll().firstOrNull { it.id == id }
+
+    fun upsert(job: Job) {
+        locked {
+            val cur = readUnlocked().toMutableList()
+            val idx = cur.indexOfFirst { it.id == job.id }
+            if (idx >= 0) cur[idx] = job else cur.add(0, job)
+            writeUnlocked(cur)
+        }
+    }
+
+    /** Lúc app mở lại: job còn RUNNING/QUEUED nghĩa là đã bị gián đoạn, người dùng bấm Tiếp tục để chạy lại. */
+    fun markInterruptedOnStart() {
+        locked {
+            val cur = readUnlocked().map {
+                if (it.status == JobStatus.RUNNING || it.status == JobStatus.QUEUED) {
+                    it.copy(
+                        status = JobStatus.FAILED,
+                        error = "Bị gián đoạn khi app đóng. Bấm Tiếp tục để chạy lại từ bước đã lưu.",
+                    )
+                } else it
+            }
+            writeUnlocked(cur)
+        }
     }
 }

@@ -122,7 +122,7 @@ fun HomeScreen(
 }
 
 @Composable
-fun JobScreen(job: Job?, log: String, onBack: () -> Unit, onOpenOutput: (String) -> Unit) {
+fun JobScreen(job: Job?, log: String, onBack: () -> Unit, onOpenOutput: (String) -> Unit, onResume: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -144,6 +144,14 @@ fun JobScreen(job: Job?, log: String, onBack: () -> Unit, onOpenOutput: (String)
         if (log.isNotBlank()) {
             Text("Nhật ký:", fontWeight = FontWeight.SemiBold)
             Text(log, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        }
+        if (job.status == JobStatus.FAILED) {
+            Button(onClick = onResume, modifier = Modifier.fillMaxWidth()) {
+                Text("Tiếp tục (dùng lại các bước đã lưu)")
+            }
+        }
+        if (job.status == JobStatus.RUNNING && job.attempts > 0) {
+            Text("Đang tự khôi phục: lần ${job.attempts + 1}/${com.personal.trungvietdub.data.JobRepository.MAX_ATTEMPTS}")
         }
         if (job.transcript.isNotBlank()) {
             Text("Lời tiếng Trung đã nhận diện:", fontWeight = FontWeight.SemiBold)

@@ -26,6 +26,9 @@ data class Job(
     val outputUri: String? = null,
     val transcript: String = "",
     val error: String? = null,
+    val mode: String = OriginalAudioMode.LOWER.name,
+    val speed: Float = 1.0f,
+    val attempts: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
 )
 

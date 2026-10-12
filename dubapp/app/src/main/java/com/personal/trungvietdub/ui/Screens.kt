@@ -35,6 +35,7 @@ fun HomeScreen(
     var pickedName by remember { mutableStateOf("") }
     var minutes by remember { mutableStateOf(0L) }
     var mode by remember { mutableStateOf(OriginalAudioMode.LOWER) }
+    var speed by remember { mutableStateOf(1.0f) }
     val picker = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -97,9 +98,18 @@ fun HomeScreen(
                     Text(m.label)
                 }
             }
+            Text("Tốc độ đọc giọng Việt: ${"%.2f".format(speed)}x", fontWeight = FontWeight.SemiBold)
+            Slider(
+                value = speed,
+                onValueChange = { speed = (Math.round(it * 20) / 20f) },
+                valueRange = 0.8f..1.4f,
+                steps = 11,
+            )
+            Text("Câu dài hơn khung gốc sẽ được tăng tốc tự động để khớp với video.",
+                style = MaterialTheme.typography.bodySmall)
             Button(
                 onClick = {
-                    picked?.let { onOpenJob(vm.startJob(it, mode)) }
+                    picked?.let { onOpenJob(vm.startJob(it, mode, speed)) }
                 },
                 enabled = picked != null && ready2,
                 modifier = Modifier.fillMaxWidth(),

@@ -67,14 +67,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun displayName(uri: Uri): String = DubForegroundService.displayNameOf(getApplication(), uri)
 
     /** Tạo job mới và chạy trong foreground service. Trả về id job. */
-    fun startJob(uri: Uri, mode: OriginalAudioMode): String {
+    fun startJob(uri: Uri, mode: OriginalAudioMode, speed: Float): String {
         val app = getApplication<Application>()
         try {
             app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } catch (_: Exception) { /* một số nguồn không hỗ trợ quyền bền */ }
         val id = UUID.randomUUID().toString()
         repo.upsert(Job(id = id, title = displayName(uri), sourceUri = uri.toString()))
-        DubForegroundService.start(app, id, mode)
+        DubForegroundService.start(app, id, mode, speed)
         return id
     }
 

@@ -30,14 +30,16 @@ class VietnameseTts(files: TtsFiles) : AutoCloseable {
 
     /**
      * Tạo giọng đọc cho [text] sao cho vừa khung [slotMs].
-     * Nếu bản đọc tốc độ thường dài hơn khung, đọc lại nhanh hơn (tối đa 1.6x).
+     * [userSpeed] là tốc độ người dùng chọn (1.0 = bình thường). Nếu bản đọc dài hơn khung,
+     * tăng tốc thêm tối đa 1.6x để khớp; nếu ngắn hơn khung thì giữ nguyên, không kéo dài giọng.
      */
-    fun speak(text: String, slotMs: Long): FloatArray {
-        val first = tts.generate(text, sid = 0, speed = 1.0f)
+    fun speak(text: String, slotMs: Long, userSpeed: Float = 1.0f): FloatArray {
+        val base = userSpeed.coerceIn(0.5f, 2.0f)
+        val first = tts.generate(text, sid = 0, speed = base)
         val durMs = first.samples.size * 1000L / first.sampleRate
         if (slotMs <= 0 || durMs <= slotMs) return first.samples
-        val speed = (durMs.toFloat() / slotMs).coerceIn(1.0f, 1.6f)
-        return tts.generate(text, sid = 0, speed = speed).samples
+        val extra = (durMs.toFloat() / slotMs).coerceIn(1.0f, 1.6f)
+        return tts.generate(text, sid = 0, speed = base * extra).samples
     }
 
     override fun close() = tts.release()

@@ -40,6 +40,7 @@ class DubForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val jobId = intent?.getStringExtra(EXTRA_JOB_ID) ?: run { stopSelf(); return START_NOT_STICKY }
         val job = repo.get(jobId) ?: run { stopSelf(); return START_NOT_STICKY }
+        val speed = intent.getFloatExtra(EXTRA_SPEED, 1.0f)
         val mode = OriginalAudioMode.valueOf(
             intent.getStringExtra(EXTRA_MODE) ?: OriginalAudioMode.LOWER.name
         )
@@ -48,12 +49,12 @@ class DubForegroundService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
         )
         scope.launch {
-            try { process(job, mode) } finally { ServiceCompat.stopForeground(this@DubForegroundService, ServiceCompat.STOP_FOREGROUND_REMOVE); stopSelf() }
+            try { process(job, mode, speed) } finally { ServiceCompat.stopForeground(this@DubForegroundService, ServiceCompat.STOP_FOREGROUND_REMOVE); stopSelf() }
         }
         return START_NOT_STICKY
     }
 
-    private suspend fun process(job: Job, mode: OriginalAudioMode) {
+    private suspend fun process(job: Job, mode: OriginalAudioMode, speed: Float) {
         var current = job.copy(status = JobStatus.RUNNING)
         repo.upsert(current)
         JobLog.append(this, job.id, "Dịch vụ nền khởi động (mode=${mode.name})")
@@ -63,6 +64,7 @@ class DubForegroundService : Service() {
                 sourceUri = Uri.parse(job.sourceUri),
                 displayName = "dub_${job.id}.mp4",
                 requestedMode = mode,
+                speed = speed,
                 onProgress = { step, frac, note ->
                     val total = overall(step, frac)
                     current = current.copy(step = step.label + if (note.isNotEmpty()) " ($note)" else "", progress = total)
@@ -129,12 +131,14 @@ class DubForegroundService : Service() {
     companion object {
         const val EXTRA_JOB_ID = "job_id"
         const val EXTRA_MODE = "mode"
+        const val EXTRA_SPEED = "speed"
         private const val NOTIF_ID = 1001
 
-        fun start(context: Context, jobId: String, mode: OriginalAudioMode) {
+        fun start(context: Context, jobId: String, mode: OriginalAudioMode, speed: Float) {
             val i = Intent(context, DubForegroundService::class.java)
                 .putExtra(EXTRA_JOB_ID, jobId)
                 .putExtra(EXTRA_MODE, mode.name)
+                .putExtra(EXTRA_SPEED, speed)
             ContextCompat.startForegroundService(context, i)
         }
 

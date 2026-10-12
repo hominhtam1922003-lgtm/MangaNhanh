@@ -24,6 +24,7 @@ class DubbingPipeline(private val context: Context) {
         sourceUri: Uri,
         displayName: String,
         requestedMode: OriginalAudioMode,
+        speed: Float,
         onProgress: (Step, Float, String) -> Unit,
         onTranscript: (String) -> Unit,
     ): Result = withContext(Dispatchers.Default) {
@@ -112,7 +113,7 @@ class DubbingPipeline(private val context: Context) {
                 spans.indices.forEach { i ->
                     if (translated[i].isNotBlank()) {
                         val slot = spans[i].endMs - spans[i].startMs
-                        val wav = tts.speak(translated[i], slot)
+                        val wav = tts.speak(translated[i], slot, speed)
                         val mono44 = AudioIO.convert(AudioIO.Pcm(wav, tts.sampleRate, 1), Composer.OUT_RATE, 1)
                         clips += Composer.Clip(spans[i].startMs, mono44)
                     }

@@ -21,6 +21,7 @@ import com.personal.trungvietdub.data.OriginalAudioMode
 import com.personal.trungvietdub.data.Step
 import com.personal.trungvietdub.pipeline.DubbingPipeline
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -110,7 +111,7 @@ class DubForegroundService : Service() {
     override fun onBind(intent: Intent?) = null
 
     override fun onDestroy() {
-        scope.coroutineContext[SupervisorJob]?.cancel()
+        scope.cancel()
         super.onDestroy()
     }
 

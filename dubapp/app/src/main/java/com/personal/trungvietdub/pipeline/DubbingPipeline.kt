@@ -37,13 +37,14 @@ class DubbingPipeline(private val context: Context) {
         log("Model sẵn sàng: ASR, TTS")
 
         try {
-            // 1. Giải mã: 16 kHz mono cho ASR, 44.1 kHz stereo cho ghép
+            // 1. Giải mã: 44.1 kHz stereo (cho ghép) và 16 kHz mono (cho ASR). PCM gốc được giải phóng ngay.
             onProgress(Step.DECODE, 0.1f, "đang giải mã")
-            val pcm = AudioIO.decode(context, sourceUri)
-            log("Giải mã: ${pcm.samples.size} mẫu, ${pcm.sampleRate} Hz, ${pcm.channels} kênh, peak=${"%.4f".format(peak(pcm.samples))}")
-            val mono16 = AudioIO.convert(pcm, Segmenter.SR, 1)
-            val stereo44 = AudioIO.convert(pcm, Composer.OUT_RATE, Composer.OUT_CH)
-            log("Mono 16 kHz: ${mono16.size} mẫu, peak=${"%.4f".format(peak(mono16))}")
+            val (stereo44, mono16) = run {
+                val pcm = AudioIO.decode(context, sourceUri)
+                log("Giải mã: ${pcm.samples.size} mẫu, ${pcm.sampleRate} Hz, ${pcm.channels} kênh, peak=${"%.4f".format(peak(pcm.samples))}")
+                AudioIO.convert(pcm, Composer.OUT_RATE, Composer.OUT_CH) to AudioIO.convert(pcm, Segmenter.SR, 1)
+            }
+            log("Mono 16 kHz: ${mono16.size} mẫu, peak=${"%.4f".format(peak(mono16))}; ${memInfo()}")
             onProgress(Step.DECODE, 1f, "")
 
             // 2. Tách giọng gốc → nhạc nền (UVR MDX-NET). Lỗi thì dùng hạ âm lượng để không mất job.
@@ -58,8 +59,7 @@ class DubbingPipeline(private val context: Context) {
                     base = UvrClient(context).separate(stereo44, uvr, work) { f ->
                         onProgress(Step.SEPARATE, f, "")
                     }
-                    log("Tách giọng xong")
-                    onProgress(Step.SEPARATE, 1f, "")
+                    log("Tách giọng xong; ${memInfo()}")
                 } catch (e: Throwable) {
                     log("Tách giọng lỗi, chuyển sang hạ âm lượng: ${e.javaClass.simpleName}: ${e.message}")
                     mode = OriginalAudioMode.LOWER
@@ -139,6 +139,16 @@ class DubbingPipeline(private val context: Context) {
         } finally {
             work.deleteRecursively()
         }
+    }
+
+    private fun memInfo(): String {
+        val rt = Runtime.getRuntime()
+        val used = (rt.totalMemory() - rt.freeMemory()) / 1048576
+        val am = context.getSystemService(android.app.ActivityManager::class.java)
+        val mi = android.app.ActivityManager.MemoryInfo()
+        am.getMemoryInfo(mi)
+        return "heap ${used}MB/${rt.maxMemory() / 1048576}MB, RAM trống ${mi.availMem / 1048576}MB" +
+            (if (mi.lowMemory) " (THIẾU BỘ NHỚ)" else "")
     }
 
     private fun peak(x: FloatArray): Float {

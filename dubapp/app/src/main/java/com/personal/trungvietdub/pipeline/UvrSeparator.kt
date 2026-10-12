@@ -58,42 +58,64 @@ class UvrSeparator(modelFile: File) : AutoCloseable {
         window = DoubleArray(nFft) { 0.5 - 0.5 * cos(2.0 * PI * it / nFft) }
     }
 
-    /** Trả về nhạc nền stereo interleaved cùng độ dài với [stereo44k]. */
-    fun separate(stereo44k: FloatArray, onProgress: (Float) -> Unit = {}): FloatArray {
+    /**
+     * Tách nhạc nền từ file float32 stereo interleaved (44.1 kHz) sang file cùng định dạng.
+     * Đọc/ghi theo từng đoạn để không giữ cả bản nhạc trong RAM (tránh bị hệ điều hành kill vì thiếu bộ nhớ).
+     */
+    fun separateFile(input: File, output: File, onProgress: (Float) -> Unit = {}) {
         require(sampleRate == 44100) { "Model cần ${sampleRate} Hz, app đang dùng 44100" }
-        val total = stereo44k.size / 2
-        val left = FloatArray(total) { stereo44k[it * 2] }
-        val right = FloatArray(total) { stereo44k[it * 2 + 1] }
-        val outL = FloatArray(total)
-        val outR = FloatArray(total)
+        val total = (input.length() / 8).toInt()
+        require(total > 0) { "File đầu vào rỗng" }
 
         var chunk = 15 * sampleRate
         var margin = sampleRate
         if (total < chunk) chunk = total
         if (margin > chunk) margin = chunk
 
-        var i = 0
-        while (i < total) {
-            val start = max(0, i - margin)
-            val end = min(i + chunk + margin, total)
-            if (start >= end) break
-            val len = end - start
-            val (yl, yr) = processChunk(left.copyOfRange(start, end), right.copyOfRange(start, end))
-            val s = if (i == 0) 0 else margin
-            val e = if (end == total) len else len - margin
-            System.arraycopy(yl, s, outL, start + s, e - s)
-            System.arraycopy(yr, s, outR, start + s, e - s)
-            onProgress(end.toFloat() / total)
-            if (end == total) break
-            i += chunk
+        java.io.RandomAccessFile(input, "r").use { inRaf ->
+            java.io.RandomAccessFile(output, "rw").use { outRaf ->
+                outRaf.setLength(input.length())
+                var i = 0
+                while (i < total) {
+                    val start = max(0, i - margin)
+                    val end = min(i + chunk + margin, total)
+                    if (start >= end) break
+                    val len = end - start
+                    val l = FloatArray(len)
+                    val r = FloatArray(len)
+                    readStereo(inRaf, start, len, l, r)
+                    val (yl, yr) = processChunk(l, r)
+                    val s = if (i == 0) 0 else margin
+                    val e = if (end == total) len else len - margin
+                    writeStereo(outRaf, start + s, yl, yr, s, e - s)
+                    onProgress(end.toFloat() / total)
+                    if (end == total) break
+                    i += chunk
+                }
+            }
         }
+    }
 
-        val out = FloatArray(total * 2)
-        for (k in 0 until total) {
-            out[k * 2] = outL[k]
-            out[k * 2 + 1] = outR[k]
+    private fun readStereo(raf: java.io.RandomAccessFile, frame: Int, len: Int, l: FloatArray, r: FloatArray) {
+        val bytes = ByteArray(len * 8)
+        raf.seek(frame.toLong() * 8)
+        raf.readFully(bytes)
+        val fb = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).asFloatBuffer()
+        for (k in 0 until len) {
+            l[k] = fb.get()
+            r[k] = fb.get()
         }
-        return out
+    }
+
+    private fun writeStereo(raf: java.io.RandomAccessFile, frame: Int, yl: FloatArray, yr: FloatArray, from: Int, count: Int) {
+        val bytes = ByteArray(count * 8)
+        val fb = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).asFloatBuffer()
+        for (k in 0 until count) {
+            fb.put(yl[from + k])
+            fb.put(yr[from + k])
+        }
+        raf.seek(frame.toLong() * 8)
+        raf.write(bytes)
     }
 
     private fun processChunk(l: FloatArray, r: FloatArray): Pair<FloatArray, FloatArray> {

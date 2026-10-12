@@ -10,8 +10,6 @@ import android.os.Message
 import android.os.Messenger
 import com.personal.trungvietdub.pipeline.UvrSeparator
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /**
  * Chạy UVR (ONNX Runtime) trong TIẾN TRÌNH RIÊNG (android:process=":uvr").
@@ -60,12 +58,10 @@ class UvrService : Service() {
             }
         }
         try {
-            val stereo = readFloats(File(input))
             UvrSeparator(File(model)).use { sep ->
-                val out = sep.separate(stereo) { f ->
+                sep.separateFile(File(input), File(output)) { f ->
                     send(MSG_PROGRESS, Bundle().apply { putFloat(KEY_PROGRESS, f) })
                 }
-                writeFloats(File(output), out)
             }
             send(MSG_DONE)
         } catch (e: Throwable) {
@@ -73,18 +69,5 @@ class UvrService : Service() {
                 putString(KEY_ERROR, "${e.javaClass.simpleName}: ${e.message ?: "không rõ"}")
             })
         }
-    }
-
-    private fun readFloats(f: File): FloatArray {
-        val bytes = f.readBytes()
-        val out = FloatArray(bytes.size / 4)
-        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(out)
-        return out
-    }
-
-    private fun writeFloats(f: File, data: FloatArray) {
-        val bb = ByteBuffer.allocate(data.size * 4).order(ByteOrder.LITTLE_ENDIAN)
-        bb.asFloatBuffer().put(data)
-        f.writeBytes(bb.array())
     }
 }

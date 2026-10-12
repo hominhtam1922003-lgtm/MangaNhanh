@@ -85,16 +85,42 @@ class UvrClient(private val context: Context) {
         }
     }
 
+    /** Ghi float32 little-endian theo khối 1 MB, không tạo mảng byte lớn. */
     private fun writeFloats(f: File, data: FloatArray) {
-        val bb = ByteBuffer.allocate(data.size * 4).order(ByteOrder.LITTLE_ENDIAN)
-        bb.asFloatBuffer().put(data)
-        f.writeBytes(bb.array())
+        val chunkFloats = 1 shl 18
+        val bytes = ByteArray(chunkFloats * 4)
+        val fb = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer()
+        java.io.FileOutputStream(f).use { out ->
+            var i = 0
+            while (i < data.size) {
+                val n = minOf(chunkFloats, data.size - i)
+                fb.clear()
+                fb.put(data, i, n)
+                out.write(bytes, 0, n * 4)
+                i += n
+            }
+        }
     }
 
+    /** Đọc float32 little-endian theo khối. */
     private fun readFloats(f: File): FloatArray {
-        val bytes = f.readBytes()
-        val out = FloatArray(bytes.size / 4)
-        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(out)
+        val n = (f.length() / 4).toInt()
+        val out = FloatArray(n)
+        val bb = ByteBuffer.allocate(1 shl 20).order(ByteOrder.LITTLE_ENDIAN)
+        var pos = 0
+        java.io.FileInputStream(f).channel.use { ch ->
+            while (pos < n) {
+                bb.clear()
+                bb.limit(minOf(bb.capacity(), (n - pos) * 4))
+                while (bb.hasRemaining()) {
+                    if (ch.read(bb) < 0) error("File kết quả bị thiếu dữ liệu")
+                }
+                bb.flip()
+                val count = bb.limit() / 4
+                bb.asFloatBuffer().get(out, pos, count)
+                pos += count
+            }
+        }
         return out
     }
 }

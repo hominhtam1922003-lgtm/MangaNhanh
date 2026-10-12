@@ -179,18 +179,34 @@ class DubbingPipeline(private val context: Context) {
         // 5. Dịch theo khối ngữ cảnh: mỗi khối ~25 câu liên tiếp (kèm 3 câu trước làm ngữ cảnh), dịch cả khối một lần
         val todoSet = spans.indices.filter { !st.has("tg_$it.txt") }.toSet()
         if (todoSet.isNotEmpty()) {
-            log("Dịch ${todoSet.size} câu theo khối ngữ cảnh (online, miễn phí)")
+            log("Dịch ${todoSet.size} câu theo khối ngữ cảnh (" + (if (geminiKey.isNotEmpty()) "Gemini" else "Google Translate miễn phí") + ")")
+            val fallbacks = AtomicInteger(0)
+            val lastErr = java.util.concurrent.atomic.AtomicReference<String>("")
             val chunks = spans.indices.toList().chunked(OnlineTranslator.CHUNK).filter { c -> c.any { it in todoSet } }
             val done = AtomicInteger(spans.size - todoSet.size)
             runParallel(
-                2, chunks,
+                if (geminiKey.isNotEmpty()) 1 else 2, chunks,
                 setup = { Unit },
                 teardown = { },
                 work = { _, chunk ->
                     val first = chunk.first()
                     val ctxStart = maxOf(0, first - OnlineTranslator.CTX)
                     val range = ctxStart..chunk.last()
-                    val out = withContext(Dispatchers.IO) { OnlineTranslator.translate(range.map { texts[it] }) }
+                    val lines = range.map { texts[it] }
+                    val out = withContext(Dispatchers.IO) {
+                        if (geminiKey.isNotEmpty()) {
+                            try {
+                                GeminiTranslator.translate(geminiKey, lines)
+                            } catch (e: Exception) {
+                                // Gemini lỗi hoặc trả sai số câu: dùng Google Translate cho khối này
+                                fallbacks.incrementAndGet()
+                                lastErr.set(e.message ?: e.javaClass.simpleName)
+                                OnlineTranslator.translate(lines)
+                            }
+                        } else {
+                            OnlineTranslator.translate(lines)
+                        }
+                    }
                     for (i in chunk) {
                         if (i in todoSet) {
                             st.saveText("tg_$i.txt", out[i - ctxStart])
@@ -200,6 +216,7 @@ class DubbingPipeline(private val context: Context) {
                     report(Step.TRANSLATE, done.get().toFloat() / spans.size, "")
                 },
             )
+            if (fallbacks.get() > 0) log("Gemini dịch lỗi ${fallbacks.get()} khối, đã dùng Google Translate. Lỗi cuối: ${lastErr.get()}")
             log("Dịch xong")
         }
         val translated: List<String> = spans.indices.map { st.loadText("tg_$it.txt") }

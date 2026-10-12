@@ -148,34 +148,39 @@ class DubbingPipeline(private val context: Context) {
         val transcript = spans.indices.joinToString("\n") { i -> "[${fmt(spans[i].startMs)}] ${texts[i]}" }
         onTranscript(transcript)
 
-        // 5. Dịch Trung → Việt: 2 luồng dùng chung một phiên NLLB (ORT cho phép gọi song song), mỗi câu lưu tr_<i>.txt
-        val trTodo = spans.indices.filter { !st.has("tr_$it.txt") }
-        if (trTodo.isNotEmpty()) {
-            val nllb = mm.nllbFiles()
-            log("Dịch ${trTodo.size} câu; NLLB: ${if (nllb != null) "có model" else "CHƯA có model"}")
-            val translator: Translator = if (nllb != null) NllbTranslator(nllb) else UnavailableTranslator()
-            translator.use { tr ->
-                val done = AtomicInteger(spans.size - trTodo.size)
-                runParallel(
-                    minOf(workers, 2), trTodo,
-                    setup = { tr },
-                    teardown = { },
-                    work = { t, i ->
-                        val out = if (texts[i].isBlank()) "" else t.translate(texts[i])
-                        st.saveText("tr_$i.txt", out)
-                        report(Step.TRANSLATE, done.incrementAndGet().toFloat() / spans.size, "")
-                    },
-                )
-            }
+        // 5. Dịch theo khối ngữ cảnh: mỗi khối ~25 câu liên tiếp (kèm 3 câu trước làm ngữ cảnh), dịch cả khối một lần
+        val todoSet = spans.indices.filter { !st.has("tg_$it.txt") }.toSet()
+        if (todoSet.isNotEmpty()) {
+            log("Dịch ${todoSet.size} câu theo khối ngữ cảnh (online, miễn phí)")
+            val chunks = spans.indices.toList().chunked(OnlineTranslator.CHUNK).filter { c -> c.any { it in todoSet } }
+            val done = AtomicInteger(spans.size - todoSet.size)
+            runParallel(
+                2, chunks,
+                setup = { Unit },
+                teardown = { },
+                work = { _, chunk ->
+                    val first = chunk.first()
+                    val ctxStart = maxOf(0, first - OnlineTranslator.CTX)
+                    val range = ctxStart..chunk.last()
+                    val out = withContext(Dispatchers.IO) { OnlineTranslator.translate(range.map { texts[it] }) }
+                    for (i in chunk) {
+                        if (i in todoSet) {
+                            st.saveText("tg_$i.txt", out[i - ctxStart])
+                            done.incrementAndGet()
+                        }
+                    }
+                    report(Step.TRANSLATE, done.get().toFloat() / spans.size, "")
+                },
+            )
             log("Dịch xong")
         }
-        val translated: List<String> = spans.indices.map { st.loadText("tr_$it.txt") }
+        val translated: List<String> = spans.indices.map { st.loadText("tg_$it.txt") }
         report(Step.TRANSLATE, 1f, "")
         val nonBlank = translated.count { it.isNotBlank() }
         val sample = translated.firstOrNull { it.isNotBlank() }?.take(80) ?: "(rỗng)"
         log("Kết quả dịch: $nonBlank/${spans.size} câu có nội dung. Ví dụ: $sample")
         if (nonBlank == 0) {
-            error("Bản dịch rỗng: mô hình NLLB không sinh được chữ nào, nên không có giọng Việt. Xem nhật ký.")
+            error("Bản dịch rỗng: không có câu nào được dịch, nên không có giọng Việt. Kiểm tra kết nối mạng rồi tiếp tục.")
         }
 
         // Phụ đề SRT tiếng Việt, lưu vào Download/TrungVietDub
@@ -230,12 +235,12 @@ class DubbingPipeline(private val context: Context) {
     }
 
     /** Chạy [work] cho từng phần tử của [items] bằng [workers] coroutine song song; mỗi worker có tài nguyên riêng. */
-    private suspend fun <W> runParallel(
+    private suspend fun <W, T> runParallel(
         workers: Int,
-        items: List<Int>,
+        items: List<T>,
         setup: () -> W,
         teardown: (W) -> Unit,
-        work: suspend (W, Int) -> Unit,
+        work: suspend (W, T) -> Unit,
     ) {
         if (items.isEmpty()) return
         val next = AtomicInteger(0)

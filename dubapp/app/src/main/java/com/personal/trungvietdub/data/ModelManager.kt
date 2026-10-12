@@ -30,7 +30,6 @@ data class ModelSpec(
 
 object ModelCatalog {
     private const val SHERPA = "https://github.com/k2-fsa/sherpa-onnx/releases/download"
-    private const val HF_NLLB = "https://huggingface.co/Xenova/nllb-200-distilled-600M/resolve/main"
 
     // SenseVoice int8: nhận diện tiếng Trung chính xác và nhanh, đầu ra có chấm câu và chuẩn hóa số
     val ASR = ModelSpec(
@@ -54,22 +53,11 @@ object ModelCatalog {
             "$SHERPA/source-separation-models/UVR-MDX-NET-Inst_HQ_3.onnx",
         )),
     )
-    val NLLB = ModelSpec(
-        id = "mt-nllb-600m-q",
-        title = "Dịch Trung → Việt (NLLB-200 600M, lượng tử hóa)",
-        approxMb = 910,
-        files = listOf(
-            RemoteFile("encoder_model_quantized.onnx", "$HF_NLLB/onnx/encoder_model_quantized.onnx"),
-            RemoteFile("decoder_model_merged_quantized.onnx", "$HF_NLLB/onnx/decoder_model_merged_quantized.onnx"),
-            RemoteFile("tokenizer.json", "$HF_NLLB/tokenizer.json"),
-        ),
-    )
-    val all = listOf(ASR, TTS_VI, NLLB, UVR)
+    val all = listOf(ASR, TTS_VI, UVR)
 }
 
 data class AsrFiles(val model: File, val tokens: File)
 data class TtsFiles(val model: File, val tokens: File, val espeakDataDir: File)
-data class NllbFiles(val encoder: File, val decoder: File, val tokenizer: File)
 
 class ModelManager(private val context: Context) {
     private val client = OkHttpClient.Builder()
@@ -103,16 +91,6 @@ class ModelManager(private val context: Context) {
 
     fun uvrFile(): File? =
         if (isReady(ModelCatalog.UVR)) File(rootOf(ModelCatalog.UVR), ModelCatalog.UVR.files[0].relPath) else null
-
-    fun nllbFiles(): NllbFiles? {
-        if (!isReady(ModelCatalog.NLLB)) return null
-        val r = rootOf(ModelCatalog.NLLB)
-        return NllbFiles(
-            encoder = File(r, "encoder_model_quantized.onnx"),
-            decoder = File(r, "decoder_model_merged_quantized.onnx"),
-            tokenizer = File(r, "tokenizer.json"),
-        )
-    }
 
     /** Tải model. onProgress nhận 0..1 cho toàn bộ model. */
     suspend fun download(spec: ModelSpec, onProgress: (Float) -> Unit) = withContext(Dispatchers.IO) {

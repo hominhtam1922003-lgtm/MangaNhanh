@@ -11,7 +11,7 @@ App Android: chọn video tiếng Trung (ưu tiên < 5 phút) → nhận diện 
 | Giọng Việt offline (sherpa-onnx VITS vais1000) | ✅ Đã viết, cần kiểm tra trên máy thật |
 | Dịch Trung → Việt (NLLB-200 600M, ONNX lượng tử hóa, tokenizer.json) | ⚠️ Đã viết, **chưa chạy thử**. Tên input decoder đọc động từ model; không dùng KV-cache (chậm hơn nhưng đơn giản) |
 | Tách giọng gốc, giữ nhạc nền (UVR MDX-NET Inst_HQ_3) | ⚠️ Đã viết, **chưa chạy thử**. Thuật toán chunk/STFT/ISTFT đã kiểm chứng bằng Python: tái tạo tín hiệu sai số ~1e-16, FFT 6144 sai số ~1e-13 |
-| Build APK | ⚠️ Chưa biên dịch: môi trường phát triển không có JDK/Android SDK |
+| Build APK (GitHub Actions) | ✅ Biên dịch thành công (run 38241549251, artifact `TrungVietDub-debug-apk`). **Chưa chạy trên máy thật** |
 
 **Những điểm chưa kiểm chứng (cần log từ máy thật nếu lỗi):**
 - Tên tensor của decoder NLLB (`input_ids`, `encoder_hidden_states`, `encoder_attention_mask`, `use_cache_branch`, `past_key_values.*`) giả định theo convention của Xenova/optimum. Code chạy được với các tên đó.

@@ -8,7 +8,7 @@ import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.personal.trungvietdub.data.AsrFiles
 
 /** Nhận diện tiếng Trung offline bằng sherpa-onnx (Paraformer). Input: mono 16 kHz. */
-class ChineseSpeechRecognizer(files: AsrFiles) : AutoCloseable {
+class ChineseSpeechRecognizer(files: AsrFiles, threads: Int = Threads.inference) : AutoCloseable {
     private val recognizer: OfflineRecognizer
 
     init {
@@ -17,7 +17,7 @@ class ChineseSpeechRecognizer(files: AsrFiles) : AutoCloseable {
             modelConfig = OfflineModelConfig(
                 paraformer = OfflineParaformerModelConfig(model = files.model.absolutePath),
                 tokens = files.tokens.absolutePath,
-                numThreads = Threads.inference,
+                numThreads = threads,
                 provider = "cpu",
                 modelType = "paraformer",
             ),

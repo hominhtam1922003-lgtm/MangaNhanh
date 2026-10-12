@@ -9,8 +9,11 @@ import com.personal.trungvietdub.data.OriginalAudioMode
 import com.personal.trungvietdub.data.Step
 import com.personal.trungvietdub.data.TtsFiles
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Điều phối: giải mã → tách nhạc (tùy chọn) → tìm đoạn → nhận diện → dịch → TTS → ghép → xuất MP4.
@@ -105,27 +108,39 @@ class DubbingPipeline(private val context: Context) {
             error("Không tìm thấy đoạn có lời nói (peak=${fmtPeak(mono16)}). Xem nhật ký.")
         }
 
-        // 4. Nhận diện tiếng Trung, lưu từng đoạn
-        val texts = ArrayList(st.loadList("texts.json"))
-        if (texts.size < spans.size) {
-            log("Nhận diện tiếng Trung từ đoạn ${texts.size + 1}/${spans.size}")
-            ChineseSpeechRecognizer(asrFiles).use { asr ->
-                while (texts.size < spans.size) {
-                    val sp = spans[texts.size]
+        // Số worker song song theo phần cứng (máy mạnh: 3). Mỗi worker chia đều số nhân CPU.
+        val workers = Threads.workers(context)
+        val threadsPer = Threads.threadsPerWorker(workers)
+        log("Chạy song song: $workers worker × $threadsPer luồng (${Threads.cpu} nhân)")
+        // Mọi callback tiến trình đi qua một khóa, vì nhiều worker báo tiến độ cùng lúc
+        val reportLock = Any()
+        fun report(step: Step, frac: Float, note: String) = synchronized(reportLock) { onProgress(step, frac, note) }
+
+        // 4. Nhận diện tiếng Trung song song; mỗi đoạn lưu một file asr_<i>.txt
+        val asrTodo = spans.indices.filter { !st.has("asr_$it.txt") }
+        if (asrTodo.isNotEmpty()) {
+            log("Nhận diện tiếng Trung: còn ${asrTodo.size}/${spans.size} đoạn")
+            val done = AtomicInteger(spans.size - asrTodo.size)
+            runParallel(
+                workers, asrTodo,
+                setup = { ChineseSpeechRecognizer(asrFiles, threadsPer) },
+                teardown = { it.close() },
+                work = { asr, i ->
+                    val sp = spans[i]
                     val from = (sp.startMs * Segmenter.SR / 1000).toInt()
                     val to = minOf(mono16.size, (sp.endMs * Segmenter.SR / 1000).toInt())
-                    texts += asr.transcribe(mono16.copyOfRange(from, to))
-                    st.saveList("texts.json", texts)
-                    onProgress(Step.ASR, texts.size.toFloat() / spans.size, "")
-                }
-            }
+                    st.saveText("asr_$i.txt", asr.transcribe(mono16.copyOfRange(from, to)))
+                    report(Step.ASR, done.incrementAndGet().toFloat() / spans.size, "")
+                },
+            )
             log("Nhận diện xong")
         }
-        onProgress(Step.ASR, 1f, "")
+        val texts: List<String> = spans.indices.map { st.loadText("asr_$it.txt") }
+        report(Step.ASR, 1f, "")
         val transcript = spans.indices.joinToString("\n") { i -> "[${fmt(spans[i].startMs)}] ${texts[i]}" }
         onTranscript(transcript)
 
-        // 5. Dịch Trung → Việt bằng NLLB, lưu từng câu
+        // 5. Dịch Trung → Việt bằng NLLB (một phiên, tuần tự), lưu từng câu
         val translated = ArrayList(st.loadList("translated.json"))
         if (translated.size < spans.size) {
             val nllb = mm.nllbFiles()
@@ -136,49 +151,80 @@ class DubbingPipeline(private val context: Context) {
                     val i = translated.size
                     translated += if (texts[i].isBlank()) "" else tr.translate(texts[i])
                     st.saveList("translated.json", translated)
-                    onProgress(Step.TRANSLATE, translated.size.toFloat() / spans.size, "")
+                    report(Step.TRANSLATE, translated.size.toFloat() / spans.size, "")
                 }
             }
             log("Dịch xong")
         }
-        onProgress(Step.TRANSLATE, 1f, "")
+        report(Step.TRANSLATE, 1f, "")
 
-        // 6. Giọng Việt cho từng câu, mỗi câu lưu thành một file
+        // 6. Giọng Việt song song; mỗi câu lưu thành clip_<i>.bin
         val voiced = spans.indices.filter { translated[it].isNotBlank() }
         val todo = voiced.filter { !st.has("clip_$it.bin") }
         if (todo.isNotEmpty()) {
-            VietnameseTts(ttsFiles).use { tts ->
-                todo.forEachIndexed { k, i ->
+            val done = AtomicInteger(voiced.size - todo.size)
+            runParallel(
+                workers, todo,
+                setup = { VietnameseTts(ttsFiles, threadsPer) },
+                teardown = { it.close() },
+                work = { tts, i ->
                     val slot = spans[i].endMs - spans[i].startMs
                     val wav = tts.speak(translated[i], slot, speed)
                     st.saveFloats(
                         "clip_$i.bin",
                         AudioIO.convert(AudioIO.Pcm(wav, tts.sampleRate, 1), Composer.OUT_RATE, 1),
                     )
-                    onProgress(Step.TTS, (voiced.size - todo.size + k + 1).toFloat() / voiced.size, "")
-                }
-            }
+                    report(Step.TTS, done.incrementAndGet().toFloat() / voiced.size, "")
+                },
+            )
         }
-        onProgress(Step.TTS, 1f, "")
+        report(Step.TTS, 1f, "")
         log("Tạo giọng Việt xong: ${voiced.size} câu")
 
         // 7. Ghép âm thanh gốc + giọng Việt
-        onProgress(Step.COMPOSE, 0f, "")
+        report(Step.COMPOSE, 0f, "")
         val clips = voiced.map { Composer.Clip(spans[it].startMs, st.loadFloats("clip_$it.bin")) }
         val mixed = Composer.mix(base, clips, effMode)
-        onProgress(Step.COMPOSE, 1f, "")
+        report(Step.COMPOSE, 1f, "")
 
-        // 8. Xuất MP4 vào thư viện
-        onProgress(Step.EXPORT, 0f, "")
-        val aac = File(dir, "dub.m4a")
-        VideoExporter.encodeAac(mixed, Composer.OUT_RATE, Composer.OUT_CH, aac)
+        // 8. Xuất MP4 vào thư viện: mã hóa AAC trong bộ nhớ rồi ghép với video gốc vào một muxer
+        report(Step.EXPORT, 0f, "")
+        val audio = VideoExporter.encodeAac(mixed, Composer.OUT_RATE, Composer.OUT_CH)
         val mp4 = File(dir, "out.mp4")
-        VideoExporter.muxVideo(context, sourceUri, aac, mp4)
+        VideoExporter.muxVideo(context, sourceUri, audio, mp4)
         val outUri = VideoExporter.saveToGallery(context, mp4, displayName)
         log("Xuất MP4 xong")
-        onProgress(Step.EXPORT, 1f, "")
+        report(Step.EXPORT, 1f, "")
         dir.deleteRecursively()
         Result(outUri, transcript, effMode)
+    }
+
+    /** Chạy [work] cho từng phần tử của [items] bằng [workers] coroutine song song; mỗi worker có tài nguyên riêng. */
+    private suspend fun <W> runParallel(
+        workers: Int,
+        items: List<Int>,
+        setup: () -> W,
+        teardown: (W) -> Unit,
+        work: (W, Int) -> Unit,
+    ) {
+        if (items.isEmpty()) return
+        val next = AtomicInteger(0)
+        coroutineScope {
+            repeat(minOf(workers, items.size)) {
+                launch(Dispatchers.Default) {
+                    val w = setup()
+                    try {
+                        while (true) {
+                            val k = next.getAndIncrement()
+                            if (k >= items.size) break
+                            work(w, items[k])
+                        }
+                    } finally {
+                        teardown(w)
+                    }
+                }
+            }
+        }
     }
 
     private fun parseSpans(text: String): List<Segmenter.Span> =

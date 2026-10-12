@@ -8,19 +8,25 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.media.MediaMuxer
-import android.os.Build
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+/** Âm thanh AAC đã mã hóa, giữ trong bộ nhớ (vài MB cho video 5 phút) để ghép một lần duy nhất. */
+class EncodedAudio(val format: MediaFormat, val samples: List<Sample>) {
+    class Sample(val ptsUs: Long, val flags: Int, val bytes: ByteArray)
+}
+
 /** Mã hóa AAC, ghép với track video gốc (không re-encode video) và lưu vào thư viện. */
 object VideoExporter {
     private const val AAC = "audio/mp4a-latm"
 
-    fun encodeAac(pcmStereo: FloatArray, sampleRate: Int, channels: Int, outFile: File) {
+    /** Mã hóa PCM stereo thành AAC trong bộ nhớ. Không tạo file trung gian, không dùng muxer riêng cho âm thanh. */
+    fun encodeAac(pcmStereo: FloatArray, sampleRate: Int, channels: Int): EncodedAudio {
         require(pcmStereo.isNotEmpty()) { "Không có âm thanh để mã hóa" }
         val fmt = MediaFormat.createAudioFormat(AAC, sampleRate, channels).apply {
             setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
@@ -28,141 +34,141 @@ object VideoExporter {
             setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16 * 1024)
         }
         val codec = MediaCodec.createEncoderByType(AAC)
-        codec.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-        codec.start()
-        val muxer = MediaMuxer(outFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-        var track = -1
-        var muxerStarted = false
-        val info = MediaCodec.BufferInfo()
-        var inPos = 0
-        var inputEos = false
-        var done = false
-        var framesWritten = 0
-        var outBytes = 0L
-
-        while (!done) {
-            if (!inputEos) {
-                val idx = codec.dequeueInputBuffer(10_000)
-                if (idx >= 0) {
-                    val buf = codec.getInputBuffer(idx)!!
-                    buf.clear()
-                    buf.order(ByteOrder.nativeOrder())
-                    val count = minOf(buf.capacity() / 2, pcmStereo.size - inPos)
-                    if (count <= 0) {
-                        codec.queueInputBuffer(idx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                        inputEos = true
-                    } else {
-                        for (i in 0 until count) {
-                            val s = (pcmStereo[inPos + i] * 32767f).toInt().coerceIn(-32768, 32767)
-                            buf.putShort(s.toShort())
-                        }
-                        val pts = (inPos / channels) * 1_000_000L / sampleRate
-                        codec.queueInputBuffer(idx, 0, count * 2, pts, 0)
-                        inPos += count
-                    }
-                }
-            }
-            val oi = codec.dequeueOutputBuffer(info, 10_000)
-            when {
-                oi == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                    track = muxer.addTrack(codec.outputFormat)
-                    muxer.start()
-                    muxerStarted = true
-                }
-                oi >= 0 -> {
-                    val ob = codec.getOutputBuffer(oi)!!
-                    if (info.size > 0 && muxerStarted && (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
-                        ob.position(info.offset)
-                        ob.limit(info.offset + info.size)
-                        muxer.writeSampleData(track, ob, info)
-                        framesWritten++
-                        outBytes += info.size
-                    }
-                    codec.releaseOutputBuffer(oi, false)
-                    if ((info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) done = true
-                }
-            }
-        }
-        codec.stop(); codec.release()
+        var outFormat: MediaFormat? = null
+        val samples = ArrayList<EncodedAudio.Sample>()
         try {
-            check(muxerStarted && framesWritten > 0) {
-                "Bộ mã hóa không tạo được khung AAC nào (started=$muxerStarted)"
+            codec.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            codec.start()
+            val info = MediaCodec.BufferInfo()
+            var inPos = 0
+            var inputEos = false
+            var done = false
+            while (!done) {
+                if (!inputEos) {
+                    val idx = codec.dequeueInputBuffer(10_000)
+                    if (idx >= 0) {
+                        val buf = codec.getInputBuffer(idx)!!
+                        buf.clear()
+                        buf.order(ByteOrder.nativeOrder())
+                        val count = minOf(buf.capacity() / 2, pcmStereo.size - inPos)
+                        if (count <= 0) {
+                            codec.queueInputBuffer(idx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            inputEos = true
+                        } else {
+                            for (i in 0 until count) {
+                                val s = (pcmStereo[inPos + i] * 32767f).toInt().coerceIn(-32768, 32767)
+                                buf.putShort(s.toShort())
+                            }
+                            val pts = (inPos / channels) * 1_000_000L / sampleRate
+                            codec.queueInputBuffer(idx, 0, count * 2, pts, 0)
+                            inPos += count
+                        }
+                    }
+                }
+                val oi = codec.dequeueOutputBuffer(info, 10_000)
+                when {
+                    oi == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> outFormat = codec.outputFormat
+                    oi >= 0 -> {
+                        val ob = codec.getOutputBuffer(oi)!!
+                        if (info.size > 0 && (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
+                            val bytes = ByteArray(info.size)
+                            ob.position(info.offset)
+                            ob.limit(info.offset + info.size)
+                            ob.get(bytes)
+                            samples.add(EncodedAudio.Sample(info.presentationTimeUs, info.flags, bytes))
+                        }
+                        codec.releaseOutputBuffer(oi, false)
+                        if ((info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) done = true
+                    }
+                }
             }
-            muxer.stop()
-        } catch (e: IllegalStateException) {
-            throw IllegalStateException(
-                "Mã hóa AAC lỗi: ${e.message} (khung=$framesWritten, byte=$outBytes, mẫu=${pcmStereo.size}, " +
-                    "rate=$sampleRate, kênh=$channels)", e,
-            )
         } finally {
-            muxer.release()
+            runCatching { codec.stop() }
+            codec.release()
         }
+        val f = outFormat ?: throw IllegalStateException("Bộ mã hóa AAC không trả về định dạng đầu ra")
+        check(samples.isNotEmpty()) { "Bộ mã hóa AAC không tạo được khung nào" }
+        return EncodedAudio(f, samples)
     }
 
-    /** Ghép video gốc (copy) với file AAC mới, xen kẽ theo timestamp. */
-    fun muxVideo(context: Context, sourceVideo: Uri, audioM4a: File, out: File) {
+    /**
+     * Ghép video gốc (copy, không re-encode) với âm thanh AAC đã mã hóa vào MỘT muxer.
+     * Hai luồng mẫu được xen kẽ theo thời gian; timestamp mỗi track luôn tăng dần.
+     */
+    fun muxVideo(context: Context, sourceVideo: Uri, audio: EncodedAudio, out: File) {
         val v = MediaExtractor().apply { setDataSource(context, sourceVideo, null) }
-        val a = MediaExtractor().apply { setDataSource(audioM4a.absolutePath) }
-        var vi = -1
-        for (i in 0 until v.trackCount) {
-            if (v.getTrackFormat(i).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true) { vi = i; break }
-        }
-        require(vi >= 0) { "Không tìm thấy track hình" }
-        val ai = 0
-        val muxer = MediaMuxer(out.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-
-        val rotation = MediaMetadataRetriever().let { r ->
-            r.setDataSource(context, sourceVideo)
-            val rot = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
-            r.release()
-            rot
-        }
-        muxer.setOrientationHint(rotation)
-
-        val vTrack = muxer.addTrack(v.getTrackFormat(vi))
-        val aTrack = muxer.addTrack(a.getTrackFormat(ai))
-        muxer.start()
-        v.selectTrack(vi)
-        a.selectTrack(ai)
-
-        val buf = ByteBuffer.allocate(4 * 1024 * 1024)
-        val info = MediaCodec.BufferInfo()
-        // MediaMuxer yêu cầu timestamp của MỖI track tăng dần; video có khung B có thể không thỏa mãn.
+        var muxer: MediaMuxer? = null
         var vCount = 0
         var aCount = 0
-        var vLast = -1L
-        var aLast = -1L
         try {
+            var vi = -1
+            for (i in 0 until v.trackCount) {
+                if (v.getTrackFormat(i).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true) { vi = i; break }
+            }
+            require(vi >= 0) { "Không tìm thấy track hình" }
+            v.selectTrack(vi)
+
+            val rotation = MediaMetadataRetriever().let { r ->
+                try {
+                    r.setDataSource(context, sourceVideo)
+                    r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+                } finally {
+                    r.release()
+                }
+            }
+            val m = MediaMuxer(out.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            muxer = m
+            m.setOrientationHint(rotation)
+            val vTrack = m.addTrack(v.getTrackFormat(vi))
+            val aTrack = m.addTrack(audio.format)
+            m.start()
+
+            val buf = ByteBuffer.allocate(4 * 1024 * 1024)
+            val info = MediaCodec.BufferInfo()
+            var vLast = -1L
+            var aLast = -1L
+            var ai = 0
             while (true) {
                 val vt = if (v.sampleTime >= 0) v.sampleTime else Long.MAX_VALUE
-                val at = if (a.sampleTime >= 0) a.sampleTime else Long.MAX_VALUE
+                val at = if (ai < audio.samples.size) audio.samples[ai].ptsUs else Long.MAX_VALUE
                 if (vt == Long.MAX_VALUE && at == Long.MAX_VALUE) break
-                val fromVideo = vt <= at
-                val ex = if (fromVideo) v else a
-                buf.clear()
-                val n = ex.readSampleData(buf, 0)
-                if (n < 0) { ex.advance(); continue }
-                val pts = if (fromVideo) maxOf(ex.sampleTime, vLast + 1) else maxOf(ex.sampleTime, aLast + 1)
-                if (fromVideo) vLast = pts else aLast = pts
-                info.offset = 0
-                info.size = n
-                info.presentationTimeUs = pts
-                info.flags = if ((ex.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0)
-                    MediaCodec.BUFFER_FLAG_KEY_FRAME else 0
-                muxer.writeSampleData(if (fromVideo) vTrack else aTrack, buf, info)
-                if (fromVideo) vCount++ else aCount++
-                ex.advance()
+
+                if (at <= vt) {
+                    val s = audio.samples[ai++]
+                    val pts = maxOf(s.ptsUs, aLast + 1)
+                    aLast = pts
+                    val bb = ByteBuffer.wrap(s.bytes)
+                    info.set(0, s.bytes.size, pts, if ((s.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
+                    m.writeSampleData(aTrack, bb, info)
+                    aCount++
+                } else {
+                    buf.clear()
+                    val n = v.readSampleData(buf, 0)
+                    if (n < 0) { v.advance(); continue }
+                    val pts = maxOf(v.sampleTime, vLast + 1)
+                    vLast = pts
+                    buf.position(0)
+                    buf.limit(n)
+                    info.set(0, n, pts,
+                        if ((v.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
+                    m.writeSampleData(vTrack, buf, info)
+                    vCount++
+                    v.advance()
+                }
             }
-            muxer.stop()
-        } catch (e: IllegalStateException) {
-            throw IllegalStateException(
-                "Ghép MP4 lỗi: ${e.message} (mẫu hình=$vCount, mẫu tiếng=$aCount)", e
-            )
+            require(vCount > 0) { "Video không có khung hình nào được ghép" }
+            try {
+                m.stop()
+            } catch (e: IllegalStateException) {
+                throw IllegalStateException(
+                    "Ghi MP4 lỗi khi hoàn tất: ${e.message} (hình=$vCount, tiếng=$aCount, " +
+                        "mẫu tiếng tổng=${audio.samples.size}, định dạng=${audio.format})", e,
+                )
+            }
         } finally {
-            muxer.release()
-            v.release(); a.release()
+            runCatching { muxer?.release() }
+            v.release()
         }
-        require(vCount > 0) { "Video không có khung hình nào được ghép" }
     }
 
     /** Lưu file vào Movies/TrungVietDub và trả về content Uri. Android 10+ dùng MediaStore không cần quyền; Android 9 trở xuống ghi trực tiếp vào thư mục (cần WRITE_EXTERNAL_STORAGE). */

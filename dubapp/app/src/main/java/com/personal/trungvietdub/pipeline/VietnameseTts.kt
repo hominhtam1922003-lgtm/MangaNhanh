@@ -7,7 +7,7 @@ import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import com.personal.trungvietdub.data.TtsFiles
 
 /** Giọng Việt offline (VITS / Piper). Trả về mono float + sampleRate của model. */
-class VietnameseTts(files: TtsFiles) : AutoCloseable {
+class VietnameseTts(files: TtsFiles, threads: Int = Threads.inference) : AutoCloseable {
     private val tts: OfflineTts
 
     init {
@@ -18,7 +18,7 @@ class VietnameseTts(files: TtsFiles) : AutoCloseable {
                     tokens = files.tokens.absolutePath,
                     dataDir = files.espeakDataDir.absolutePath,
                 ),
-                numThreads = Threads.inference,
+                numThreads = threads,
                 provider = "cpu",
             ),
             maxNumSentences = 1,

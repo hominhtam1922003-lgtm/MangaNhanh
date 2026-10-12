@@ -18,7 +18,7 @@ class VietnameseTts(files: TtsFiles) : AutoCloseable {
                     tokens = files.tokens.absolutePath,
                     dataDir = files.espeakDataDir.absolutePath,
                 ),
-                numThreads = 4,
+                numThreads = Threads.inference,
                 provider = "cpu",
             ),
             maxNumSentences = 1,

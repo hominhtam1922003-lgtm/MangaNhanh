@@ -17,7 +17,7 @@ class ChineseSpeechRecognizer(files: AsrFiles) : AutoCloseable {
             modelConfig = OfflineModelConfig(
                 paraformer = OfflineParaformerModelConfig(model = files.model.absolutePath),
                 tokens = files.tokens.absolutePath,
-                numThreads = 4,
+                numThreads = Threads.inference,
                 provider = "cpu",
                 modelType = "paraformer",
             ),

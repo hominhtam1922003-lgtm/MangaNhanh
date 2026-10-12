@@ -123,7 +123,7 @@ class NllbTokenizer(file: File) {
  */
 class NllbTranslator(files: NllbFiles) : Translator {
     private val env = OrtEnvironment.getEnvironment()
-    private val opts = OrtSession.SessionOptions().apply { setIntraOpNumThreads(4) }
+    private val opts = OrtSession.SessionOptions().apply { setIntraOpNumThreads(Threads.inference) }
     private val encoder: OrtSession = env.createSession(files.encoder.absolutePath, opts)
     private val decoder: OrtSession = env.createSession(files.decoder.absolutePath, opts)
     private val tok = NllbTokenizer(files.tokenizer)

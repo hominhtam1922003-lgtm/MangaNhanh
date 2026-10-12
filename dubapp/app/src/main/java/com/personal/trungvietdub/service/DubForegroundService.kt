@@ -46,7 +46,21 @@ class DubForegroundService : Service() {
 
         fun start(context: Context, jobId: String) {
             val i = Intent(context, DubForegroundService::class.java).putExtra(EXTRA_JOB_ID, jobId)
-            ContextCompat.startForegroundService(context, i)
+            try {
+                ContextCompat.startForegroundService(context, i)
+            } catch (e: Exception) {
+                // Ví dụ Android 12+ không cho khởi động dịch vụ nền khi app ở nền: không để job kẹt ở RUNNING
+                JobLog.append(context, jobId, "Không khởi động được worker: ${e.javaClass.simpleName}: ${e.message}")
+                val repo = JobRepository.get(context)
+                repo.get(jobId)?.let {
+                    repo.upsert(
+                        it.copy(
+                            status = JobStatus.FAILED,
+                            error = "Không khởi động được tiến trình nền (${e.javaClass.simpleName}). Mở app và bấm Tiếp tục.",
+                        ),
+                    )
+                }
+            }
         }
 
         fun displayNameOf(context: Context, uri: Uri): String {

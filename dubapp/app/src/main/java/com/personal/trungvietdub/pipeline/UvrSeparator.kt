@@ -37,7 +37,7 @@ class UvrSeparator(modelFile: File) : AutoCloseable {
 
     init {
         val opts = OrtSession.SessionOptions().apply {
-            setIntraOpNumThreads(2)
+            setIntraOpNumThreads(Threads.inference)
             setCPUArenaAllocator(false)
             setMemoryPatternOptimization(false)
         }

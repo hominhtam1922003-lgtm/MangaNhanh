@@ -135,16 +135,21 @@ class DubbingPipeline(private val context: Context) {
             val win = GeminiAsr.WINDOW_SEC * Segmenter.SR
             val wins = (speech16.size + win - 1) / win
             log("Nhận diện bằng Gemini: $wins khối ${GeminiAsr.WINDOW_SEC} giây")
-            for (w in 0 until wins) {
-                if (st.has("gem_$w.json")) continue
-                report(Step.ASR, w.toFloat() / wins, "Gemini ${w + 1}/$wins")
-                val from = w * win
-                val to = minOf(speech16.size, from + win)
-                val segs = withContext(Dispatchers.IO) { GeminiAsr.transcribe(geminiKey, speech16.copyOfRange(from, to)) }
-                val offset = w * GeminiAsr.WINDOW_SEC * 1000L
-                st.saveText("gem_$w.json", GeminiAsr.toJson(segs.map { it.copy(startMs = it.startMs + offset, endMs = it.endMs + offset) }))
-                log("Gemini khối ${w + 1}/$wins: ${segs.size} câu")
-            }
+            val gemTodo = (0 until wins).filter { !st.has("gem_$it.json") }
+            val gemDone = AtomicInteger(wins - gemTodo.size)
+            runParallel(
+                2, gemTodo,
+                setup = { Unit },
+                teardown = { },
+                work = { _, w ->
+                    val from = w * win
+                    val to = minOf(speech16.size, from + win)
+                    val segs = withContext(Dispatchers.IO) { GeminiAsr.transcribe(geminiKey, speech16.copyOfRange(from, to)) }
+                    val offset = w * GeminiAsr.WINDOW_SEC * 1000L
+                    st.saveText("gem_$w.json", GeminiAsr.toJson(segs.map { it.copy(startMs = it.startMs + offset, endMs = it.endMs + offset) }))
+                    report(Step.ASR, gemDone.incrementAndGet().toFloat() / wins, "Gemini ${gemDone.get()}/$wins")
+                },
+            )
             val all = (0 until wins).flatMap { GeminiAsr.fromJson(st.loadText("gem_$it.json")) }
             val assigned = GeminiAsr.assign(all, spans.map { it.startMs to it.endMs })
             spans.indices.forEach { st.saveText("asr_$it.txt", assigned[it]) }
@@ -185,7 +190,7 @@ class DubbingPipeline(private val context: Context) {
             val chunks = spans.indices.toList().chunked(OnlineTranslator.CHUNK).filter { c -> c.any { it in todoSet } }
             val done = AtomicInteger(spans.size - todoSet.size)
             runParallel(
-                if (geminiKey.isNotEmpty()) 1 else 2, chunks,
+                2, chunks,
                 setup = { Unit },
                 teardown = { },
                 work = { _, chunk ->

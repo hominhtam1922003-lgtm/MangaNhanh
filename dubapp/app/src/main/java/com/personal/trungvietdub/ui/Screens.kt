@@ -1,6 +1,9 @@
 package com.personal.trungvietdub.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -72,20 +75,24 @@ fun HomeScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("LỒNG TIẾNG TRUNG → VIỆT", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Column {
+            Text("Lồng tiếng Trung → Việt", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("Chọn video, app tự nhận diện, dịch và lồng giọng Việt", style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
 
         NotificationCard()
 
         GeminiKeyCard(hasKey) { hasKey = it }
 
         error?.let {
-            Card { Column(Modifier.padding(12.dp)) {
+            SectionCard { Column(Modifier.padding(12.dp)) {
                 Text(it, color = MaterialTheme.colorScheme.error)
                 TextButton(onClick = { vm.clearError() }) { Text("Đóng") }
             } }
         }
 
-        Card { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionCard { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Dữ liệu AI (tải một lần)", fontWeight = FontWeight.SemiBold)
             // Khi đã có khóa Gemini thì ẩn model FireRedASR offline (không cần tải)
             ModelCatalog.all.filter { !(hasKey && it.id == ModelCatalog.ASR.id) }.forEach { spec ->
@@ -105,7 +112,7 @@ fun HomeScreen(
             }
         } }
 
-        Card { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionCard { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(onClick = { picker.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Chọn video")
             }
@@ -167,12 +174,25 @@ fun JobScreen(job: Job?, log: String, onBack: () -> Unit, onOpenOutput: (String)
 private fun ColumnScope.JobDetails(
     job: Job, log: String, onResume: () -> Unit, onOpenOutput: (String) -> Unit,
 ) {
-        Text(job.title, fontWeight = FontWeight.SemiBold)
-        LinearProgressIndicator(progress = { job.progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-        Text("${(job.progress * 100).toInt()}%  ${job.step}")
+        Text(job.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        val animated by animateFloatAsState(job.progress.coerceIn(0f, 1f), label = "progress")
+        LinearProgressIndicator(
+            progress = { animated },
+            modifier = Modifier.fillMaxWidth().height(8.dp),
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
+        Text("${(job.progress * 100).toInt()}%  ${job.step}", style = MaterialTheme.typography.bodyMedium)
         Step.values().forEach { s ->
             val done = job.progress >= (Step.values().take(s.ordinal + 1).sumOf { it.weight.toDouble() }.toFloat() - 0.001f)
-            Text((if (done) "✓ " else "○ ") + s.label)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    if (done) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = null,
+                    tint = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(s.label, color = if (done) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         if (job.status == JobStatus.FAILED) {
             Text("Lỗi: ${job.error ?: "không rõ"}", color = MaterialTheme.colorScheme.error)
@@ -246,7 +266,7 @@ fun NotificationCard() {
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { enabled = Notifications.enabled(ctx) }
 
-    Card { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    SectionCard { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Thông báo tiến độ", fontWeight = FontWeight.SemiBold)
         if (enabled) {
             Text("✓ Đã bật. Thanh tiến độ hiện trên thanh thông báo, và báo khi xong hoặc lỗi.",
@@ -281,7 +301,7 @@ fun NotificationCard() {
 fun GeminiKeyCard(hasKey: Boolean, onChanged: (Boolean) -> Unit) {
     val ctx = LocalContext.current
     var text by remember { mutableStateOf("") }
-    Card { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    SectionCard { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Nhận diện tiếng Trung: Gemini", fontWeight = FontWeight.SemiBold)
         if (hasKey) {
             Text("✓ Đã lưu khóa API. Video sẽ được gửi tới Gemini để nhận diện (cần mạng).",

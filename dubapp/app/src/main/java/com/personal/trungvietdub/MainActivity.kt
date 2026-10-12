@@ -47,7 +47,7 @@ class MainActivity : ComponentActivity() {
         ) needed += Manifest.permission.WRITE_EXTERNAL_STORAGE
         if (needed.isNotEmpty()) requestPermissions(needed.toTypedArray(), 1)
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
+            com.personal.trungvietdub.ui.DubTheme {
                 Surface(Modifier.fillMaxSize()) {
                     var nav by rememberSaveable { mutableStateOf<String>("home") }
                     var jobId by rememberSaveable { mutableStateOf<String?>(null) }

@@ -36,7 +36,11 @@ class UvrSeparator(modelFile: File) : AutoCloseable {
     private val window: DoubleArray
 
     init {
-        val opts = OrtSession.SessionOptions().apply { setIntraOpNumThreads(4) }
+        val opts = OrtSession.SessionOptions().apply {
+            setIntraOpNumThreads(2)
+            setCPUArenaAllocator(false)
+            setMemoryPatternOptimization(false)
+        }
         session = env.createSession(modelFile.absolutePath, opts)
         val md = session.metadata.customMetadata
         require(md["model_type"] == "UVR") { "Model không phải UVR (model_type=${md["model_type"]})" }
@@ -67,7 +71,7 @@ class UvrSeparator(modelFile: File) : AutoCloseable {
         val total = (input.length() / 8).toInt()
         require(total > 0) { "File đầu vào rỗng" }
 
-        var chunk = 15 * sampleRate
+        var chunk = 6 * sampleRate
         var margin = sampleRate
         if (total < chunk) chunk = total
         if (margin > chunk) margin = chunk

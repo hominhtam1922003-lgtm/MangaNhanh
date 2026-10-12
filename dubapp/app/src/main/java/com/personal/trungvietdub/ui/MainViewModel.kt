@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
-    private val repo = JobRepository(app)
+    private val repo = JobRepository.get(app)
     private val models = ModelManager(app)
 
     val jobs: StateFlow<List<Job>> = repo.jobs

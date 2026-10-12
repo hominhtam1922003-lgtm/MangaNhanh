@@ -34,7 +34,7 @@ fun HomeScreen(
     var picked by remember { mutableStateOf<Uri?>(null) }
     var pickedName by remember { mutableStateOf("") }
     var minutes by remember { mutableStateOf(0L) }
-    var mode by remember { mutableStateOf(OriginalAudioMode.SEPARATE) }
+    var mode by remember { mutableStateOf(OriginalAudioMode.LOWER) }
     val picker = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->

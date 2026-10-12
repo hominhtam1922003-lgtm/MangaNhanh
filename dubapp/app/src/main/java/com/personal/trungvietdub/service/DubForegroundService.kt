@@ -34,7 +34,7 @@ class DubForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        repo = JobRepository(this)
+        repo = JobRepository.get(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

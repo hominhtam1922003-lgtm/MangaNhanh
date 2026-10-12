@@ -9,7 +9,17 @@ import kotlinx.serialization.json.Json
 import java.io.File
 
 /** Lưu lịch sử job dạng JSON trong filesDir/jobs.json. */
-class JobRepository(context: Context) {
+class JobRepository private constructor(context: Context) {
+    companion object {
+        @Volatile private var instance: JobRepository? = null
+
+        /** Một instance duy nhất trong cả tiến trình: UI và service phải cùng thấy trạng thái job. */
+        fun get(context: Context): JobRepository =
+            instance ?: synchronized(this) {
+                instance ?: JobRepository(context.applicationContext).also { instance = it }
+            }
+    }
+
     private val file = File(context.filesDir, "jobs.json")
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
     private val serializer = ListSerializer(Job.serializer())

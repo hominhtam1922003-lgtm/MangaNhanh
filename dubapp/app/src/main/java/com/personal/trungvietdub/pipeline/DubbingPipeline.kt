@@ -2,6 +2,7 @@ package com.personal.trungvietdub.pipeline
 
 import android.content.Context
 import android.net.Uri
+import com.personal.trungvietdub.data.AppSettings
 import com.personal.trungvietdub.data.AsrFiles
 import com.personal.trungvietdub.data.JobLog
 import com.personal.trungvietdub.data.ModelManager
@@ -37,7 +38,11 @@ class DubbingPipeline(private val context: Context) {
         val dir = File(context.cacheDir, "jobs/$jobId").apply { mkdirs() }
         val st = StageStore(dir)
         val mm = ModelManager(context)
-        val asrFiles: AsrFiles = mm.asrFiles() ?: error("Chưa tải model nhận diện tiếng Trung")
+        // Có khóa Gemini thì nhận diện bằng Gemini (online, chính xác nhất); không có thì dùng FireRedASR offline
+        val geminiKey = AppSettings.geminiKey(context)
+        val asrFiles: AsrFiles? = if (geminiKey.isEmpty()) {
+            mm.asrFiles() ?: error("Chưa tải model nhận diện tiếng Trung, hoặc hãy nhập khóa Gemini ở màn hình chính")
+        } else null
         val ttsFiles: TtsFiles = mm.ttsFiles() ?: error("Chưa tải model giọng Việt")
         log("Xử lý; đã có sẵn từ lần trước: ${st.completed().joinToString().ifEmpty { "chưa có" }}")
 
@@ -124,24 +129,47 @@ class DubbingPipeline(private val context: Context) {
         val reportLock = Any()
         fun report(step: Step, frac: Float, note: String) = synchronized(reportLock) { onProgress(step, frac, note) }
 
-        // 4. Nhận diện tiếng Trung song song; mỗi đoạn lưu một file asr_<i>.txt
-        val asrTodo = spans.indices.filter { !st.has("asr_$it.txt") }
-        if (asrTodo.isNotEmpty()) {
-            log("Nhận diện tiếng Trung: còn ${asrTodo.size}/${spans.size} đoạn")
-            val done = AtomicInteger(spans.size - asrTodo.size)
-            runParallel(
-                workers, asrTodo,
-                setup = { ChineseSpeechRecognizer(asrFiles, threadsPer) },
-                teardown = { it.close() },
-                work = { asr, i ->
-                    val sp = spans[i]
-                    val from = (sp.startMs * Segmenter.SR / 1000).toInt()
-                    val to = minOf(speech16.size, (sp.endMs * Segmenter.SR / 1000).toInt())
-                    st.saveText("asr_$i.txt", asr.transcribe(speech16.copyOfRange(from, to)))
-                    report(Step.ASR, done.incrementAndGet().toFloat() / spans.size, "")
-                },
-            )
-            log("Nhận diện xong")
+        // 4. Nhận diện tiếng Trung; kết quả lưu asr_<i>.txt cho từng đoạn VAD
+        if (geminiKey.isNotEmpty()) {
+            // Gemini: gửi audio theo khối 4 phút, tuần tự để tránh vượt giới hạn tốc độ; mỗi khối lưu gem_<w>.json
+            val win = GeminiAsr.WINDOW_SEC * Segmenter.SR
+            val wins = (speech16.size + win - 1) / win
+            log("Nhận diện bằng Gemini: $wins khối ${GeminiAsr.WINDOW_SEC} giây")
+            for (w in 0 until wins) {
+                if (st.has("gem_$w.json")) continue
+                report(Step.ASR, w.toFloat() / wins, "Gemini ${w + 1}/$wins")
+                val from = w * win
+                val to = minOf(speech16.size, from + win)
+                val segs = withContext(Dispatchers.IO) { GeminiAsr.transcribe(geminiKey, speech16.copyOfRange(from, to)) }
+                val offset = w * GeminiAsr.WINDOW_SEC * 1000L
+                st.saveText("gem_$w.json", GeminiAsr.toJson(segs.map { it.copy(startMs = it.startMs + offset, endMs = it.endMs + offset) }))
+                log("Gemini khối ${w + 1}/$wins: ${segs.size} câu")
+            }
+            val all = (0 until wins).flatMap { GeminiAsr.fromJson(st.loadText("gem_$it.json")) }
+            val assigned = GeminiAsr.assign(all, spans.map { it.startMs to it.endMs })
+            spans.indices.forEach { st.saveText("asr_$it.txt", assigned[it]) }
+            log("Nhận diện Gemini xong: ${all.size} câu → ${spans.size} đoạn")
+            report(Step.ASR, 1f, "")
+        } else {
+            // Offline: FireRedASR, song song theo worker
+            val asrTodo = spans.indices.filter { !st.has("asr_$it.txt") }
+            if (asrTodo.isNotEmpty()) {
+                log("Nhận diện tiếng Trung: còn ${asrTodo.size}/${spans.size} đoạn")
+                val done = AtomicInteger(spans.size - asrTodo.size)
+                runParallel(
+                    workers, asrTodo,
+                    setup = { ChineseSpeechRecognizer(asrFiles!!, threadsPer) },
+                    teardown = { it.close() },
+                    work = { asr, i ->
+                        val sp = spans[i]
+                        val from = (sp.startMs * Segmenter.SR / 1000).toInt()
+                        val to = minOf(speech16.size, (sp.endMs * Segmenter.SR / 1000).toInt())
+                        st.saveText("asr_$i.txt", asr.transcribe(speech16.copyOfRange(from, to)))
+                        report(Step.ASR, done.incrementAndGet().toFloat() / spans.size, "")
+                    },
+                )
+                log("Nhận diện xong")
+            }
         }
         val texts: List<String> = spans.indices.map { st.loadText("asr_$it.txt") }
         report(Step.ASR, 1f, "")

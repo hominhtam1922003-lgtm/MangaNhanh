@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.personal.trungvietdub.data.AppSettings
 import com.personal.trungvietdub.data.Job
 import com.personal.trungvietdub.data.JobStatus
 import com.personal.trungvietdub.data.ModelCatalog
@@ -61,7 +62,11 @@ fun HomeScreen(
         pickedName = name
         minutes = mins
     }
-    val ready2 = ModelCatalog.all.all { ready[it.id] == true }
+    val ctxHome = LocalContext.current
+    var hasKey by remember { mutableStateOf(AppSettings.geminiKey(ctxHome).isNotEmpty()) }
+    // Có khóa Gemini thì không cần tải model FireRedASR offline
+    val ready2 = ModelCatalog.all.filter { it.id != ModelCatalog.ASR.id }.all { ready[it.id] == true } &&
+        (hasKey || ready[ModelCatalog.ASR.id] == true)
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -70,6 +75,8 @@ fun HomeScreen(
         Text("LỒNG TIẾNG TRUNG → VIỆT", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
         NotificationCard()
+
+        GeminiKeyCard(hasKey) { hasKey = it }
 
         error?.let {
             Card { Column(Modifier.padding(12.dp)) {
@@ -264,6 +271,44 @@ fun NotificationCard() {
                     }) { Text("Mở cài đặt") }
                 }
             }
+        }
+    } }
+}
+
+/** Nhập khóa API Gemini (miễn phí tại aistudio.google.com) để nhận diện tiếng Trung bằng Gemini. */
+@Composable
+fun GeminiKeyCard(hasKey: Boolean, onChanged: (Boolean) -> Unit) {
+    val ctx = LocalContext.current
+    var text by remember { mutableStateOf("") }
+    Card { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Nhận diện tiếng Trung: Gemini", fontWeight = FontWeight.SemiBold)
+        if (hasKey) {
+            Text("✓ Đã lưu khóa API. Video sẽ được gửi tới Gemini để nhận diện (cần mạng).",
+                style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(onClick = {
+                AppSettings.setGeminiKey(ctx, "")
+                onChanged(false)
+            }) { Text("Xóa khóa") }
+        } else {
+            Text("Chưa có khóa: app sẽ dùng FireRedASR offline (phải tải model ~1.5 GB). " +
+                "Nhập khóa Gemini miễn phí từ aistudio.google.com để nhận diện chính xác hơn.",
+                style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Khóa API Gemini") },
+                singleLine = true,
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                onClick = {
+                    AppSettings.setGeminiKey(ctx, text)
+                    text = ""
+                    onChanged(AppSettings.geminiKey(ctx).isNotEmpty())
+                },
+                enabled = text.trim().length > 10,
+            ) { Text("Lưu khóa") }
         }
     } }
 }

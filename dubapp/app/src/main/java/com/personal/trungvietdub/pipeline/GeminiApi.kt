@@ -11,8 +11,8 @@ import java.util.concurrent.TimeUnit
 
 /** Lớp gọi Gemini generateContent dùng chung: trả JSON theo schema, tự thử lại và đổi model khi cần. */
 object GeminiApi {
-    /** Model ưu tiên theo thứ tự; lỗi 404/429/5xx thì chuyển sang model sau. */
-    private val MODELS = listOf("gemini-2.5-pro", "gemini-2.5-flash")
+    /** Model ưu tiên theo thứ tự (model cũ có thể bị Google ngừng cấp cho người dùng mới, khi đó 404 và chuyển model sau). */
+    private val MODELS = listOf("gemini-3.8-flash", "gemini-3.5-flash", "gemini-2.5-pro")
 
     private class HttpError(val code: Int, msg: String) : Exception(msg)
 

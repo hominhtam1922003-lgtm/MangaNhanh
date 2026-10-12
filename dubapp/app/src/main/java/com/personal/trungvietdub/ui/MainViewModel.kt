@@ -50,7 +50,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val allModelsReady get() = _ready.value.values.all { it }
 
     init {
-        repo.markInterruptedOnStart()
+        // App vừa mở lại sau khi bị văng/đóng: tự chạy tiếp các job còn dở (giới hạn MAX_ATTEMPTS).
+        repo.readAll()
+            .filter { it.status == JobStatus.RUNNING || it.status == JobStatus.QUEUED }
+            .forEach { onWorkerDied(it.id) }
         viewModelScope.launch {
             while (isActive) {
                 val list = repo.readAll()

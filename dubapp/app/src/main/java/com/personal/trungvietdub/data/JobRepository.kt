@@ -76,18 +76,4 @@ class JobRepository private constructor(context: Context) {
         }
     }
 
-    /** Lúc app mở lại: job còn RUNNING/QUEUED nghĩa là đã bị gián đoạn, người dùng bấm Tiếp tục để chạy lại. */
-    fun markInterruptedOnStart() {
-        locked {
-            val cur = readUnlocked().map {
-                if (it.status == JobStatus.RUNNING || it.status == JobStatus.QUEUED) {
-                    it.copy(
-                        status = JobStatus.FAILED,
-                        error = "Bị gián đoạn khi app đóng. Bấm Tiếp tục để chạy lại từ bước đã lưu.",
-                    )
-                } else it
-            }
-            writeUnlocked(cur)
-        }
-    }
 }

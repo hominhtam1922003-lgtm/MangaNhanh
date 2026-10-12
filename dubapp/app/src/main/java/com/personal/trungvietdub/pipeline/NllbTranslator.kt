@@ -5,7 +5,7 @@ import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import com.personal.trungvietdub.data.NllbFiles
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.float
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -16,27 +16,40 @@ import java.nio.LongBuffer
 import java.text.Normalizer
 
 /**
- * Tokenizer Unigram (SentencePiece) đọc từ tokenizer.json của Hugging Face.
- * Với tokenizer.json, id của mỗi piece = chỉ số trong mảng model.vocab.
+ * Tokenizer BPE (SentencePiece-BPE) đọc từ tokenizer.json của Hugging Face (Xenova/nllb-200-distilled-600M).
+ * Định dạng: model.vocab là object piece -> id; model.merges là danh sách "a b" theo thứ tự ưu tiên.
+ * Mỗi từ được thêm tiền tố ▁ (thay khoảng trắng), rồi ghép theo merges có rank thấp nhất trước.
  * Mã ngôn ngữ NLLB (zho_Hans, vie_Latn) nằm trong added_tokens.
  */
 class NllbTokenizer(file: File) {
-    private val vocab: Array<String>
-    private val scores: FloatArray
     private val pieceToId = HashMap<String, Int>()
+    private val idToPiece: Array<String?>
+    private val merges = HashMap<String, Int>()
     private val addedToId = HashMap<String, Int>()
     private val specialIds = HashSet<Int>()
-    private val maxPieceLen: Int
     private val unkId: Int
 
     init {
         val root = Json.parseToJsonElement(file.readText()).jsonObject
         val model = root.getValue("model").jsonObject
-        val arr = model.getValue("vocab").jsonArray
-        vocab = Array(arr.size) { arr[it].jsonArray[0].jsonPrimitive.content }
-        scores = FloatArray(arr.size) { arr[it].jsonArray[1].jsonPrimitive.float }
+        val type = model["type"]?.jsonPrimitive?.content ?: "BPE"
+        require(type == "BPE") { "Tokenizer kiểu $type chưa được hỗ trợ (cần BPE)" }
+
+        for ((piece, idEl) in model.getValue("vocab").jsonObject) {
+            pieceToId[piece] = idEl.jsonPrimitive.int
+        }
+        val maxId = pieceToId.values.maxOrNull() ?: 0
+        idToPiece = arrayOfNulls(maxId + 1)
+        for ((p, id) in pieceToId) idToPiece[id] = p
+
         unkId = model["unk_id"]?.jsonPrimitive?.int ?: 3
-        for (i in vocab.indices) pieceToId.putIfAbsent(vocab[i], i)
+
+        model["merges"]?.jsonArray?.forEachIndexed { rank, m ->
+            val key = if (m is JsonArray) m[0].jsonPrimitive.content + " " + m[1].jsonPrimitive.content
+            else m.jsonPrimitive.content
+            merges.putIfAbsent(key, rank)
+        }
+
         root["added_tokens"]?.jsonArray?.forEach { t ->
             val o = t.jsonObject
             val content = o.getValue("content").jsonPrimitive.content
@@ -45,53 +58,52 @@ class NllbTokenizer(file: File) {
             specialIds.add(id)
         }
         specialIds.addAll(listOf(0, 1, 2, 3))
-        maxPieceLen = minOf(24, vocab.maxOf { it.length })
     }
 
     fun langId(code: String): Int = addedToId[code] ?: error("Không có mã ngôn ngữ $code trong tokenizer")
 
-    /** [lang] + các piece của văn bản + </s>. */
+    /** [lang] + các token của văn bản + </s>. */
     fun encode(text: String, srcLang: String): IntArray {
+        val out = ArrayList<Int>()
+        out.add(langId(srcLang))
         val norm = Normalizer.normalize(text.trim().replace(Regex("\\s+"), " "), Normalizer.Form.NFKC)
-        if (norm.isEmpty()) return intArrayOf(langId(srcLang), EOS)
-        val s = "\u2581" + norm.replace(' ', '\u2581')
-        val n = s.length
-        val best = DoubleArray(n + 1) { Double.NEGATIVE_INFINITY }
-        val prevStart = IntArray(n + 1) { -1 }
-        val prevId = IntArray(n + 1)
-        best[0] = 0.0
-        for (i in 0 until n) {
-            if (best[i] == Double.NEGATIVE_INFINITY) continue
-            for (l in 1..minOf(maxPieceLen, n - i)) {
-                val id = pieceToId[s.substring(i, i + l)] ?: continue
-                val sc = best[i] + scores[id]
-                if (sc > best[i + l]) {
-                    best[i + l] = sc; prevStart[i + l] = i; prevId[i + l] = id
-                }
-            }
-            // ký tự không có trong vocab -> <unk> với điểm phạt
-            if (!pieceToId.containsKey(s.substring(i, i + 1))) {
-                val sc = best[i] - 100.0
-                if (sc > best[i + 1]) {
-                    best[i + 1] = sc; prevStart[i + 1] = i; prevId[i + 1] = unkId
-                }
+        if (norm.isNotEmpty()) {
+            for (word in norm.split(' ')) {
+                if (word.isEmpty()) continue
+                out.addAll(bpe("\u2581$word"))
             }
         }
-        val ids = ArrayList<Int>()
-        var pos = n
-        while (pos > 0) {
-            ids.add(prevId[pos])
-            pos = prevStart[pos]
+        out.add(EOS)
+        return out.toIntArray()
+    }
+
+    private fun bpe(word: String): List<Int> {
+        val syms = ArrayList<String>()
+        var i = 0
+        while (i < word.length) {
+            val n = Character.charCount(word.codePointAt(i))
+            syms.add(word.substring(i, i + n))
+            i += n
         }
-        ids.reverse()
-        return (listOf(langId(srcLang)) + ids + listOf(EOS)).toIntArray()
+        while (syms.size > 1) {
+            var bestRank = Int.MAX_VALUE
+            var bestIdx = -1
+            for (k in 0 until syms.size - 1) {
+                val r = merges["${syms[k]} ${syms[k + 1]}"] ?: continue
+                if (r < bestRank) { bestRank = r; bestIdx = k }
+            }
+            if (bestIdx < 0) break
+            syms[bestIdx] = syms[bestIdx] + syms[bestIdx + 1]
+            syms.removeAt(bestIdx + 1)
+        }
+        return syms.map { pieceToId[it] ?: unkId }
     }
 
     fun decode(ids: List<Int>): String {
         val sb = StringBuilder()
         for (id in ids) {
-            if (id in specialIds || id !in vocab.indices) continue
-            sb.append(vocab[id])
+            if (id in specialIds || id < 0 || id >= idToPiece.size) continue
+            sb.append(idToPiece[id] ?: continue)
         }
         return sb.toString().replace('\u2581', ' ').trim()
     }

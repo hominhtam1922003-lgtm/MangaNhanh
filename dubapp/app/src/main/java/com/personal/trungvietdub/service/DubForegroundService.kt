@@ -15,6 +15,7 @@ import com.personal.trungvietdub.DubApp
 import com.personal.trungvietdub.MainActivity
 import com.personal.trungvietdub.R
 import com.personal.trungvietdub.data.Job
+import com.personal.trungvietdub.data.JobLog
 import com.personal.trungvietdub.data.JobRepository
 import com.personal.trungvietdub.data.JobStatus
 import com.personal.trungvietdub.data.OriginalAudioMode
@@ -55,8 +56,10 @@ class DubForegroundService : Service() {
     private suspend fun process(job: Job, mode: OriginalAudioMode) {
         var current = job.copy(status = JobStatus.RUNNING)
         repo.upsert(current)
-                try {
+        JobLog.append(this, job.id, "Dịch vụ nền khởi động (mode=${mode.name})")
+        try {
             val result = DubbingPipeline(this).run(
+                jobId = job.id,
                 sourceUri = Uri.parse(job.sourceUri),
                 displayName = "dub_${job.id}.mp4",
                 requestedMode = mode,
@@ -74,6 +77,8 @@ class DubForegroundService : Service() {
             )
         } catch (e: Throwable) {
             // Bắt cả Error (UnsatisfiedLinkError, OutOfMemoryError) để job báo lỗi thay vì app bị đóng
+            JobLog.append(this, job.id, "LỖI: ${e.javaClass.name}: ${e.message}\n" +
+                e.stackTrace.take(12).joinToString("\n") { "    at $it" })
             current = current.copy(
                 status = JobStatus.FAILED,
                 error = "${e.javaClass.simpleName}: ${e.message ?: "không rõ"}",

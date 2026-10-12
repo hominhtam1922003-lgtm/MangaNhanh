@@ -3,6 +3,7 @@ package com.personal.trungvietdub.pipeline
 import android.content.Context
 import android.net.Uri
 import com.personal.trungvietdub.data.AsrFiles
+import com.personal.trungvietdub.data.JobLog
 import com.personal.trungvietdub.data.ModelManager
 import com.personal.trungvietdub.data.OriginalAudioMode
 import com.personal.trungvietdub.data.Step
@@ -19,23 +20,30 @@ class DubbingPipeline(private val context: Context) {
     data class Result(val outputUri: Uri, val transcript: String, val effectiveMode: OriginalAudioMode)
 
     suspend fun run(
+        jobId: String,
         sourceUri: Uri,
         displayName: String,
         requestedMode: OriginalAudioMode,
         onProgress: (Step, Float, String) -> Unit,
         onTranscript: (String) -> Unit,
     ): Result = withContext(Dispatchers.Default) {
+        fun log(msg: String) = JobLog.append(context, jobId, msg)
+        log("Bắt đầu xử lý")
+        onProgress(Step.DECODE, 0f, "đang kiểm tra model")
         val mm = ModelManager(context)
         val asrFiles: AsrFiles = mm.asrFiles() ?: error("Chưa tải model nhận diện tiếng Trung")
         val ttsFiles: TtsFiles = mm.ttsFiles() ?: error("Chưa tải model giọng Việt")
         val work = File(context.cacheDir, "work/${System.currentTimeMillis()}").apply { mkdirs() }
+        log("Model sẵn sàng: ASR, TTS")
 
         try {
             // 1. Giải mã: 16 kHz mono cho ASR, 44.1 kHz stereo cho ghép
-            onProgress(Step.DECODE, 0f, "")
+            onProgress(Step.DECODE, 0.1f, "đang giải mã")
             val pcm = AudioIO.decode(context, sourceUri)
+            log("Giải mã: ${pcm.samples.size} mẫu, ${pcm.sampleRate} Hz, ${pcm.channels} kênh, peak=${"%.4f".format(peak(pcm.samples))}")
             val mono16 = AudioIO.convert(pcm, Segmenter.SR, 1)
             val stereo44 = AudioIO.convert(pcm, Composer.OUT_RATE, Composer.OUT_CH)
+            log("Mono 16 kHz: ${mono16.size} mẫu, peak=${"%.4f".format(peak(mono16))}")
             onProgress(Step.DECODE, 1f, "")
 
             // 2. Tách giọng gốc → nhạc nền (UVR MDX-NET). Lỗi thì dùng hạ âm lượng để không mất job.
@@ -44,12 +52,15 @@ class DubbingPipeline(private val context: Context) {
             if (mode == OriginalAudioMode.SEPARATE) {
                 onProgress(Step.SEPARATE, 0f, "")
                 val uvr = mm.uvrFile() ?: error("Chưa tải model tách giọng")
+                log("Bắt đầu tách giọng (UVR)")
                 try {
                     base = UvrSeparator(uvr).use { sep ->
                         sep.separate(stereo44) { f -> onProgress(Step.SEPARATE, f, "") }
                     }
+                    log("Tách giọng xong")
                     onProgress(Step.SEPARATE, 1f, "")
                 } catch (e: Throwable) {
+                    log("Tách giọng lỗi, chuyển sang hạ âm lượng: ${e.javaClass.simpleName}: ${e.message}")
                     mode = OriginalAudioMode.LOWER
                     base = stereo44
                     onProgress(Step.SEPARATE, 1f, "lỗi tách giọng, dùng hạ âm lượng: ${e.message}")
@@ -59,10 +70,15 @@ class DubbingPipeline(private val context: Context) {
             // 3. Tìm đoạn có lời nói
             onProgress(Step.SEGMENT, 0f, "")
             val spans = Segmenter.segment(mono16)
+            log("Tìm đoạn: ${spans.size} đoạn")
             onProgress(Step.SEGMENT, 1f, "${spans.size} đoạn")
+            if (spans.isEmpty()) {
+                error("Không tìm thấy đoạn có lời nói (peak=${"%.4f".format(peak(mono16))}, ${mono16.size} mẫu). Xem nhật ký để biết chi tiết.")
+            }
 
             // 4. Nhận diện tiếng Trung
             val texts = ArrayList<String>(spans.size)
+            log("Nhận diện tiếng Trung...")
             ChineseSpeechRecognizer(asrFiles).use { asr ->
                 spans.forEachIndexed { i, sp ->
                     val from = (sp.startMs * Segmenter.SR / 1000).toInt()
@@ -71,13 +87,16 @@ class DubbingPipeline(private val context: Context) {
                     onProgress(Step.ASR, (i + 1f) / spans.size, "")
                 }
             }
+            log("Nhận diện xong")
             val transcript = spans.indices.joinToString("\n") { i -> "[${fmt(spans[i].startMs)}] ${texts[i]}" }
             onTranscript(transcript)
 
             // 5. Dịch Trung → Việt bằng NLLB
             val translated = ArrayList<String>(spans.size)
             val nllb = mm.nllbFiles()
+            log("Dịch bằng NLLB: ${if (nllb != null) "có model" else "CHƯA có model"}")
             val translator: Translator = if (nllb != null) NllbTranslator(nllb) else UnavailableTranslator()
+            log("Tạo tokenizer/session NLLB xong")
             translator.use { tr ->
                 spans.indices.forEach { i ->
                     translated += if (texts[i].isBlank()) "" else tr.translate(texts[i])
@@ -86,6 +105,7 @@ class DubbingPipeline(private val context: Context) {
             }
 
             // 6. Giọng Việt cho từng đoạn, đặt đúng mốc thời gian
+            log("Dịch xong")
             val clips = ArrayList<Composer.Clip>()
             VietnameseTts(ttsFiles).use { tts ->
                 spans.indices.forEach { i ->
@@ -99,6 +119,7 @@ class DubbingPipeline(private val context: Context) {
                 }
             }
 
+            log("Tạo giọng Việt xong: ${clips.size} đoạn")
             // 7. Ghép nhạc nền + giọng Việt
             onProgress(Step.COMPOSE, 0f, "")
             val mixed = Composer.mix(base, clips, mode)
@@ -111,11 +132,18 @@ class DubbingPipeline(private val context: Context) {
             val mp4 = File(work, "out.mp4")
             VideoExporter.muxVideo(context, sourceUri, aac, mp4)
             val outUri = VideoExporter.saveToGallery(context, mp4, displayName)
+            log("Xuất MP4 xong")
             onProgress(Step.EXPORT, 1f, "")
             Result(outUri, transcript, mode)
         } finally {
             work.deleteRecursively()
         }
+    }
+
+    private fun peak(x: FloatArray): Float {
+        var m = 0f
+        for (v in x) { val a = if (v < 0f) -v else v; if (a > m) m = a }
+        return m
     }
 
     private fun fmt(ms: Long): String {

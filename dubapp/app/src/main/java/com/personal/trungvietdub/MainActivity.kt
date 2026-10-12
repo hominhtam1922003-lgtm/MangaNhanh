@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.collectAsState
+import com.personal.trungvietdub.data.JobLog
 import com.personal.trungvietdub.ui.HistoryScreen
 import com.personal.trungvietdub.ui.HomeScreen
 import com.personal.trungvietdub.ui.JobScreen
@@ -59,6 +60,7 @@ class MainActivity : ComponentActivity() {
                         )
                         is Nav.Job -> JobScreen(
                             job = jobs.firstOrNull { it.id == current.id },
+                            log = remember(jobs) { JobLog.tail(this@MainActivity, current.id) },
                             onBack = { nav = "home" },
                             onOpenOutput = { uri -> openVideo(Uri.parse(uri)) },
                         )

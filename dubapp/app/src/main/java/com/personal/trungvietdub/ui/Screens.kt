@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.personal.trungvietdub.data.Job
@@ -111,7 +112,7 @@ fun HomeScreen(
 }
 
 @Composable
-fun JobScreen(job: Job?, onBack: () -> Unit, onOpenOutput: (String) -> Unit) {
+fun JobScreen(job: Job?, log: String, onBack: () -> Unit, onOpenOutput: (String) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -128,6 +129,11 @@ fun JobScreen(job: Job?, onBack: () -> Unit, onOpenOutput: (String) -> Unit) {
         }
         if (job.status == JobStatus.FAILED) {
             Text("Lỗi: ${job.error ?: "không rõ"}", color = MaterialTheme.colorScheme.error)
+        }
+        Text("Trạng thái: ${job.status}", style = MaterialTheme.typography.bodySmall)
+        if (log.isNotBlank()) {
+            Text("Nhật ký:", fontWeight = FontWeight.SemiBold)
+            Text(log, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
         }
         if (job.transcript.isNotBlank()) {
             Text("Lời tiếng Trung đã nhận diện:", fontWeight = FontWeight.SemiBold)

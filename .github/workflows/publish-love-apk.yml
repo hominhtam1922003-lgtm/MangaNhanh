@@ -55,29 +55,25 @@ jobs:
         env:
           ARTIFACT_NAME: HaiTraiTim-1.2.0-APK
         run: |
-          set -euo pipefail
+          exec > >(tee /tmp/love-download.log) 2>&1
           mkdir -p release-apk
-          for attempt in 1 2 3 4; do
-            ARTIFACT_ID=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID/artifacts" --jq ".artifacts[] | select(.name == \"$ARTIFACT_NAME\" and .expired == false) | .id" | head -1)
-            if [ -n "$ARTIFACT_ID" ]; then
-              if curl -sSL --retry 3 --retry-all-errors --retry-delay 5 \
+          for attempt in 1 2 3 4 5; do
+            artifact_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID/artifacts" \
+              --jq ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | select(.expired == false) | .id" | head -1)
+            echo "Lần $attempt: artifact=$artifact_id"
+            if [ -n "$artifact_id" ]; then
+              code=$(curl -sSL --retry 3 --retry-all-errors --retry-delay 5 -w '%{http_code}' \
                 -H "Authorization: Bearer $GH_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" \
-                -o /tmp/verified-artifact.zip; then
-                if python3 - <<'PY'
-          import zipfile
-          with zipfile.ZipFile("/tmp/verified-artifact.zip") as archive:
-              archive.extractall("release-apk")
-          PY
-                then
-                  echo "Đã tải artifact $ARTIFACT_ID của lần chạy $BUILD_RUN_ID"
-                  ls -l release-apk
-                  exit 0
-                fi
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" \
+                -o /tmp/verified-artifact.zip)
+              echo "HTTP $code · $(stat -c%s /tmp/verified-artifact.zip 2>/dev/null || echo 0) byte"
+              if [ "$code" = "200" ] && python3 -c "import zipfile; zipfile.ZipFile('/tmp/verified-artifact.zip').extractall('release-apk')"; then
+                echo "Đã tải và giải nén artifact $artifact_id của run $BUILD_RUN_ID"
+                ls -l release-apk
+                exit 0
               fi
             fi
-            echo "Chưa lấy được artifact, thử lại sau 20 giây (lần $attempt/4)…"
             sleep 20
           done
           echo "Không tải được artifact đã kiểm chứng." >&2
@@ -124,10 +120,10 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const path = '/tmp/love-publish.log';
+            const paths = ['/tmp/love-download.log', '/tmp/love-publish.log'].filter((file) => fs.existsSync(file));
             await github.rest.checks.create({
               ...context.repo, head_sha: context.sha,
               name: 'Love APK publication diagnostics', status: 'completed', conclusion: 'neutral',
               output: { title: 'Nhật ký đăng APK Hai Trái Tim', summary: 'APK không build lại.',
-                text: fs.existsSync(path) ? fs.readFileSync(path, 'utf8').slice(-50000) : 'Chưa chạy bước đăng Release.' }
+                text: paths.length ? paths.map((file) => fs.readFileSync(file, 'utf8')).join('\n').slice(-50000) : 'Chưa chạy bước tải hoặc đăng Release.' }
             });

@@ -9,7 +9,7 @@ on:
       run_id:
         description: ID lần build-apk thành công trên nhánh làm việc
         required: true
-        default: '38386193021'
+        default: '38392914401'
         type: string
 
 permissions:
@@ -31,7 +31,7 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38386193021' }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38392914401' }}
     steps:
       - name: Kiểm tra nguồn APK đã build thành công
         id: verify
@@ -48,7 +48,7 @@ jobs:
           assert run['path'] == '.github/workflows/build-apk.yml', 'Sai workflow build'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f"sha={run['head_sha']}\n")
-              output.write(f"tag=lich-nhac-v1.2.0-test-{run['head_sha'][:7]}\n")
+              output.write(f"tag=lich-nhac-v1.3.0-test-{run['head_sha'][:7]}\n")
           PY
       - name: Lấy APK đã kiểm chứng, không build hoặc đổi chữ ký
         uses: actions/download-artifact@v4
@@ -67,9 +67,9 @@ jobs:
               assert 'AndroidManifest.xml' in names and 'classes.dex' in names, 'Không phải APK Android'
               assert apk.testzip() is None, 'APK bị hỏng'
           PY
-          mv release-apk/app-release.apk release-apk/LichNhac-1.2.0.apk
+          mv release-apk/app-release.apk release-apk/LichNhac-1.3.0.apk
           cd release-apk
-          sha256sum LichNhac-1.2.0.apk > LichNhac-1.2.0.apk.sha256
+          sha256sum LichNhac-1.3.0.apk > LichNhac-1.3.0.apk.sha256
       # Nếu token runner không tạo được tag ở commit đã đổi workflow, có thể
       # tạo draft Release bằng gh, rồi workflow chỉ tải asset vào draft đó.
       - name: Đăng bản thử nghiệm và file APK trực tiếp
@@ -79,29 +79,29 @@ jobs:
         run: |
           exec > >(tee /tmp/lich-nhac-publish.log) 2>&1
           cat > /tmp/release-notes.md <<EOF
-          APK thử nghiệm **Lịch Nhắc 1.2.0**, dành cho **Android 7.0+**.
+          APK thử nghiệm **Lịch Nhắc 1.3.0**, dành cho **Android 7.0+**.
 
-          Tải file **LichNhac-1.2.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP hoặc đăng nhập GitHub đối với repository công khai.
+          Tải file **LichNhac-1.3.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP hoặc đăng nhập GitHub đối với repository công khai.
 
           APK được lấy nguyên vẹn từ [lần build thành công](https://github.com/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID), không build lại hoặc thay chữ ký.
           Commit nguồn: \`$VERIFIED_SHA\`.
 
-          Bản sửa: UI sáng/tối và ngang/dọc gọn hơn, âm lịch trong từng ô, giữ ghép dấu tiếng Việt, xác nhận lưu/đọc lại key, dự báo 24 giờ và thông số chi tiết, báo thức chuông lặp với Dừng/Hoãn 5 hoặc 10 phút.
+          Trợ lý GroqCloud chat nhiều lượt, key riêng gsk_…, khám phá/chuyển mô hình khi bị ngừng, lịch sử SQLite, sao chép và chuyển tin nhắn sang form tạo công việc do người dùng xác nhận.
 
-          CI: analyze không lỗi, 73 kiểm thử Flutter đạt, unit test chính sách báo thức đạt, 2 kiểm thử Android 15 emulator đạt (AlarmManager → service → MediaPlayer đang phát, hoãn và xếp hàng). Chưa kiểm chứng âm thanh thực tế/OEM, GPS hoặc key Gemini của bạn trên máy thật.
+          85 kiểm thử Flutter, native unit và 2 kiểm thử báo thức Android 15 emulator đạt. Chat dùng mock API trong kiểm thử; chưa xác thực bằng key thật của bạn. Lấy key tại https://console.groq.com/keys — key Gemini không dùng ở đây.
 
-          Bật nhắc → Báo thức. Vào Tiện ích → Báo thức & quyền Android để cấp quyền exact (Android 12+), thông báo và toàn màn hình nếu cần; kiểm tra âm lượng báo thức. Android bắt buộc thông báo điều khiển cho dịch vụ phát chuông.
+          Khi gửi: tối đa 20 tin gần đây và câu hỏi gửi tới GroqCloud; lịch chỉ tham chiếu khi bạn cho phép. Không có tự ghi việc/đặt chuông hoặc tự bật thanh toán. AI có thể sai.
 
-          **Cảnh báo cài đặt:** APK thử mới có thể khác chữ ký APK 1.1 và không cài đè được. Gỡ app sẽ mất dữ liệu/key/cài đặt; đừng gỡ nếu chưa chấp nhận mất dữ liệu. Không có đồng bộ/sao lưu tự động.
+          **Cảnh báo cài đặt:** có thể khác chữ ký APK cũ và không cài đè được. Gỡ app sẽ mất công việc/key/lịch sử/cài đặt; không gỡ nếu chưa chấp nhận mất dữ liệu. Không có sao lưu/sync tự động.
 
-          **Dùng debug signing để thử nội bộ, không phải bản ký phát hành Google Play.** Dự báo thời tiết không bảo đảm chính xác 100%; Android có thể trì hoãn thông báo nền. Gemini API key chỉ nhập trong ứng dụng, không có key nhúng trong APK.
+          **Dùng debug signing để thử nội bộ, không phải bản ký phát hành Google Play.** Dự báo thời tiết không bảo đảm chính xác 100%; Android có thể trì hoãn thông báo nền. GroqCloud API key chỉ nhập trong ứng dụng, không có key nhúng trong APK.
           EOF
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" release-apk/LichNhac-1.2.0.apk release-apk/LichNhac-1.2.0.apk.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$RELEASE_TAG" release-apk/LichNhac-1.3.0.apk release-apk/LichNhac-1.3.0.apk.sha256 --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$RELEASE_TAG" release-apk/LichNhac-1.2.0.apk release-apk/LichNhac-1.2.0.apk.sha256 --target "$VERIFIED_SHA" --title "Lịch Nhắc 1.2.0 — APK thử nghiệm" --notes-file /tmp/release-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
+            gh release create "$RELEASE_TAG" release-apk/LichNhac-1.3.0.apk release-apk/LichNhac-1.3.0.apk.sha256 --target "$VERIFIED_SHA" --title "Lịch Nhắc 1.3.0 — APK thử nghiệm" --notes-file /tmp/release-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
           fi
-          echo "APK tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/LichNhac-1.2.0.apk" >> "$GITHUB_STEP_SUMMARY"
+          echo "APK tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/LichNhac-1.3.0.apk" >> "$GITHUB_STEP_SUMMARY"
       - name: Công bố chẩn đoán đăng APK
         if: always()
         uses: actions/github-script@v8

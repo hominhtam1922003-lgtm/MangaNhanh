@@ -1,17 +1,17 @@
 # Lịch Nhắc 1.3
 
-**[Tải thẳng LichNhac-1.2.0.apk — không cần giải nén](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/lich-nhac-v1.2.0-test-d783451/LichNhac-1.2.0.apk)**
+**[Tải trực tiếp LichNhac-1.3.0.apk — GroqCloud chat](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/lich-nhac-v1.3.0-test-e241f0f/LichNhac-1.3.0.apk)**
 
-[Release 1.2.0 thử nghiệm](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/tag/lich-nhac-v1.2.0-test-d783451) · [Build đã kiểm chứng #38386193021](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38386193021).
+[Release 1.3](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/tag/lich-nhac-v1.3.0-test-e241f0f) · [Build nguồn thành công #38392914401](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38392914401).
 
-APK được lấy nguyên vẹn từ build thành công của commit `d783451`, không build lại khi đăng Release. Dùng debug signing để cài thử, không phải bản ký Google Play. **Có thể không cài đè APK 1.1 vì khác chữ ký. Không gỡ app nếu chưa chấp nhận mất công việc/key/cài đặt.**
+APK lấy nguyên vẹn từ commit `e241f0f`, không build lại khi đăng Release. Debug signing để thử, không ký Google Play. **Có thể không cài đè được APK cũ do khác chữ ký. Gỡ app sẽ mất công việc/key/lịch sử/cài đặt; không gỡ nếu chưa chấp nhận mất dữ liệu.**
 
-Ứng dụng Android Flutter bằng tiếng Việt: công việc, lịch tháng/âm lịch, ngày lễ Việt Nam, thời tiết theo tọa độ và trợ lý lập kế hoạch Gemini.
+Ứng dụng Android Flutter bằng tiếng Việt: công việc, lịch tháng/âm lịch, ngày lễ Việt Nam, thời tiết theo tọa độ và trợ lý chat GroqCloud.
 
-- Tên: **Lịch Nhắc** · ID: **`vn.lichnhac.app`** · phiên bản **1.2.0+3**.
+- Tên: **Lịch Nhắc** · ID: **`vn.lichnhac.app`** · phiên bản **1.3.0+4**.
 - **Android 7.0 / API 24 trở lên**, theo lựa chọn nâng cấp của người dùng. Bản này không còn hỗ trợ API 23, để dùng Flutter stable và thư viện hiện đại.
-- Công việc, cài đặt và lịch lễ lưu trên máy. **Thời tiết và Gemini cần internet**.
-- Không có backend riêng hoặc đăng nhập ứng dụng. Thời tiết không cần API key. Gemini tùy chọn, dùng key của riêng người dùng và quota của Google.
+- Công việc, cài đặt và lịch lễ lưu trên máy. **Thời tiết và trợ lý AI cần internet**.
+- Không có backend riêng hoặc đăng nhập ứng dụng. Thời tiết không cần API key. GroqCloud tùy chọn, dùng key của riêng người dùng và hạn mức nhà cung cấp.
 
 ## Trợ lý AI GroqCloud — 1.3
 
@@ -22,7 +22,7 @@ APK được lấy nguyên vẹn từ build thành công của commit `d783451`,
 - Khi bấm Gửi: tối đa 20 tin gần nhất (giới hạn ngữ cảnh 16.000 ký tự) và câu hỏi ≤4.000 ký tự gửi cho GroqCloud. Có thể chọn cho AI tham khảo 30 việc chưa xong, chỉ tiêu đề/ngày/giờ, không ghi chú/GPS/thời tiết.
 - Lịch sử tối đa 100 tin lưu SQLite trên máy; không mã hóa riêng, không sync tự động. Xóa cuộc trò chuyện có xác nhận, không xóa dữ liệu nhà cung cấp đã nhận.
 - Sao chép tin nhắn hoặc chuyển sang form tạo việc; phải nhập tiêu đề và bấm Lưu. AI không tự ghi công việc, đặt chuông hay truy cập web/GPS.
-- API có hạn mức/điều khoản riêng. AI có thể sai. Bản mới cần build/test lại; liên kết APK 1.2 ở trên là bản cũ, chưa có GroqCloud.
+- API có hạn mức/điều khoản riêng. AI có thể sai. APK 1.3 đã build/test; các bản 1.2 trở về trước chưa có chat GroqCloud.
 
 ## Thay đổi 1.2
 
@@ -213,6 +213,15 @@ scripts/build-apk.sh
 test/         # Quá hạn/lọc, SQLite, notification, thời tiết HTTP/rule, lịch âm, AI JSON, widget
 legacy-web/   # MangaNhanh web cũ, không tham gia build Flutter
 ```
+
+## Kiểm chứng 1.3 — 13/10/2026
+
+Nguồn `e241f0f3460b5d2df3af5ea6b3620f8e4293a09e`, [run #38392914401](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38392914401): **success, 9 phút 28 giây**.
+
+- Analyze thành công, không diff định dạng Dart.
+- **85 tests passed**: thêm Groq key tách biệt, đọc lại, chat UTF-8/endpoint/header/ngữ cảnh, lọc model, tự đổi model ngừng (400/404), giới hạn retry, 429 không retry, giới hạn lịch sử; UI 320×640/chữ 1,5 lần/bàn phím, gửi/nhận và lưu SQLite không tự tạo việc.
+- APK release build thành công (**62,8 MB** theo Flutter), native unit và **2 Android 15 emulator alarm tests** đạt.
+- **Test chat dùng API mock/FakeGroq, không phải key tài khoản thật.** Cần nhập key hợp lệ trên máy và kiểm tra quyền/hạn mức. Không khẳng định đã xác thực với GroqCloud bằng key của người dùng.
 
 ## Kiểm chứng 1.2 — 13/10/2026
 

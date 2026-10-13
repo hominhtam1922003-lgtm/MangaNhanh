@@ -1,10 +1,10 @@
 # Lịch Nhắc 1.2
 
-**Bản APK cũ 1.1 (không chứa sửa lỗi 1.2 bên dưới):** [Tải thẳng LichNhac-1.1.0.apk — không cần giải nén](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/lich-nhac-v1.1.0-test-56783aa/LichNhac-1.1.0.apk)
+**[Tải thẳng LichNhac-1.2.0.apk — không cần giải nén](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/lich-nhac-v1.2.0-test-d783451/LichNhac-1.2.0.apk)**
 
-[Trang Release thử nghiệm](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/tag/lich-nhac-v1.1.0-test-56783aa) · [Lần build đã kiểm chứng](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38373854418).
+[Release 1.2.0 thử nghiệm](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/tag/lich-nhac-v1.2.0-test-d783451) · [Build đã kiểm chứng #38386193021](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38386193021).
 
-File APK 62,2 MB được lấy nguyên vẹn từ build đã kiểm chứng. Release của repository công khai cho phép tải APK không cần đăng nhập GitHub; artifact ZIP của Actions vẫn được giữ để dự phòng.
+APK được lấy nguyên vẹn từ build thành công của commit `d783451`, không build lại khi đăng Release. Dùng debug signing để cài thử, không phải bản ký Google Play. **Có thể không cài đè APK 1.1 vì khác chữ ký. Không gỡ app nếu chưa chấp nhận mất công việc/key/cài đặt.**
 
 Ứng dụng Android Flutter bằng tiếng Việt: công việc, lịch tháng/âm lịch, ngày lễ Việt Nam, thời tiết theo tọa độ và trợ lý lập kế hoạch Gemini.
 
@@ -203,7 +203,24 @@ test/         # Quá hạn/lọc, SQLite, notification, thời tiết HTTP/rule,
 legacy-web/   # MangaNhanh web cũ, không tham gia build Flutter
 ```
 
-## Kiểm chứng thực tế — 13/10/2026
+## Kiểm chứng 1.2 — 13/10/2026
+
+Commit **`d783451c0cc3867f9f610755df28827e4440f856`**, [run #38386193021](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38386193021): **success, 9 phút 7 giây**.
+
+| Bước | Kết quả thật |
+|---|---|
+| Flutter 3.47.7 / Dart 3.13.5 | Stable, Java 17 |
+| Định dạng | Không có diff `lib` / `test` |
+| Analyze | **No issues found** |
+| Flutter test | **73 tests passed**, gồm IME ghép dấu/caret, storage key, migration alarm, permission fallback, ngang 1440×800 và màn nhỏ/chữ lớn |
+| Build release APK | Thành công, **62,6 MB** theo Flutter |
+| Native unit policy | `:app:testReleaseUnitTest` thành công, kiểm tra giữ hoãn/marker đã phát/đổi hạn/múi giờ |
+| Android 15 emulator | **OK (2 tests), 19,541 giây**; lịch thật AlarmManager chạy đến receiver/service, MediaPlayer báo đang phát, hoãn 5 phút, đồng bộ/restore giữ hoãn, hai chuông xếp hàng và hủy |
+| API thời tiết thật | **HTTP 200**, chấp nhận các tham số mới (gió giật, áp suất, mưa tổng, UV, mọc/lặn) |
+
+Emulator kiểm tra trạng thái MediaPlayer, **không chứng minh loa điện thoại/OEM, DND, reboot vật lý hay độ đúng của dự báo**. Chưa dùng key Google thật của người dùng; key test là chuỗi giả, storage/network được mock. Không đo FPS trên máy thật. Khôi phục lịch đã được kiểm tra bằng gọi `restore`, chưa mô phỏng reboot hệ điều hành.
+
+## Kiểm chứng bản cũ 1.1 — 13/10/2026
 
 Môi trường Arena thiếu Flutter/Dart và không tải được SDK từ Google, nên đã chuyển kiểm chứng thật sang **GitHub Actions**, không thay Flutter bằng app giả lập.
 

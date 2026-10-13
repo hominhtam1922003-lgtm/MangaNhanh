@@ -48,8 +48,9 @@ class ForecastChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 24,
+            runSpacing: 8,
             children: [
               Text('Cao ${hi.toStringAsFixed(1)}°'),
               Text('Thấp ${lo.toStringAsFixed(1)}°'),

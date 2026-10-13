@@ -65,7 +65,7 @@ void main() {
   );
   test('Chi tiết mới đọc dữ liệu thật, cache cũ trả null', () {
     final raw = fixture(now);
-    (raw['current'] as Map).addAll({
+    (raw['current'] as Map<String, dynamic>).addAll({
       'wind_gusts_10m': 31,
       'wind_direction_10m': 170,
       'precipitation': .4,
@@ -73,7 +73,7 @@ void main() {
       'surface_pressure': 1005,
       'is_day': 0,
     });
-    (raw['daily'] as Map).addAll({
+    (raw['daily'] as Map<String, dynamic>).addAll({
       'precipitation_sum': [3.2],
       'wind_speed_10m_max': [25],
       'wind_gusts_10m_max': [42],

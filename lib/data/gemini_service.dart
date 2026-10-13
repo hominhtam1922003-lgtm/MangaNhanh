@@ -90,8 +90,9 @@ class GeminiService {
                   as Map<String, dynamic>;
           final error = data['error'] as Map?;
           for (final detail in (error?['details'] as List? ?? [])) {
-            if (detail is Map && detail['reason'] is String)
+            if (detail is Map && detail['reason'] is String) {
               reason = detail['reason'] as String;
+            }
           }
         } catch (_) {
           /* Không hiển thị response thô có thể chứa dữ liệu riêng tư. */

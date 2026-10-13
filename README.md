@@ -269,10 +269,12 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-**https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.0.0-test-0aa4d35/HaiTraiTim-1.0.0.apk**
+**https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.1.0-test-49375da/HaiTraiTim-1.1.0.apk**
 
-- `HaiTraiTim-1.0.0.apk` · **55.060.797 byte** · SHA256 `662baa28f6999b5f133775d7b80cef0b6afda85402b247cca5a5f67e84f66781` · kèm file `.sha256` trong Assets.
-- Lấy nguyên vẹn từ [lần build thành công 38399009546](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38399009546) (commit `f593650`), tải lên Release bằng [workflow đăng APK 38402603441](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38402603441), không build lại và không đổi chữ ký.
-- CI đã chạy: **14 kiểm thử Node** (logic lịch + PostgreSQL thật qua PGlite: RLS, ghép đôi, hạn mã, thu hồi chia sẻ xóa lời nhắc, nhật ký/ảnh riêng), `tsc` sạch, Prettier sạch, `expo export` Android + iOS, Gradle `assembleRelease` cho `arm64-v8a` và `armeabi-v7a`.
-- **Chưa kiểm chứng:** hai điện thoại thật, FCM/APNs, Face ID thật, FPS thực tế. Dự báo chu kỳ chỉ là phép tính lịch, **không dùng để tránh thai**. APK đang dùng **chữ ký debug của mẫu Expo** — chỉ để thử, không phát hành cửa hàng; cấu hình 4 secret keystore trong Actions để ký bằng khóa riêng.
-- APK **không nhúng máy chủ**: bạn cần tự tạo dự án Supabase, chạy `supabase/migrations/001_love.sql`, triển khai Edge Function + cron (`npm run provision`), rồi nhập URL và khóa công khai khi mở app. Không nhập khóa bí mật/`service_role`/mật khẩu vào ứng dụng hoặc chat.
+- `HaiTraiTim-1.1.0.apk` · **55.186.153 byte** · SHA256 `0df84b96399475dcb43d22f3414a9066d30f73d4a55d6b8f338e6b95170494de` · kèm file `.sha256` trong Assets.
+- Bản 1.1.0 thêm **chế độ chạy hoàn toàn trên máy**: mở app chọn “Dùng trên máy này” là dùng được ngay, không cần tài khoản, không cần máy chủ, không cần Internet. Hai máy nối nhau bằng mã QR chia đoạn hoặc tệp dữ liệu JSON (gồm cả nhật ký và ảnh nhỏ). Vẫn giữ chế độ đồng bộ Supabase và đổi qua lại trong Cài đặt.
+- Lấy nguyên vẹn từ [lần build thành công 38404844843](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38404844843) (commit `49375da`), tải lên Release bằng [workflow đăng APK 38406849237](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38406849237), không build lại và không đổi chữ ký.
+- CI đã chạy: **23 kiểm thử Node** (logic lịch; reducer chế độ trên máy; mã QR ghép/đoạn/hỏng; ghép nối lại không nhân đôi kỷ niệm; lời nhắc trước kỳ/đầu kỳ/rụng trứng/kỷ niệm; PostgreSQL thật bằng PGlite cho RLS, ghép đôi, hạn mã, thu hồi chia sẻ xóa lời nhắc), `tsc` sạch, Prettier sạch, `expo export` Android + iOS, Gradle `assembleRelease` cho `arm64-v8a` và `armeabi-v7a`.
+- **Chưa kiểm chứng:** hai điện thoại thật, quét QR bằng camera thật, quyền thông báo trên máy thật, Face ID thật, FPS thực tế, FCM/APNs. Dự báo chu kỳ chỉ là phép tính lịch, **không dùng để tránh thai**.
+- APK dùng **chữ ký debug của mẫu Expo** — chỉ để thử, không phát hành cửa hàng; cấu hình 4 secret keystore trong Actions để ký bằng khóa riêng. **Gỡ ứng dụng hoặc xóa dữ liệu ứng dụng sẽ mất dữ liệu trên máy**, hãy xuất tệp dự phòng trước.
+- Chế độ đồng bộ (tùy chọn) cần bạn tự tạo dự án Supabase, chạy `supabase/migrations/001_love.sql`, triển khai Edge Function + cron (`npm run provision`), rồi nhập URL và khóa công khai khi mở app. Không nhập khóa bí mật/`service_role`/mật khẩu vào ứng dụng hoặc chat.

@@ -51,13 +51,37 @@ jobs:
               output.write(f"sha={run['head_sha']}\n")
               output.write(f"tag=hai-trai-tim-v1.2.0-test-{run['head_sha'][:7]}\n")
           PY
-      - name: Lấy APK đã kiểm chứng, không build lại và không đổi chữ ký
-        uses: actions/download-artifact@v4
-        with:
-          name: HaiTraiTim-1.2.0-APK
-          path: release-apk
-          run-id: ${{ env.BUILD_RUN_ID }}
-          github-token: ${{ github.token }}
+      - name: Lấy APK đã kiểm chứng qua REST API (không build lại, không đổi chữ ký)
+        env:
+          ARTIFACT_NAME: HaiTraiTim-1.2.0-APK
+        run: |
+          set -euo pipefail
+          mkdir -p release-apk
+          for attempt in 1 2 3 4; do
+            ARTIFACT_ID=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID/artifacts" --jq ".artifacts[] | select(.name == \"$ARTIFACT_NAME\" and .expired == false) | .id" | head -1)
+            if [ -n "$ARTIFACT_ID" ]; then
+              if curl -sSL --retry 3 --retry-all-errors --retry-delay 5 \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" \
+                -o /tmp/verified-artifact.zip; then
+                if python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile("/tmp/verified-artifact.zip") as archive:
+              archive.extractall("release-apk")
+          PY
+                then
+                  echo "Đã tải artifact $ARTIFACT_ID của lần chạy $BUILD_RUN_ID"
+                  ls -l release-apk
+                  exit 0
+                fi
+              fi
+            fi
+            echo "Chưa lấy được artifact, thử lại sau 20 giây (lần $attempt/4)…"
+            sleep 20
+          done
+          echo "Không tải được artifact đã kiểm chứng." >&2
+          exit 1
       - name: Kiểm tra gói APK và băm SHA256
         run: |
           test -s release-apk/HaiTraiTim-1.2.0.apk

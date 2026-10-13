@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 
@@ -10,24 +11,30 @@ class ReminderService {
     await NotificationHub.plugin.cancelAll();
   }
 
+  String _signature(Task task) =>
+      'task:${task.id}:${base64Url.encode(utf8.encode(jsonEncode({'title': task.title, 'date': localDateKey(task.dueDate), 'time': task.dueMinutes, 'category': task.category.name, 'timezone': tz.local.name})))}';
+
   Future<String?> reconcile(
     List<Task> tasks, {
     bool requestPermission = false,
   }) async {
     try {
-      await NotificationHub.cancelNamespace('task:');
       await NotificationHub.initialize(timezone: true);
       final android = NotificationHub.plugin
           .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin
           >();
       if (requestPermission && !await NotificationHub.requestPermission()) {
-        return 'Đã lưu công việc. Quyền thông báo chưa được cấp; '
-            'bạn có thể bật trong cài đặt Android.';
+        await NotificationHub.cancelNamespace('task:');
+        return 'Đã lưu công việc. Quyền thông báo chưa được cấp; bạn có thể bật trong cài đặt Android.';
       }
       final now = tz.TZDateTime.now(tz.local);
       final enabled = await android?.areNotificationsEnabled() ?? true;
-      var hasFutureReminder = false;
+      final dates = <int, tz.TZDateTime>{};
+      final byId = {
+        for (final task in tasks)
+          if (task.id != null) task.id!: task,
+      };
       for (final task in tasks) {
         if (!task.reminder || task.completed || task.dueMinutes == null) {
           continue;
@@ -40,19 +47,58 @@ class ReminderService {
           task.dueMinutes! ~/ 60,
           task.dueMinutes! % 60,
         );
-        if (!date.isAfter(now)) {
+        if (date.isAfter(now)) dates[task.id!] = date;
+      }
+      if (!enabled) {
+        await NotificationHub.cancelNamespace('task:');
+        return dates.isEmpty
+            ? null
+            : 'Thông báo đang bị tắt trong cài đặt Android. Dữ liệu vẫn được lưu.';
+      }
+      final pending = await NotificationHub.plugin
+          .pendingNotificationRequests();
+      final unchanged = <int>{};
+      for (final notification in pending) {
+        if (!(notification.payload?.startsWith('task:') ?? false)) {
           continue;
         }
-        hasFutureReminder = true;
-        if (!enabled) {
+        final task = byId[notification.id];
+        if (task != null &&
+            dates.containsKey(notification.id) &&
+            notification.payload == _signature(task)) {
+          unchanged.add(notification.id);
+        } else {
+          await NotificationHub.plugin.cancel(id: notification.id);
+        }
+      }
+      // Giữ nhắc đã hiện cho việc chưa xong; hủy khi xóa, hoàn thành hoặc thay hạn.
+      for (final notification
+          in await NotificationHub.plugin.getActiveNotifications()) {
+        if (notification.channelId != 'task_reminders' &&
+            !(notification.payload?.startsWith('task:') ?? false)) {
           continue;
         }
+        final task = byId[notification.id];
+        if (task == null ||
+            task.completed ||
+            !task.reminder ||
+            notification.payload != _signature(task)) {
+          if (notification.id != null) {
+            await NotificationHub.plugin.cancel(id: notification.id!);
+          }
+        }
+      }
+      for (final entry in dates.entries) {
+        if (unchanged.contains(entry.key)) {
+          continue;
+        }
+        final task = byId[entry.key]!;
         await NotificationHub.plugin.zonedSchedule(
           id: task.id!,
           title: task.title,
           body:
               'Đến hạn lúc ${displayTime(task.dueMinutes!)} • ${task.category.label}',
-          scheduledDate: date,
+          scheduledDate: entry.value,
           notificationDetails: const NotificationDetails(
             android: AndroidNotificationDetails(
               'task_reminders',
@@ -64,16 +110,12 @@ class ReminderService {
             ),
           ),
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-          payload: 'task:${task.id}',
+          payload: _signature(task),
         );
-      }
-      if (!enabled && hasFutureReminder) {
-        return 'Thông báo đang bị tắt trong cài đặt Android. Dữ liệu vẫn được lưu.';
       }
       return null;
     } catch (_) {
-      return 'Dữ liệu đã lưu, nhưng chưa thể cập nhật nhắc việc. '
-          'Hãy mở lại ứng dụng và kiểm tra quyền thông báo.';
+      return 'Dữ liệu đã lưu, nhưng chưa thể cập nhật nhắc việc. Hãy mở lại ứng dụng và kiểm tra quyền thông báo.';
     }
   }
 }

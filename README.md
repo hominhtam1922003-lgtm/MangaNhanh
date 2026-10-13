@@ -78,7 +78,7 @@ SQLite `lich_nhac.db`, schema **v2**: v1 tạo bảng công việc; v2 thêm cà
 
 - Ngày hạn lưu `YYYY-MM-DD` địa phương; giờ lưu số phút từ 00:00. Không có giờ: quá hạn từ ngày tiếp theo. Có giờ: quá hạn khi thời điểm đã qua. Đã xong: không quá hạn.
 - Lịch nhắc đọc múi giờ thiết bị, dùng IANA `timezone`, xử lý GMT cố định; không xin quyền báo thức chính xác.
-- Thông báo công việc, lễ và thời tiết có namespace/kênh riêng, không hủy nhầm khi sửa việc.
+- Thông báo công việc, lễ và thời tiết có namespace/kênh riêng, không hủy nhầm khi sửa việc. Nhắc công việc chỉ đồng bộ phần thay đổi, không hủy/lên lịch lại toàn bộ danh sách mỗi lần sửa.
 - Công việc không tự đồng bộ sang máy khác. Android backup bị tắt. Gỡ/xóa dữ liệu app làm mất dữ liệu.
 - **Xóa toàn bộ dữ liệu** có xác nhận, bao gồm công việc, cài đặt, vị trí, cache, lịch nhắc, tác vụ nền và Gemini key.
 - Để giữ dữ liệu khi cài cập nhật, giữ application ID và chữ ký APK.

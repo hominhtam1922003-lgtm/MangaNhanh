@@ -16,6 +16,7 @@ void main() {
   late bool enabled;
   late String zone;
   late ReminderService service;
+  late List<Map<String, dynamic>> pending;
 
   setUp(() {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
@@ -25,9 +26,26 @@ void main() {
     enabled = true;
     zone = 'Asia/Ho_Chi_Minh';
     service = ReminderService();
+    pending = [
+      {'id': 1, 'title': 'Nhắc việc', 'body': '', 'payload': 'task:1'},
+      {'id': 1500000001, 'title': 'Lễ', 'body': '', 'payload': 'holiday:1'},
+    ];
     messenger.setMockMethodCallHandler(timezone, (_) async => zone);
     messenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
+      if (call.method == 'cancel') {
+        pending.removeWhere((p) => p['id'] == (call.arguments as Map)['id']);
+      }
+      if (call.method == 'zonedSchedule') {
+        final args = call.arguments as Map;
+        pending.removeWhere((p) => p['id'] == args['id']);
+        pending.add({
+          'id': args['id'],
+          'title': args['title'],
+          'body': args['body'],
+          'payload': args['payload'],
+        });
+      }
       return switch (call.method) {
         'initialize' => true,
         'requestNotificationsPermission' => granted,
@@ -40,10 +58,7 @@ void main() {
             'payload': 'weather:rain',
           },
         ],
-        'pendingNotificationRequests' => [
-          {'id': 1, 'title': 'Nhắc việc', 'body': '', 'payload': 'task:1'},
-          {'id': 1500000001, 'title': 'Lễ', 'body': '', 'payload': 'holiday:1'},
-        ],
+        'pendingNotificationRequests' => pending,
         _ => null,
       };
     });
@@ -154,6 +169,20 @@ void main() {
       expect(ids, isNot(contains(1600000001)));
     },
   );
+
+  test('Không hủy hoặc lên lịch lại các việc không thay đổi', () async {
+    final task = futureTask();
+    await service.reconcile([task]);
+    calls.clear();
+    await service.reconcile([task]);
+    expect(calls.where((c) => c.method == 'zonedSchedule'), isEmpty);
+    expect(
+      calls.where(
+        (c) => c.method == 'cancel' && (c.arguments as Map)['id'] == 1,
+      ),
+      isEmpty,
+    );
+  });
 
   test('Đổi múi giờ và múi giờ GMT cố định', () async {
     await service.reconcile([futureTask()]);

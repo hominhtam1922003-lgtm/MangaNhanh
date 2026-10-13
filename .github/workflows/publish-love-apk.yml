@@ -1,0 +1,108 @@
+name: Đăng APK Hai Trái Tim tải trực tiếp
+
+on:
+  push:
+    branches: [arena/6f7cfa08-manganhanh]
+    paths: [.github/workflows/publish-love-apk.yml]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: ID lần chạy "APK Hai Trái Tim" đã thành công
+        required: true
+        default: '38400739817'
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+  checks: write
+
+concurrency:
+  group: publish-love-apk
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/arena/6f7cfa08-manganhanh'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38400739817' }}
+    steps:
+      - name: Kiểm tra nguồn APK đã build thành công
+        id: verify
+        run: |
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID" > /tmp/love-run.json
+          python3 - <<'PY'
+          import json, os
+          with open('/tmp/love-run.json') as stream:
+              run = json.load(stream)
+          assert run['status'] == 'completed' and run['conclusion'] == 'success', 'Build chưa thành công'
+          assert run['head_branch'] == 'arena/6f7cfa08-manganhanh', 'Sai nhánh nguồn APK'
+          assert run['head_repository']['full_name'] == os.environ['GITHUB_REPOSITORY'], 'Sai repository'
+          assert run['path'] == '.github/workflows/build-couple-apk.yml', 'Sai workflow build'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f"sha={run['head_sha']}\n")
+              output.write(f"tag=hai-trai-tim-v1.0.0-test-{run['head_sha'][:7]}\n")
+          PY
+      - name: Lấy APK đã kiểm chứng, không build lại và không đổi chữ ký
+        uses: actions/download-artifact@v4
+        with:
+          name: HaiTraiTim-1.0.0-APK
+          path: release-apk
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Kiểm tra gói APK và băm SHA256
+        run: |
+          test -s release-apk/HaiTraiTim-1.0.0.apk
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('release-apk/HaiTraiTim-1.0.0.apk') as apk:
+              names = set(apk.namelist())
+              assert 'AndroidManifest.xml' in names and 'classes.dex' in names, 'Không phải APK Android'
+              assert apk.testzip() is None, 'APK bị hỏng'
+          PY
+          cd release-apk
+          sha256sum HaiTraiTim-1.0.0.apk > HaiTraiTim-1.0.0.apk.sha256
+          cat HaiTraiTim-1.0.0.apk.sha256
+      - name: Đăng APK vào Release để tải trực tiếp
+        env:
+          VERIFIED_SHA: ${{ steps.verify.outputs.sha }}
+          RELEASE_TAG: ${{ steps.verify.outputs.tag }}
+        run: |
+          exec > >(tee /tmp/love-publish.log) 2>&1
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-apk/HaiTraiTim-1.0.0.apk release-apk/HaiTraiTim-1.0.0.apk.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            cat > /tmp/love-notes.md <<EOF
+          APK thử nghiệm **Hai Trái Tim 1.0.0** cho **Android 7.0+ (API 24)**, lấy nguyên vẹn từ [lần build thành công](https://github.com/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID).
+
+          Tải file **HaiTraiTim-1.0.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP.
+          Commit nguồn: \`$VERIFIED_SHA\`.
+
+          Ứng dụng cần bạn tự tạo dự án Supabase (migration + Edge Function + cron trong thư mục \`couple-love\`), rồi nhập URL và khóa công khai khi mở app. Thông báo đẩy cần thêm Expo Project ID và FCM/APNs.
+
+          **Chưa kiểm chứng:** hai điện thoại thật, FCM/APNs, Face ID thật, FPS thực tế. Dự báo chu kỳ chỉ là phép tính lịch, không dùng để tránh thai. APK dùng chữ ký debug của mẫu Expo; hãy cấu hình keystore riêng để ký bản phát hành.
+          EOF
+            gh release create "$RELEASE_TAG" release-apk/HaiTraiTim-1.0.0.apk release-apk/HaiTraiTim-1.0.0.apk.sha256 --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.0.0 — APK thử nghiệm" --notes-file /tmp/love-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
+          fi
+          gh release view "$RELEASE_TAG" --json tagName,isDraft,assets --repo "$GITHUB_REPOSITORY" | tee /tmp/love-release.json
+          echo "APK tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/HaiTraiTim-1.0.0.apk" >> "$GITHUB_STEP_SUMMARY"
+      - name: Công bố chẩn đoán đăng APK
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const path = '/tmp/love-publish.log';
+            await github.rest.checks.create({
+              ...context.repo, head_sha: context.sha,
+              name: 'Love APK publication diagnostics', status: 'completed', conclusion: 'neutral',
+              output: { title: 'Nhật ký đăng APK Hai Trái Tim', summary: 'APK không build lại.',
+                text: fs.existsSync(path) ? fs.readFileSync(path, 'utf8').slice(-50000) : 'Chưa chạy bước đăng Release.' }
+            });

@@ -6,10 +6,18 @@
 
 Khi mở app lần đầu, bạn chọn một trong hai chế độ và có thể đổi lại trong Cài đặt:
 
-1. **Trên máy này · không cần máy chủ (mặc định, đầy đủ tính năng)** — đếm ngày yêu, trái tim 3D, chu kỳ, nhật ký, cảm xúc, lời nhắc hẹn giờ trên máy, sinh trắc học và sao lưu tệp. Hai máy trao đổi dữ liệu bằng **mã QR / tệp dữ liệu**, không cần tài khoản, không cần Internet. Vì không có máy chủ nên **không có cập nhật tức thời giữa hai máy và không nhắc hộ được người thương**.
+1. **Trên máy này · không cần máy chủ (mặc định, đầy đủ tính năng)** — đếm ngày yêu, trái tim 3D, chu kỳ, nhật ký, cảm xúc, lời nhắc hẹn giờ trên máy, sinh trắc học và sao lưu tệp. Hai máy ghép nối bằng **mã 6 số** rồi tự gửi dữ liệu cho nhau khi cả hai cùng mở app (xem mục *Kết nối tức thời* bên dưới) — không cần tài khoản, không cần máy chủ; khi một bên không có mạng thì vẫn có cách **mã dán tay / tệp dữ liệu**.
 2. **Đồng bộ hai máy** — cần một dự án Supabase do bạn tạo (xem mục 2 bên dưới). Đổi lại bạn có cập nhật tức thời Android ↔ iPhone, nhật ký chung, lời nhắc kép gửi tới cả hai máy.
 
 Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo tài khoản thay bạn. Chế độ 1 chạy hoàn toàn độc lập, không cần đăng ký gì.
+
+### Kết nối tức thời giữa hai máy (không cần máy chủ)
+
+- Một bạn bấm **Tạo mã 6 số**, bạn kia nhập đúng 6 số đó ở mục **Ghép nối → Bước 2**. Cùng 6 số thì hai máy suy ra đúng một phòng (id phòng + khóa 32 byte bằng SHA-512 của `haitraitim-code-v3|<6 số>`) nên **chỉ cần một bên nhập, cả hai bên cùng vào phòng**.
+- Vào phòng là **mỗi máy vừa gửi dữ liệu của mình vừa nhận dữ liệu của người thương**, cả hai đều hiện “Đã ghép nối với …” và chip trạng thái trên đầu app. Không phải quét hai lần, không phải làm lại ở bên nào.
+- Kênh truyền là MQTT 3.1.1 qua WebSocket tới ba trạm công cộng miễn phí (EMQX, HiveMQ, Mosquitto) theo thứ tự, tự đổi trạm khi trạm trước không tới được, có nhịp giữ kết nối 20 giây. Nội dung **luôn được mã hóa đầu-cuối** bằng NaCl secretbox (nonce 24 byte ngẫu nhiên mỗi gói), trạm chỉ thấy chuỗi đã mã hóa. Ai không biết mã 6 số thì không đọc được; nếu muốn riêng tư hơn, hãy dùng mục **Cách khác → Tạo mã QR** (khóa ngẫu nhiên 32 byte, dài hơn nên khó đoán hơn mã 6 số).
+- Mỗi gói chỉ chứa **dữ liệu của chính máy gửi** (tên, cảm xúc, chu kỳ, kỷ niệm mình viết, lời nhắc) nên hai máy không gửi trả lại dữ liệu của nhau và không lặp vô tận; gói quá lớn thì tự cắt bớt phần chữ rồi mới bỏ bớt kỷ niệm, và **ảnh riêng không đi qua kênh này** (dùng “Xuất và chia sẻ tệp dữ liệu”).
+- Giới hạn thật: cần Internet ở **cả hai** máy; dữ liệu mới chỉ sang nhau khi hai bên cùng mở app (một bên đóng app thì lần mở sau gửi bù); mã 6 số chỉ có 1.000.000 khả năng nên đừng dán công khai ở nơi nhiều người thấy.
 
 ## Có trong mã nguồn
 
@@ -146,6 +154,8 @@ EXPO_OFFLINE=1 npx expo export --platform android
 EXPO_OFFLINE=1 npx expo export --platform ios
 EXPO_OFFLINE=1 npx expo prebuild --platform android --no-install --clean
 ```
+
+`tests/relay.test.mjs` kiểm tra phần kết nối tức thời: mã hóa/giải mã gói, sai khóa thì không đọc được, mã 6 số hai máy vào cùng một phòng, bộ mã hóa/giải mã gói MQTT ghép đúng khi dữ liệu về từng byte, mỗi máy chỉ gửi dữ liệu của mình và gói gửi đi không đổi sau khi gộp (không lặp), gói lớn tự cắt bớt, và trạng thái chỉ báo khi có thay đổi kèm tên người thương.
 
 Tests Node gồm logic lịch và **PostgreSQL thực chạy WASM bằng PGlite + pgcrypto**, áp dụng migration thật trong fixture auth/storage để kiểm tra ghép đôi, hết hạn, giới hạn thử, RLS, privacy revocation, nhật ký/ảnh, hàng chờ và lời nhắc kép. Fixture không thay cho Supabase cloud / Realtime / mạng push thật.
 

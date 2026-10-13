@@ -262,3 +262,17 @@ Log đầy đủ được công bố qua GitHub Checks **Flutter diagnostics**. 
 Các lỗi test/Gradle ở những lần CI đầu đã được sửa. Dữ liệu thời tiết trong smoke test là điểm lưới tại tâm Mỹ Tho, không phải GPS của điện thoại người dùng và không chứng minh dự báo chính xác 100%.
 
 **Chưa kiểm chứng Gemini bằng key của bạn, GPS trên thiết bị thật, thông báo nền/reboot hoặc FPS thực tế.** Test mock/CI không thay thế thử trên điện thoại. Cần thử quyền cho phép/từ chối, mất mạng, thay vị trí, reboot, tiết kiệm pin và buộc dừng. Không cam kết thời tiết chính xác 100% hoặc cảnh báo đúng phút.
+
+## Ứng dụng Hai Trái Tim (thư mục `couple-love/`)
+
+Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm trong thư mục `couple-love`: React Native/Expo SDK 54, NativeWind, trái tim 3D bằng Three.js/R3F, Supabase (đồng bộ realtime, RLS, Storage, Edge Function + cron thông báo kép). Hướng dẫn cấu hình backend, push FCM/APNs, secrets ký APK và kiểm thử ở `couple-love/README.md`.
+
+### Tải APK thử nghiệm (Android 7.0+, API 24)
+
+**https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.0.0-test-0aa4d35/HaiTraiTim-1.0.0.apk**
+
+- `HaiTraiTim-1.0.0.apk` · **55.060.797 byte** · SHA256 `662baa28f6999b5f133775d7b80cef0b6afda85402b247cca5a5f67e84f66781` · kèm file `.sha256` trong Assets.
+- Lấy nguyên vẹn từ [lần build thành công 38399009546](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38399009546) (commit `f593650`), tải lên Release bằng [workflow đăng APK 38402603441](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38402603441), không build lại và không đổi chữ ký.
+- CI đã chạy: **14 kiểm thử Node** (logic lịch + PostgreSQL thật qua PGlite: RLS, ghép đôi, hạn mã, thu hồi chia sẻ xóa lời nhắc, nhật ký/ảnh riêng), `tsc` sạch, Prettier sạch, `expo export` Android + iOS, Gradle `assembleRelease` cho `arm64-v8a` và `armeabi-v7a`.
+- **Chưa kiểm chứng:** hai điện thoại thật, FCM/APNs, Face ID thật, FPS thực tế. Dự báo chu kỳ chỉ là phép tính lịch, **không dùng để tránh thai**. APK đang dùng **chữ ký debug của mẫu Expo** — chỉ để thử, không phát hành cửa hàng; cấu hình 4 secret keystore trong Actions để ký bằng khóa riêng.
+- APK **không nhúng máy chủ**: bạn cần tự tạo dự án Supabase, chạy `supabase/migrations/001_love.sql`, triển khai Edge Function + cron (`npm run provision`), rồi nhập URL và khóa công khai khi mở app. Không nhập khóa bí mật/`service_role`/mật khẩu vào ứng dụng hoặc chat.

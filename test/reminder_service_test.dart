@@ -19,6 +19,7 @@ void main() {
 
   setUp(() {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    AndroidFlutterLocalNotificationsPlugin.registerWith();
     calls = [];
     granted = true;
     enabled = true;
@@ -31,6 +32,10 @@ void main() {
         'initialize' => true,
         'requestNotificationsPermission' => granted,
         'areNotificationsEnabled' => enabled,
+        'pendingNotificationRequests' => [
+          {'id': 1, 'title': 'Nhắc việc', 'body': '', 'payload': 'task:1'},
+          {'id': 1500000001, 'title': 'Lễ', 'body': '', 'payload': 'holiday:1'},
+        ],
         _ => null,
       };
     });
@@ -106,7 +111,7 @@ void main() {
         await service.reconcile([futureTask()], requestPermission: true),
         contains('chưa được cấp'),
       );
-      expect(calls.any((c) => c.method == 'cancelAll'), isTrue);
+      expect(calls.any((c) => c.method == 'cancel'), isTrue);
       expect(calls.any((c) => c.method == 'zonedSchedule'), isFalse);
     },
   );
@@ -121,11 +126,11 @@ void main() {
     await service.reconcile([futureTask()]);
     calls.clear();
     await service.reconcile([futureTask(completed: true)]);
-    expect(calls.any((c) => c.method == 'cancelAll'), isTrue);
+    expect(calls.any((c) => c.method == 'cancel'), isTrue);
     expect(calls.any((c) => c.method == 'zonedSchedule'), isFalse);
     calls.clear();
     await service.reconcile([]);
-    expect(calls.any((c) => c.method == 'cancelAll'), isTrue);
+    expect(calls.any((c) => c.method == 'cancel'), isTrue);
   });
 
   test('Đổi múi giờ và múi giờ GMT cố định', () async {

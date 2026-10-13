@@ -4,6 +4,9 @@ import '../app/app_controller.dart';
 import '../models/task.dart';
 import '../models/task_query.dart';
 import '../widgets/task_list.dart';
+import '../widgets/depth_card.dart';
+import '../models/holiday.dart';
+import '../models/vietnamese_calendar.dart';
 
 class TodayView extends StatelessWidget {
   const TodayView({
@@ -11,10 +14,14 @@ class TodayView extends StatelessWidget {
     required this.controller,
     required this.onEdit,
     required this.onToggle,
+    this.onWeather,
+    this.onHolidays,
+    this.onPlanner,
   });
   final AppController controller;
   final ValueChanged<Task> onEdit;
   final ValueChanged<Task> onToggle;
+  final VoidCallback? onWeather, onHolidays, onPlanner;
 
   @override
   Widget build(BuildContext context) {
@@ -27,16 +34,54 @@ class TodayView extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 100),
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: DepthCard(
+            hero: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'LỊCH NHẮC',
+                  style: TextStyle(
+                    letterSpacing: 3,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Một ngày có kế hoạch',
+                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 12),
+                Text('Hôm nay, ${displayDate(now)}'),
+                if (now.year >= 1900 && now.year <= 2100)
+                  Text(solarToLunar(now).label),
+                ...holidaysOn(now).map((h) => Text('✦ ${h.title}')),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Text(
-                'Một ngày có kế hoạch',
-                style: Theme.of(context).textTheme.headlineSmall,
+              ActionChip(
+                avatar: const Icon(Icons.cloud_outlined, size: 18),
+                label: const Text('Thời tiết'),
+                onPressed: onWeather,
               ),
-              const SizedBox(height: 8),
-              Text('Hôm nay, ${displayDate(now)}'),
+              ActionChip(
+                avatar: const Icon(Icons.celebration_outlined, size: 18),
+                label: const Text('Lịch lễ'),
+                onPressed: onHolidays,
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.auto_awesome, size: 18),
+                label: const Text('Gemini'),
+                onPressed: onPlanner,
+              ),
             ],
           ),
         ),

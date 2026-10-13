@@ -32,6 +32,35 @@ class TaskRepository {
     }
   }
 
+  Future<void> saveMany(List<Task> tasks) async {
+    for (final task in tasks) {
+      final error = validateTitle(task.title);
+      if (error != null) {
+        throw ArgumentError(error);
+      }
+    }
+    final db = await database.open();
+    await db.transaction((txn) async {
+      for (final task in tasks) {
+        await txn.insert('tasks', task.toMap());
+      }
+    });
+  }
+
+  Future<String?> setting(String key) async {
+    final db = await database.open();
+    final rows = await db.query('settings', where: 'key = ?', whereArgs: [key]);
+    return rows.isEmpty ? null : rows.first['value'] as String;
+  }
+
+  Future<void> setSetting(String key, String value) async {
+    final db = await database.open();
+    await db.rawInsert(
+      'INSERT OR REPLACE INTO settings(key, value) VALUES(?, ?)',
+      [key, value],
+    );
+  }
+
   Future<void> delete(int id) async {
     final db = await database.open();
     await db.delete('tasks', where: 'id = ?', whereArgs: [id]);

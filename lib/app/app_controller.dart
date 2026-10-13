@@ -7,7 +7,8 @@ import '../data/task_repository.dart';
 import '../models/task.dart';
 
 class AppController extends ChangeNotifier {
-  AppController(this.repository, this.reminders);
+  AppController(this.repository, this.reminders, {this.clearExtras});
+  final Future<void> Function()? clearExtras;
   final TaskRepository repository;
   final ReminderService reminders;
   List<Task> _tasks = [];
@@ -85,6 +86,9 @@ class AppController extends ChangeNotifier {
         task.reminder && task.dueMinutes != null && !task.completed,
   );
 
+  Future<void> saveMany(List<Task> tasks) =>
+      _change(() => repository.saveMany(tasks));
+
   Future<void> toggle(Task task) => save(task.withCompleted(!task.completed));
   Future<void> delete(Task task) => _change(() => repository.delete(task.id!));
 
@@ -96,6 +100,8 @@ class AppController extends ChangeNotifier {
 
   Future<void> clear() => _change(() async {
     await repository.clear();
+    await reminders.cancelAll();
+    await clearExtras?.call();
     themeMode = ThemeMode.system;
   });
 

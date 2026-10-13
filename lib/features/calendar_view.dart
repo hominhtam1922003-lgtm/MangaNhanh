@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../app/app_controller.dart';
 import '../models/task.dart';
+import '../models/holiday.dart';
+import '../models/vietnamese_calendar.dart';
 import '../models/task_query.dart';
 import '../widgets/task_list.dart';
 
@@ -120,6 +122,7 @@ class _CalendarViewState extends State<CalendarView> {
                   final selected = sameDay(day, _selected);
                   final today = sameDay(day, now);
                   final hasTask = taskDays.contains(localDateKey(day));
+                  final hasHoliday = holidaysOn(day).isNotEmpty;
                   final color = selected
                       ? scheme.onPrimary
                       : day.month != _month.month
@@ -127,7 +130,7 @@ class _CalendarViewState extends State<CalendarView> {
                       : scheme.onSurface;
                   return Semantics(
                     label:
-                        '${displayDate(day)}${hasTask ? ', có công việc' : ''}',
+                        '${displayDate(day)}${hasTask ? ', có công việc' : ''}${hasHoliday ? ', ngày lễ' : ''}',
                     selected: selected,
                     button: true,
                     child: Material(
@@ -162,7 +165,11 @@ class _CalendarViewState extends State<CalendarView> {
                               height: 5,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: hasTask ? color : Colors.transparent,
+                                color: hasHoliday
+                                    ? Colors.orange
+                                    : hasTask
+                                    ? color
+                                    : Colors.transparent,
                               ),
                             ),
                           ],
@@ -174,7 +181,7 @@ class _CalendarViewState extends State<CalendarView> {
               ),
               const SizedBox(height: 10),
               const Text(
-                '• Ngày có công việc hoặc deadline',
+                '• Công việc   • Cam: ngày lễ / kỷ niệm',
                 textAlign: TextAlign.center,
               ),
             ],
@@ -185,6 +192,19 @@ class _CalendarViewState extends State<CalendarView> {
           child: Text(
             'Ngày ${displayDate(_selected)} • ${tasks.length} công việc',
             style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_selected.year >= 1900 && _selected.year <= 2100)
+                Text(solarToLunar(_selected).label),
+              ...holidaysOn(
+                _selected,
+              ).map((h) => Text('✦ ${h.title} • ${h.description}')),
+            ],
           ),
         ),
         Padding(

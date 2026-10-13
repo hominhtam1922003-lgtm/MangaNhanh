@@ -34,7 +34,7 @@ class _SettingsViewState extends State<SettingsView> {
       context,
       title: 'Xóa toàn bộ dữ liệu?',
       message:
-          'Tất cả công việc và cài đặt trên thiết bị sẽ bị xóa. '
+          'Tất cả công việc, cache thời tiết, vị trí, cài đặt và Gemini API key trên thiết bị sẽ bị xóa. '
           'Các thông báo nhắc sẽ được hủy. Không thể hoàn tác.',
       confirmLabel: 'Xóa toàn bộ',
     );
@@ -93,8 +93,9 @@ class _SettingsViewState extends State<SettingsView> {
               Text('Dữ liệu của bạn ở trên thiết bị'),
               SizedBox(height: 8),
               Text(
-                'Ứng dụng hoạt động ngoại tuyến, không cần tài khoản. '
+                'Công việc hoạt động ngoại tuyến, không cần tài khoản. '
                 'Công việc và cài đặt không tự đồng bộ sang máy khác. '
+                'Thời tiết dùng internet và gửi tọa độ đã chọn tới Open-Meteo. Gemini chỉ gửi nội dung khi bạn yêu cầu. '
                 'Gỡ ứng dụng hoặc xóa dữ liệu ứng dụng sẽ làm mất dữ liệu.',
               ),
             ],
@@ -123,7 +124,7 @@ class _SettingsViewState extends State<SettingsView> {
           child: Center(child: CircularProgressIndicator()),
         ),
       const SizedBox(height: 24),
-      const Text('Lịch Nhắc • Phiên bản 1.0.0', textAlign: TextAlign.center),
+      const Text('Lịch Nhắc • Phiên bản 1.1.0', textAlign: TextAlign.center),
     ],
   );
 }

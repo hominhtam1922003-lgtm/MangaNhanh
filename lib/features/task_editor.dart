@@ -10,10 +10,12 @@ class TaskEditor extends StatefulWidget {
     required this.controller,
     this.task,
     this.initialDate,
+    this.onDraftSaved,
   });
   final AppController controller;
   final Task? task;
   final DateTime? initialDate;
+  final ValueChanged<Task>? onDraftSaved;
 
   @override
   State<TaskEditor> createState() => _TaskEditorState();
@@ -91,19 +93,22 @@ class _TaskEditorState extends State<TaskEditor> {
     }
     setState(() => _saving = true);
     try {
-      await widget.controller.save(
-        Task(
-          id: widget.task?.id,
-          title: _title.text.trim(),
-          notes: _notes.text.trim(),
-          dueDate: _date,
-          dueMinutes: _minutes,
-          category: _category,
-          priority: _priority,
-          completed: _completed,
-          reminder: _reminder && _minutes != null,
-        ),
+      final task = Task(
+        id: widget.task?.id,
+        title: _title.text.trim(),
+        notes: _notes.text.trim(),
+        dueDate: _date,
+        dueMinutes: _minutes,
+        category: _category,
+        priority: _priority,
+        completed: _completed,
+        reminder: widget.onDraftSaved == null && _reminder && _minutes != null,
       );
+      if (widget.onDraftSaved != null) {
+        widget.onDraftSaved!(task);
+      } else {
+        await widget.controller.save(task);
+      }
       if (mounted) {
         Navigator.pop(context);
       }
@@ -153,7 +158,7 @@ class _TaskEditorState extends State<TaskEditor> {
       appBar: AppBar(
         title: Text(widget.task == null ? 'Thêm công việc' : 'Sửa công việc'),
         actions: [
-          if (widget.task != null)
+          if (widget.task?.id != null)
             IconButton(
               tooltip: 'Xóa công việc',
               onPressed: _saving ? null : _delete,
@@ -296,7 +301,13 @@ class _TaskEditorState extends State<TaskEditor> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.check),
-                    label: Text(_saving ? 'Đang lưu…' : 'Lưu công việc'),
+                    label: Text(
+                      _saving
+                          ? 'Đang lưu…'
+                          : widget.onDraftSaved == null
+                          ? 'Lưu công việc'
+                          : 'Lưu bản nháp',
+                    ),
                   ),
                   const SizedBox(height: 24),
                 ],

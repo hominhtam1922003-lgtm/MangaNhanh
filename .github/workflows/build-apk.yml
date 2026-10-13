@@ -14,7 +14,10 @@ permissions:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Lấy mã nguồn
         uses: actions/checkout@v5

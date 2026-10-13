@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
 
 import '../app/app_controller.dart';
+import '../app/weather_controller.dart';
 import '../models/task.dart';
 import '../widgets/task_list.dart';
 import 'calendar_view.dart';
-import 'settings_view.dart';
+import 'utility_view.dart';
+import 'weather/weather_screen.dart';
+import 'holidays/holidays_screen.dart';
+import 'planner/planner_screen.dart';
 import 'task_editor.dart';
 import 'tasks_view.dart';
 import 'today_view.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.controller});
+  const HomeScreen({super.key, required this.controller, this.weather});
   final AppController controller;
+  final WeatherController? weather;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -20,7 +25,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
   DateTime _selectedDate = dateOnly(DateTime.now());
-  static const _titles = ['Hôm nay', 'Lịch', 'Công việc', 'Cài đặt'];
+  static const _titles = [
+    'Hôm nay',
+    'Lịch',
+    'Công việc',
+    'Thời tiết',
+    'Tiện ích',
+  ];
 
   void _edit(Task task) => _openEditor(task: task);
 
@@ -113,6 +124,22 @@ class _HomeScreenState extends State<HomeScreen> {
                           controller: controller,
                           onEdit: _edit,
                           onToggle: _toggle,
+                          onWeather: () => setState(() => _index = 3),
+                          onHolidays: () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => HolidaysScreen(
+                                repository: controller.repository,
+                              ),
+                            ),
+                          ),
+                          onPlanner: () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  PlannerScreen(controller: controller),
+                            ),
+                          ),
                         ),
                         CalendarView(
                           controller: controller,
@@ -126,7 +153,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           onEdit: _edit,
                           onToggle: _toggle,
                         ),
-                        SettingsView(controller: controller),
+                        widget.weather == null
+                            ? const EmptyState(
+                                title: 'Thời tiết',
+                                message: 'Chọn vị trí để xem dự báo.',
+                              )
+                            : WeatherScreen(controller: widget.weather!),
+                        UtilityView(controller: controller),
                       ],
                     ),
                   ),
@@ -134,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
       ),
       floatingActionButton:
-          _index == 3 || controller.loading || controller.error != null
+          _index >= 3 || controller.loading || controller.error != null
           ? null
           : FloatingActionButton(
               tooltip: 'Thêm công việc',
@@ -164,12 +197,17 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationDestination(
             icon: Icon(Icons.checklist_outlined),
             selectedIcon: Icon(Icons.checklist),
-            label: 'Công việc',
+            label: 'Việc',
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Cài đặt',
+            icon: Icon(Icons.cloud_outlined),
+            selectedIcon: Icon(Icons.cloud),
+            label: 'Thời tiết',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.widgets_outlined),
+            selectedIcon: Icon(Icons.widgets),
+            label: 'Tiện ích',
           ),
         ],
       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:lich_nhac/app/app_controller.dart';
 import 'package:lich_nhac/data/app_database.dart';
 import 'package:lich_nhac/data/reminder_service.dart';
@@ -20,7 +21,7 @@ void main() {
   late AppController controller;
   setUp(() {
     controller = AppController(
-      TaskRepository(AppDatabase()),
+      TaskRepository(AppDatabase(factory: databaseFactoryFfi)),
       ReminderService(),
     );
     controller.loading = false;
@@ -35,9 +36,14 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(host(HomeScreen(controller: controller)));
+    await tester.scrollUntilVisible(
+      find.text('Hôm nay chưa có công việc'),
+      150,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Hôm nay chưa có công việc'), findsOneWidget);
     expect(tester.takeException(), isNull);
-    for (final label in ['Lịch', 'Công việc', 'Cài đặt']) {
+    for (final label in ['Lịch', 'Việc', 'Tiện ích']) {
       await tester.tap(find.text(label).last);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);

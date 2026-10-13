@@ -18,10 +18,15 @@ void main() {
     values = {'groq.key': dummy, 'gemini.key': 'old_dummy_gemini_key'};
     messenger.setMockMethodCallHandler(channel, (call) async {
       final args = call.arguments as Map;
-      if (call.method == 'read') return values[args['key']];
-      if (call.method == 'write')
+      if (call.method == 'read') {
+        return values[args['key']];
+      }
+      if (call.method == 'write') {
         values[args['key'] as String] = args['value'] as String;
-      if (call.method == 'delete') values.remove(args['key']);
+      }
+      if (call.method == 'delete') {
+        values.remove(args['key']);
+      }
       return null;
     });
   });
@@ -168,7 +173,9 @@ void main() {
     var posts = 0;
     final service = GroqService(
       client: MockClient((r) async {
-        if (r.method == 'GET') return models(['chat']);
+        if (r.method == 'GET') {
+          return models(['chat']);
+        }
         posts++;
         return http.Response(dummy, 429);
       }),
@@ -187,7 +194,9 @@ void main() {
     var posts = 0;
     final service = GroqService(
       client: MockClient((r) async {
-        if (r.method == 'GET') return models(['a', 'b', 'c', 'd']);
+        if (r.method == 'GET') {
+          return models(['a', 'b', 'c', 'd']);
+        }
         posts++;
         return http.Response('{}', 404);
       }),
@@ -202,7 +211,9 @@ void main() {
       Map? sent;
       final service = GroqService(
         client: MockClient((r) async {
-          if (r.method == 'GET') return models(['chat']);
+          if (r.method == 'GET') {
+            return models(['chat']);
+          }
           sent = jsonDecode(r.body) as Map;
           return answer();
         }),

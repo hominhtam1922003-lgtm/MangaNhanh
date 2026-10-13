@@ -35,20 +35,25 @@ class _AssistantScreenState extends State<AssistantScreen> {
   void dispose() {
     _input.dispose();
     _scroll.dispose();
-    if (widget.service == null) _service.dispose();
+    if (widget.service == null) {
+      _service.dispose();
+    }
     super.dispose();
   }
 
   Future<void> _load() async {
     try {
       final raw = await widget.controller.repository.setting('groq.chat');
-      if (raw != null)
+      if (raw != null) {
         _messages = (jsonDecode(raw) as List)
             .map((m) => ChatMessage.fromJson(m as Map<String, dynamic>))
             .toList();
+      }
       _model = await widget.controller.repository.setting('groq.model') ?? '';
       _hasKey = await _service.hasKey();
-      if (_hasKey) await _discover();
+      if (_hasKey) {
+        await _discover();
+      }
     } catch (e) {
       _error = _safeError(e);
     } finally {
@@ -66,24 +71,28 @@ class _AssistantScreenState extends State<AssistantScreen> {
     final models = await _service.models();
     final model = GroqService.selectModel(models, _model);
     await widget.controller.repository.setSetting('groq.model', model);
-    if (mounted)
+    if (mounted) {
       setState(() {
         _models = models;
         _model = model;
       });
+    }
   }
 
   void _bottom() => WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (mounted && _scroll.hasClients)
+    if (mounted && _scroll.hasClients) {
       _scroll.animateTo(
         _scroll.position.maxScrollExtent,
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
       );
+    }
   });
   Future<void> _send() async {
     final text = _input.text;
-    if (_busy || text.trim().isEmpty) return;
+    if (_busy || text.trim().isEmpty) {
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -100,7 +109,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
                   .toList()
             : [],
       );
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       final next = [
         ..._messages,
         ChatMessage('user', text.trim()),
@@ -113,9 +124,13 @@ class _AssistantScreenState extends State<AssistantScreen> {
       setState(() {
         _messages = kept;
         _model = result.model;
-        if (!_models.contains(result.model)) _models.add(result.model);
+        if (!_models.contains(result.model)) {
+          _models.add(result.model);
+        }
       });
-      if (_input.text == text) _input.clear();
+      if (_input.text == text) {
+        _input.clear();
+      }
       _bottom();
       try {
         await widget.controller.repository.setSetting(
@@ -127,16 +142,21 @@ class _AssistantScreenState extends State<AssistantScreen> {
           result.model,
         );
       } catch (_) {
-        if (mounted)
+        if (mounted) {
           setState(
             () => _error =
                 'Đã nhận trả lời nhưng chưa lưu được lịch sử trên máy. Không cần gửi lại câu hỏi.',
           );
+        }
       }
     } catch (e) {
-      if (mounted) setState(() => _error = _safeError(e));
+      if (mounted) {
+        setState(() => _error = _safeError(e));
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -148,17 +168,21 @@ class _AssistantScreenState extends State<AssistantScreen> {
               'Xóa lịch sử trên thiết bị. Không xóa dữ liệu đã gửi cho GroqCloud và không xóa công việc.',
           confirmLabel: 'Xóa',
         ) ||
-        !mounted)
+        !mounted) {
       return;
+    }
     try {
       await widget.controller.repository.setSetting('groq.chat', '[]');
-      if (mounted)
+      if (mounted) {
         setState(() {
           _messages = [];
           _error = null;
         });
+      }
     } catch (e) {
-      if (mounted) setState(() => _error = _safeError(e));
+      if (mounted) {
+        setState(() => _error = _safeError(e));
+      }
     }
   }
 
@@ -167,23 +191,29 @@ class _AssistantScreenState extends State<AssistantScreen> {
       context,
       MaterialPageRoute<void>(builder: (_) => _AISettings(service: _service)),
     );
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
       _hasKey = await _service.hasKey();
-      if (_hasKey)
+      if (_hasKey) {
         await _discover();
-      else {
+      } else {
         _models = [];
         _model = '';
       }
     } catch (e) {
-      if (mounted) _error = _safeError(e);
+      if (mounted) {
+        _error = _safeError(e);
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -370,6 +400,8 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 ),
                 child: Text(
                   _error!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
@@ -459,7 +491,9 @@ class _AISettingsState extends State<_AISettings> {
     } catch (_) {
       _status = 'Chưa đọc được vùng lưu trữ bảo mật.';
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -477,12 +511,13 @@ class _AISettingsState extends State<_AISettings> {
     try {
       await action();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => _status = e is UserMessage
               ? e.message
               : 'Chưa hoàn tất thao tác. Hãy thử lại.',
         );
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -550,11 +585,12 @@ class _AISettingsState extends State<_AISettings> {
                     ? null
                     : () => _action(() async {
                         final models = await widget.service.models();
-                        if (mounted)
+                        if (mounted) {
                           setState(
                             () => _status =
                                 'GroqCloud đã trả ${models.length} mô hình chat. Khi gửi, app tự chọn mô hình khả dụng.',
                           );
+                        }
                       }),
                 child: const Text('Kiểm tra kết nối'),
               ),
@@ -569,15 +605,17 @@ class _AISettingsState extends State<_AISettings> {
                                   'Trợ lý sẽ ngừng gọi API cho tới khi nhập key mới. Lịch sử và công việc vẫn giữ.',
                               confirmLabel: 'Xóa',
                             ) ||
-                            !mounted)
+                            !mounted) {
                           return;
+                        }
                         await _action(() async {
                           await widget.service.deleteKey();
-                          if (mounted)
+                          if (mounted) {
                             setState(() {
                               _hasKey = false;
                               _status = 'Đã xóa GroqCloud API key.';
                             });
+                          }
                         });
                       },
                 child: const Text('Xóa key'),

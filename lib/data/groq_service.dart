@@ -60,8 +60,9 @@ class GroqService {
   Future<void> deleteKey() => storage.delete(key: 'groq.key');
   Future<String> _key() async {
     final key = await storage.read(key: 'groq.key');
-    if (key == null || key.isEmpty)
+    if (key == null || key.isEmpty) {
       throw const UserMessage('Lưu GroqCloud API key trong Cài đặt AI trước.');
+    }
     return key;
   }
 
@@ -71,19 +72,24 @@ class GroqService {
   }) async {
     try {
       final response = await request().timeout(const Duration(seconds: 60));
-      if (response.statusCode == 200) return response;
-      if (response.statusCode == 401)
+      if (response.statusCode == 200) {
+        return response;
+      }
+      if (response.statusCode == 401) {
         throw const UserMessage(
           'GroqCloud từ chối API key. Kiểm tra hoặc thay key trong Cài đặt AI.',
         );
-      if (response.statusCode == 403)
+      }
+      if (response.statusCode == 403) {
         throw const UserMessage(
           'GroqCloud từ chối quyền truy cập. Kiểm tra quyền, dự án và khu vực của tài khoản.',
         );
-      if (response.statusCode == 429)
+      }
+      if (response.statusCode == 429) {
         throw const UserMessage(
           'GroqCloud đã chạm hạn mức. Chờ rồi gửi lại; app không tự gửi liên tục hoặc bật thanh toán.',
         );
+      }
       String? code;
       try {
         code =
@@ -103,14 +109,16 @@ class GroqService {
               ].contains(code))) {
         throw _UnavailableModel();
       }
-      if (response.statusCode == 400 || response.statusCode == 413)
+      if (response.statusCode == 400 || response.statusCode == 413) {
         throw const UserMessage(
           'GroqCloud không chấp nhận yêu cầu. Thử câu hỏi ngắn hơn hoặc bắt đầu cuộc trò chuyện mới.',
         );
-      if (response.statusCode >= 500)
+      }
+      if (response.statusCode >= 500) {
         throw const UserMessage(
           'GroqCloud đang gặp lỗi máy chủ. Tin nhắn chưa được ghi vào lịch sử; có thể gửi lại sau.',
         );
+      }
       throw const UserMessage(
         'Chưa nhận được phản hồi từ GroqCloud. Hãy thử lại sau.',
       );
@@ -150,10 +158,11 @@ class GroqService {
           )
           .toSet()
           .toList();
-      if (models.isEmpty)
+      if (models.isEmpty) {
         throw const UserMessage(
           'GroqCloud chưa trả mô hình chat khả dụng cho tài khoản này. Kiểm tra quyền trong console.groq.com.',
         );
+      }
       return models;
     } on UserMessage {
       rethrow;
@@ -165,7 +174,9 @@ class GroqService {
   }
 
   static String selectModel(List<String> models, String preferred) {
-    if (models.contains(preferred)) return preferred;
+    if (models.contains(preferred)) {
+      return preferred;
+    }
     // Chọn từ danh sách thật, không gắn cứng tên/phiên bản đã bị ngừng.
     return models.firstWhere(
       (id) => id.contains('llama') && id.contains('instant'),
@@ -182,8 +193,9 @@ class GroqService {
     List<ChatMessage> history = const [],
     List<Task> contextTasks = const [],
   }) async {
-    if (text.trim().isEmpty || text.length > 4000)
+    if (text.trim().isEmpty || text.length > 4000) {
       throw const UserMessage('Nhập tin nhắn từ 1 đến 4.000 ký tự.');
+    }
     final key = await _key();
     var candidates = await models();
     final rejected = <String>{};
@@ -191,8 +203,9 @@ class GroqService {
     var remaining = 16000;
     for (final message in history.reversed.take(20)) {
       if (!['user', 'assistant'].contains(message.role) ||
-          message.content.length > remaining)
+          message.content.length > remaining) {
         break;
+      }
       recent.insert(0, message);
       remaining -= message.content.length;
     }
@@ -223,7 +236,9 @@ class GroqService {
     ];
     for (var attempt = 0; attempt < 3; attempt++) {
       final available = candidates.where((m) => !rejected.contains(m)).toList();
-      if (available.isEmpty) break;
+      if (available.isEmpty) {
+        break;
+      }
       final model = selectModel(available, preferred);
       try {
         final response = await _request(
@@ -249,8 +264,9 @@ class GroqService {
           final content = (choice['message'] as Map)['content'];
           if (content is! String ||
               content.trim().isEmpty ||
-              content.length > 15000)
+              content.length > 15000) {
             throw const FormatException();
+          }
           return GroqReply(
             content.trim() +
                 (choice['finish_reason'] == 'length'

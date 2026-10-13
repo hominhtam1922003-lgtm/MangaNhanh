@@ -1,0 +1,3 @@
+project_id = "hai-trai-tim"
+[functions.dispatch-notifications]
+verify_jwt = false

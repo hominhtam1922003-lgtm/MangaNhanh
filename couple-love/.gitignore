@@ -1,0 +1,16 @@
+node_modules/
+.expo/
+dist/
+android/
+ios/
+.env
+.env.*
+google-services.json
+*.jks
+*.keystore
+*.apk
+
+!.env.example
+*.sha256
+
+dist-ios/

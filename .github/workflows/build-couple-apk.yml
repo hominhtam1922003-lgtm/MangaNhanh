@@ -1,0 +1,115 @@
+name: APK Hai Trái Tim
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, arena/6f7cfa08-manganhanh]
+    paths:
+      [
+        "couple-love/**",
+        ".github/workflows/build-couple-apk.yml",
+        "App.tsx",
+        "src/**",
+        "scripts/**",
+        "tests/**",
+        "package*.json",
+        "*.config.js",
+        ".github/workflows/build-apk.yml",
+      ]
+  pull_request:
+    paths:
+      [
+        "couple-love/**",
+        ".github/workflows/build-couple-apk.yml",
+        "App.tsx",
+        "src/**",
+        "scripts/**",
+        "tests/**",
+        "package*.json",
+        "*.config.js",
+        ".github/workflows/build-apk.yml",
+      ]
+permissions:
+  contents: read
+concurrency:
+  group: love-apk-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      CI: "1"
+      EXPO_OFFLINE: "1"
+      EXPO_NO_TELEMETRY: "1"
+      PROJECT_DIR: "."
+      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.LOVE_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.LOVE_SUPABASE_ANON_KEY }}
+      EXPO_PUBLIC_EAS_PROJECT_ID: ${{ secrets.LOVE_EAS_PROJECT_ID }}
+    steps:
+      - name: Lấy mã nguồn
+        uses: actions/checkout@v5
+      - name: Xác định thư mục dự án
+        run: |
+          if [ -f couple-love/package.json ]; then echo 'PROJECT_DIR=couple-love' >> "$GITHUB_ENV"; fi
+      - name: Cài Node 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: "**/package-lock.json"
+      - name: Cài Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Chuẩn bị Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Cài phụ thuộc từ lockfile
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npm ci --no-audit --no-fund
+      - name: Kiểm tra logic, RLS PostgreSQL và TypeScript
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          npm test
+          npm run check
+          npm run format:check
+      - name: Cấu hình FCM nếu đã có secret
+        working-directory: ${{ env.PROJECT_DIR }}
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.LOVE_GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > google-services.json
+          fi
+      - name: Sinh dự án Android Expo
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npx expo prebuild --platform android --no-install --clean
+      - name: Ký APK nếu đã có keystore riêng
+        working-directory: ${{ env.PROJECT_DIR }}
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.LOVE_ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.LOVE_ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.LOVE_ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.LOVE_ANDROID_KEY_PASSWORD }}
+        run: node scripts/sign-android.cjs
+      - name: Build APK chứa JavaScript, không cần Metro khi chạy
+        working-directory: ${{ env.PROJECT_DIR }}/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.LOVE_ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.LOVE_ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.LOVE_ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures=arm64-v8a,armeabi-v7a -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
+          cp app/build/outputs/apk/release/app-release.apk ../HaiTraiTim-1.0.0.apk
+          cd ..
+          sha256sum HaiTraiTim-1.0.0.apk > HaiTraiTim-1.0.0.sha256
+      - name: Tải APK xuống từ Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: HaiTraiTim-1.0.0-APK
+          path: |
+            ${{ env.PROJECT_DIR }}/HaiTraiTim-1.0.0.apk
+            ${{ env.PROJECT_DIR }}/HaiTraiTim-1.0.0.sha256
+          if-no-files-found: error
+          retention-days: 14

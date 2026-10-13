@@ -85,10 +85,14 @@ class AlarmService : Service() {
         quiet(); current = null; next(); return true
     }
     private fun next() {
-        sendBroadcast(Intent("vn.lichnhac.ALARM_UPDATE").setPackage(packageName))
-        if (queue.isNotEmpty()) ring(queue.removeFirst()) else {
-            stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
+        while (queue.isNotEmpty()) {
+            val row = queue.removeFirst()
+            try { ring(row); return } catch (_: Exception) {
+                fallbackNotification(this, row); quiet(); current = null
+            }
         }
+        sendBroadcast(Intent("vn.lichnhac.ALARM_UPDATE").setPackage(packageName))
+        stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
     }
     fun prune(valid: Map<Int, Long>) {
         queue.removeIf { valid[it.id] != it.original }

@@ -82,6 +82,26 @@ class GeminiService {
           'Gemini từ chối API key/quyền truy cập. Kiểm tra key và giới hạn ứng dụng.',
         );
       }
+      if (response.statusCode == 400) {
+        String? reason;
+        try {
+          final data =
+              jsonDecode(utf8.decode(response.bodyBytes))
+                  as Map<String, dynamic>;
+          final error = data['error'] as Map?;
+          for (final detail in (error?['details'] as List? ?? [])) {
+            if (detail is Map && detail['reason'] is String)
+              reason = detail['reason'] as String;
+          }
+        } catch (_) {
+          /* Không hiển thị response thô có thể chứa dữ liệu riêng tư. */
+        }
+        if (reason == 'API_KEY_INVALID' || reason == 'API_KEY_EXPIRED') {
+          throw const UserMessage(
+            'Google cho biết API key không hợp lệ hoặc đã hết hạn. Key đã lưu trên máy nhưng chưa dùng được; nhập key mới và kiểm tra lại.',
+          );
+        }
+      }
       if (response.statusCode == 404) {
         throw const UserMessage(
           'Mô hình không còn sẵn sàng. Bấm tải danh sách mô hình và chọn lại.',

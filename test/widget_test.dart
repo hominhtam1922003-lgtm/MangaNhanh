@@ -62,6 +62,12 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final previousErrorHandler = FlutterError.onError;
+    FlutterError.onError = (details) {
+      debugPrint(details.toString());
+      previousErrorHandler?.call(details);
+    };
+    addTearDown(() => FlutterError.onError = previousErrorHandler);
     final weather = WeatherController(
       controller.repository,
       WeatherApi(),

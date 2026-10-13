@@ -17,7 +17,11 @@ Map<String, dynamic> fixture(
   return {
     'timezone': 'Asia/Ho_Chi_Minh',
     'utc_offset_seconds': 25200,
-    'current': {'time': epoch, 'temperature_2m': 30, 'weather_code': code},
+    'current': <String, dynamic>{
+      'time': epoch,
+      'temperature_2m': 30,
+      'weather_code': code,
+    },
     'hourly': {
       'time': [epoch + 3600],
       'temperature_2m': [temperature],
@@ -29,7 +33,7 @@ Map<String, dynamic> fixture(
       'uv_index': [4],
       'is_day': [1],
     },
-    'daily': {
+    'daily': <String, dynamic>{
       'time': [epoch],
       'temperature_2m_min': [25],
       'temperature_2m_max': [34],

@@ -23,6 +23,7 @@ export default function Settings({
   refresh,
   locked,
   onToggleLock,
+  onSwitchMode,
 }: {
   db: SupabaseClient;
   data: Snapshot;
@@ -31,6 +32,7 @@ export default function Settings({
   refresh: () => void;
   locked: boolean;
   onToggleLock: (value: boolean) => Promise<void>;
+  onSwitchMode: () => void;
 }) {
   const me = data.profiles.find((p) => p.id === user.id);
   const [name, setName] = useState(me?.nickname || "Bạn"),
@@ -233,6 +235,19 @@ export default function Settings({
           />
         </Card>
       )}
+      <Card>
+        <Title small>Chế độ chạy</Title>
+        <Note>
+          Đang dùng chế độ đồng bộ máy chủ. Bạn có thể chuyển sang chế độ chạy
+          hoàn toàn trên máy nếu không muốn dùng Supabase; dữ liệu trên máy chủ
+          sẽ không tự chuyển sang chế độ mới.
+        </Note>
+        <Button
+          label="Chuyển sang chế độ trên máy (không cần máy chủ)"
+          secondary
+          onPress={onSwitchMode}
+        />
+      </Card>
       <Card>
         <Title small>Quản lý không gian</Title>
         <Note>Máy chủ: {config.url}</Note>

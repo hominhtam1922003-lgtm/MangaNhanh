@@ -2,6 +2,15 @@
 
 Ứng dụng Android/iOS bằng **React Native · Expo SDK 54 · NativeWind · Three.js/R3F native · Supabase**. Tất cả nội dung giao diện của ứng dụng bằng tiếng Việt.
 
+## Hai chế độ chạy
+
+Khi mở app lần đầu, bạn chọn một trong hai chế độ và có thể đổi lại trong Cài đặt:
+
+1. **Trên máy này · không cần máy chủ (mặc định, đầy đủ tính năng)** — đếm ngày yêu, trái tim 3D, chu kỳ, nhật ký, cảm xúc, lời nhắc hẹn giờ trên máy, sinh trắc học và sao lưu tệp. Hai máy trao đổi dữ liệu bằng **mã QR / tệp dữ liệu**, không cần tài khoản, không cần Internet. Vì không có máy chủ nên **không có cập nhật tức thời giữa hai máy và không nhắc hộ được người thương**.
+2. **Đồng bộ hai máy** — cần một dự án Supabase do bạn tạo (xem mục 2 bên dưới). Đổi lại bạn có cập nhật tức thời Android ↔ iPhone, nhật ký chung, lời nhắc kép gửi tới cả hai máy.
+
+Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo tài khoản thay bạn. Chế độ 1 chạy hoàn toàn độc lập, không cần đăng ký gì.
+
 ## Có trong mã nguồn
 
 - Trái tim 3D nổi, chất liệu bóng, ánh sáng và 80 hạt lấp lánh; vuốt để xoay. Tôn trọng tùy chọn giảm chuyển động. Không cần tải mô hình hoặc ảnh từ bên ngoài.
@@ -14,7 +23,10 @@
 - Lời nhắc cảm xúc cho người thương; chống lặp trong cùng phút.
 - Face ID / vân tay khóa khi rời ứng dụng; phiên và cấu hình lưu trong SecureStore, không lưu mật khẩu ở mã nguồn.
 - SQL RLS, RPC ghép đôi nguyên tử, hàng chờ push có lease / retry, Edge Function và script triển khai lịch chạy 5 phút.
+- **Chế độ trên máy:** dữ liệu JSON trong thư mục riêng của ứng dụng + bản sao trong AsyncStorage, ảnh JPEG thu nhỏ trong `images/`, lời nhắc đặt bằng lịch cục bộ, mã QR chia đoạn (có kiểm tra hỏng/mất đoạn), tệp sao lưu JSON chứa cả nhật ký và ảnh nhỏ, khóa Face ID/vân tay, nút xóa toàn bộ dữ liệu hai bước.
 - GitHub Actions build **APK release chứa sẵn JavaScript**, không cần mở Metro / mua EAS Build.
+
+**Giới hạn của chế độ trên máy:** mã QR chỉ chứa hồ sơ, ngày bắt đầu và dữ liệu chu kỳ (không chứa nhật ký); tệp dữ liệu chứa cả nhật ký và ảnh nhỏ. Ghép nối là bản chụp tại thời điểm tạo mã, muốn cập nhật phải ghép lại. Gỡ ứng dụng hoặc xóa dữ liệu ứng dụng sẽ mất dữ liệu, hãy xuất tệp dự phòng. Nhắc hẹn không phải báo thức reo chuông và hệ điều hành có thể trì hoãn.
 
 **Không phải ứng dụng y tế:** dự báo chu kỳ là phép tính lịch, không phải AI, không đo hay xác nhận rụng trứng. Không có “ngày an toàn” để tránh thai. Không bảo đảm 60 FPS trên mọi điện thoại. Hiện chưa kiểm thử bằng hai điện thoại thật / FCM / APNs.
 

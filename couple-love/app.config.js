@@ -10,7 +10,7 @@ module.exports = {
     newArchEnabled: true,
     android: {
       package: "vn.haitraitim.app",
-      versionCode: 1,
+      versionCode: 2,
       ...(fs.existsSync("google-services.json")
         ? { googleServicesFile: "./google-services.json" }
         : {}),

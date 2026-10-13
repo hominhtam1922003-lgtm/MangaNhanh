@@ -1,0 +1,494 @@
+export const STATE_VERSION = 1;
+export const makeId = () =>
+  Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+export const MOODS = [
+  { id: "happy", name: "Vui vẻ", emoji: "😊" },
+  { id: "love", name: "Yêu thương", emoji: "🥰" },
+  { id: "calm", name: "Bình yên", emoji: "😌" },
+  { id: "tired", name: "Mệt", emoji: "😴" },
+  { id: "sad", name: "Buồn", emoji: "😔" },
+  { id: "angry", name: "Bực mình", emoji: "😤" },
+];
+const moodIds = MOODS.map((m) => m.id);
+const text = (value, max) =>
+  (typeof value === "string" ? value : "").slice(0, max);
+const iso = (value, fallback) => {
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? new Date(time).toISOString() : fallback;
+};
+const date = (value) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(value || "") ? value : null;
+const uid = () =>
+  Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const profile = (raw, id, name) => ({
+  id,
+  nickname: text(raw?.nickname, 40).trim() || name,
+  mood: moodIds.includes(raw?.mood) ? raw.mood : "calm",
+  moodNote: text(raw?.moodNote, 300),
+  avatar: typeof raw?.avatar === "string" ? raw.avatar : null,
+});
+export function emptyState(now = new Date().toISOString()) {
+  return {
+    version: STATE_VERSION,
+    me: { id: "me", nickname: "Bạn", mood: "calm", moodNote: "", avatar: null },
+    partner: null,
+    anniversary: now,
+    timezone: "Asia/Ho_Chi_Minh",
+    cycle: null,
+    diary: [],
+    alerts: [],
+    settings: { biometric: false, notify: false },
+    links: [],
+  };
+}
+export function migrate(raw, now = new Date().toISOString()) {
+  const state = emptyState(now);
+  if (!raw || typeof raw !== "object") return state;
+  state.me = profile(raw.me, "me", "Bạn");
+  state.partner = raw.partner
+    ? profile(raw.partner, "partner", "Người thương")
+    : null;
+  state.anniversary = iso(raw.anniversary, now);
+  state.timezone = text(raw.timezone, 40) || state.timezone;
+  const cycle = raw.cycle;
+  if (cycle && date(cycle.lastPeriod)) {
+    state.cycle = {
+      lastPeriod: cycle.lastPeriod,
+      cycleLength: Math.min(60, Math.max(14, Number(cycle.cycleLength) || 28)),
+      periodLength: Math.min(10, Math.max(1, Number(cycle.periodLength) || 5)),
+      reminders: cycle.reminders !== false,
+      updatedAt: iso(cycle.updatedAt, now),
+    };
+  }
+  const diary = Array.isArray(raw.diary) ? raw.diary : [];
+  state.diary = diary
+    .filter((e) => e && typeof e === "object" && text(e.title, 100).trim())
+    .slice(0, 500)
+    .map((e) => ({
+      id: text(e.id, 40) || uid(),
+      authorId: e.authorId === "partner" ? "partner" : "me",
+      title: text(e.title, 100).trim(),
+      body: text(e.body, 6000),
+      image: typeof e.image === "string" ? e.image : null,
+      createdAt: iso(e.createdAt, now),
+      updatedAt: iso(e.updatedAt, now),
+    }));
+  const alerts = Array.isArray(raw.alerts) ? raw.alerts : [];
+  state.alerts = alerts
+    .filter((a) => a && typeof a === "object" && text(a.title, 120).trim())
+    .slice(0, 200)
+    .map((a) => ({
+      id: text(a.id, 40) || uid(),
+      title: text(a.title, 120).trim(),
+      body: text(a.body, 600),
+      key: text(a.key, 80) || null,
+      category: ["cycle", "mood", "anniversary", "love"].includes(a.category)
+        ? a.category
+        : "love",
+      createdAt: iso(a.createdAt, now),
+      readAt: a.readAt ? iso(a.readAt, now) : null,
+    }));
+  state.settings = {
+    biometric: raw.settings?.biometric === true,
+    notify: raw.settings?.notify === true,
+  };
+  state.links = Array.isArray(raw.links)
+    ? raw.links
+        .filter((l) => l && typeof l === "object")
+        .slice(0, 20)
+        .map((l) => ({
+          id: text(l.id, 80) || "partner",
+          name: text(l.name, 40).trim() || "Người thương",
+          linkedAt: iso(l.linkedAt, now),
+        }))
+    : [];
+  return state;
+}
+export function reduce(state, action) {
+  const type = action?.type;
+  if (typeof type !== "string") throw new Error("Thao tác không hợp lệ.");
+  const next = JSON.parse(JSON.stringify(state));
+  if (type === "profile.set") {
+    const nickname = text(action.nickname, 40).trim();
+    if (!nickname) throw new Error("Tên gọi cần từ 1 đến 40 ký tự.");
+    if (!moodIds.includes(action.mood))
+      throw new Error("Cảm xúc không hợp lệ.");
+    next.me = {
+      ...next.me,
+      nickname,
+      mood: action.mood,
+      moodNote: text(action.moodNote, 300),
+    };
+  } else if (type === "profile.avatar") {
+    next.me = { ...next.me, avatar: action.file || null };
+  } else if (type === "anniversary.set") {
+    const at = Date.parse(action.iso);
+    if (
+      !Number.isFinite(at) ||
+      at > Date.now() + 60000 ||
+      at < Date.parse("1900-01-01")
+    )
+      throw new Error("Ngày kỷ niệm không hợp lệ.");
+    next.anniversary = new Date(at).toISOString();
+  } else if (type === "cycle.save") {
+    const lastPeriod = date(action.lastPeriod);
+    if (!lastPeriod) throw new Error("Ngày đầu kỳ không hợp lệ.");
+    if (lastPeriod > new Date().toISOString().slice(0, 10))
+      throw new Error("Ngày đầu kỳ không được ở tương lai.");
+    const cycleLength = Number(action.cycleLength),
+      periodLength = Number(action.periodLength);
+    if (!Number.isInteger(cycleLength) || cycleLength < 14 || cycleLength > 60)
+      throw new Error("Vòng kinh 14–60 ngày.");
+    if (
+      !Number.isInteger(periodLength) ||
+      periodLength < 1 ||
+      periodLength > 10
+    )
+      throw new Error("Kỳ kinh 1–10 ngày.");
+    next.cycle = {
+      lastPeriod,
+      cycleLength,
+      periodLength,
+      reminders: action.reminders !== false,
+      updatedAt: new Date().toISOString(),
+    };
+  } else if (type === "cycle.clear") {
+    next.cycle = null;
+  } else if (type === "diary.add") {
+    const title = text(action.title, 100).trim();
+    if (!title) throw new Error("Cần đặt tên cho kỷ niệm (1–100 ký tự).");
+    if (text(action.body, 6000).length < (action.body || "").length)
+      throw new Error("Ghi chú tối đa 6.000 ký tự.");
+    next.diary.unshift({
+      id: text(action.id, 40) || uid(),
+      authorId: "me",
+      title,
+      body: text(action.body, 6000),
+      image: typeof action.image === "string" ? action.image : null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    next.diary = next.diary.slice(0, 500);
+  } else if (type === "diary.update") {
+    const index = next.diary.findIndex(
+      (e) => e.id === action.id && e.authorId === "me",
+    );
+    if (index < 0) throw new Error("Chỉ sửa được kỷ niệm do bạn viết.");
+    const title = text(action.title, 100).trim();
+    if (!title) throw new Error("Cần đặt tên cho kỷ niệm (1–100 ký tự).");
+    next.diary[index] = {
+      ...next.diary[index],
+      title,
+      body: text(action.body, 6000),
+      image:
+        typeof action.image === "string"
+          ? action.image
+          : next.diary[index].image,
+      updatedAt: new Date().toISOString(),
+    };
+  } else if (type === "diary.remove") {
+    const target = next.diary.find(
+      (e) => e.id === action.id && e.authorId === "me",
+    );
+    if (!target) throw new Error("Chỉ xóa được kỷ niệm do bạn viết.");
+    next.diary = next.diary.filter((e) => e.id !== action.id);
+  } else if (type === "alerts.add") {
+    const title = text(action.title, 120).trim();
+    if (!title) throw new Error("Lời nhắc cần có tiêu đề.");
+    const key = text(action.key, 80);
+    if (key && next.alerts.some((a) => a.key === key)) return next;
+    next.alerts.unshift({
+      id: uid(),
+      key: key || null,
+      title,
+      body: text(action.body, 600),
+      category: ["cycle", "mood", "anniversary", "love"].includes(
+        action.category,
+      )
+        ? action.category
+        : "love",
+      createdAt: new Date().toISOString(),
+      readAt: null,
+    });
+    next.alerts = next.alerts.slice(0, 200);
+  } else if (type === "alerts.read") {
+    next.alerts = next.alerts.map((a) =>
+      a.id === action.id ? { ...a, readAt: new Date().toISOString() } : a,
+    );
+  } else if (type === "alerts.clear") {
+    next.alerts = [];
+  } else if (type === "settings.set") {
+    next.settings = { ...next.settings, notify: action.notify === true };
+  } else if (type === "partner.merge") {
+    const raw =
+      action.state && typeof action.state === "object" ? action.state : {};
+    const incoming = migrate({ ...raw, me: raw.from || raw.me });
+    const incomingId =
+      text(raw.from?.id || raw.me?.id, 80) || incoming.me.nickname;
+    const previous = new Set(next.diary.map((e) => e.id));
+    const theirs = incoming.diary
+      .filter((e) => !previous.has(e.id))
+      .map((e) => ({ ...e, authorId: e.authorId === "me" ? "partner" : "me" }));
+    next.diary = [...next.diary, ...theirs]
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      .slice(0, 500);
+    next.partner = { ...incoming.me, id: "partner" };
+    if (
+      incoming.cycle &&
+      (!next.cycle || incoming.cycle.updatedAt > next.cycle.updatedAt)
+    )
+      next.cycle = incoming.cycle;
+    next.links = [
+      ...next.links.filter((l) => l.id !== incomingId),
+      {
+        id: incomingId,
+        name: incoming.me.nickname,
+        linkedAt: new Date().toISOString(),
+      },
+    ].slice(-20);
+  } else if (type === "partner.unlink") {
+    next.partner = null;
+  } else if (type === "state.replace") {
+    return migrate(action.state);
+  } else {
+    throw new Error("Thao tác không được hỗ trợ.");
+  }
+  return next;
+}
+const fnv = (input) => {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+};
+export function base64Encode(input) {
+  const bytes = [];
+  for (const character of String(input)) {
+    const code = character.codePointAt(0);
+    if (code < 0x80) bytes.push(code);
+    else if (code < 0x800) bytes.push(0xc0 | (code >> 6), 0x80 | (code & 63));
+    else if (code < 0x10000)
+      bytes.push(
+        0xe0 | (code >> 12),
+        0x80 | ((code >> 6) & 63),
+        0x80 | (code & 63),
+      );
+    else
+      bytes.push(
+        0xf0 | (code >> 18),
+        0x80 | ((code >> 12) & 63),
+        0x80 | ((code >> 6) & 63),
+        0x80 | (code & 63),
+      );
+  }
+  if (typeof globalThis.Buffer !== "undefined")
+    return globalThis.Buffer.from(bytes).toString("base64");
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return globalThis.btoa(binary);
+}
+export function base64Decode(input) {
+  const binary =
+    typeof globalThis.Buffer !== "undefined"
+      ? globalThis.Buffer.from(String(input), "base64").toString("binary")
+      : globalThis.atob(String(input));
+  const bytes = [];
+  for (let index = 0; index < binary.length; index++)
+    bytes.push(binary.charCodeAt(index));
+  let text = "";
+  for (let index = 0; index < bytes.length;) {
+    const first = bytes[index];
+    let code;
+    if (first < 0x80) {
+      code = first;
+      index += 1;
+    } else if (first < 0xe0) {
+      code = ((first & 31) << 6) | (bytes[index + 1] & 63);
+      index += 2;
+    } else if (first < 0xf0) {
+      code =
+        ((first & 15) << 12) |
+        ((bytes[index + 1] & 63) << 6) |
+        (bytes[index + 2] & 63);
+      index += 3;
+    } else {
+      code =
+        ((first & 7) << 18) |
+        ((bytes[index + 1] & 63) << 12) |
+        ((bytes[index + 2] & 63) << 6) |
+        (bytes[index + 3] & 63);
+      index += 4;
+    }
+    text += String.fromCodePoint(code);
+  }
+  return text;
+}
+export function splitCode(code, size = 900) {
+  const body = String(code).slice(5);
+  if (body.length <= size) return [String(code)];
+  const chunks = [];
+  for (let index = 0; index < body.length; index += size)
+    chunks.push(body.slice(index, index + size));
+  return chunks.map(
+    (chunk, index) => `HTT1:${index + 1}/${chunks.length}:${chunk}`,
+  );
+}
+export function joinCodes(codes) {
+  const parts = codes.map((code) => String(code).trim()).filter(Boolean);
+  if (parts.length === 0) throw new Error("Chưa có mã nào để ghép.");
+  if (parts.length === 1) {
+    const single = parts[0];
+    if (!single.startsWith("HTT1:"))
+      throw new Error("Mã không đúng định dạng Hai Trái Tim.");
+    const singleMatch = /^HTT1:(\d+)\/(\d+):/.exec(single);
+    if (singleMatch && Number(singleMatch[2]) > 1)
+      throw new Error(`Cần đủ ${singleMatch[2]} đoạn mã, hiện có 1.`);
+    return single;
+  }
+  const ordered = [];
+  let total = 0;
+  for (const part of parts) {
+    const match = /^HTT1:(\d+)\/(\d+):([\s\S]+)$/.exec(part);
+    if (!match)
+      throw new Error(`Đoạn mã thứ ${ordered.length + 1} không hợp lệ.`);
+    total = Math.max(total, Number(match[2]));
+    ordered[Number(match[1]) - 1] = match[3];
+  }
+  if (ordered.length !== total || ordered.some((part) => !part))
+    throw new Error(`Cần đủ ${total} đoạn mã, hiện có ${parts.length}.`);
+  return "HTT1:" + ordered.join("");
+}
+export function encodeLink(state, kind = "link", images = {}) {
+  const body = {
+    v: STATE_VERSION,
+    kind,
+    from: {
+      id: "me",
+      nickname: state.me.nickname,
+      mood: state.me.mood,
+      moodNote: state.me.moodNote,
+    },
+    anniversary: state.anniversary,
+    cycle: state.cycle,
+    diary: kind === "full" ? state.diary : [],
+    avatar: state.me.avatar,
+    images: kind === "full" ? images : {},
+  };
+  const payload = JSON.stringify(body);
+  return `HTT1:${base64Encode(JSON.stringify({ data: payload, crc: fnv(payload) }))}`;
+}
+export function decodeLink(code) {
+  const trimmed = String(code || "").trim();
+  if (!trimmed.startsWith("HTT1:"))
+    throw new Error("Mã không đúng định dạng Hai Trái Tim.");
+  const envelope = JSON.parse(base64Decode(trimmed.slice(5)));
+  if (typeof envelope?.data !== "string")
+    throw new Error("Mã bị thiếu dữ liệu.");
+  if (envelope.crc !== fnv(envelope.data))
+    throw new Error("Mã có thể bị hỏng khi sao chép. Hãy quét lại.");
+  const payload = JSON.parse(envelope.data);
+  if (payload?.v !== STATE_VERSION)
+    throw new Error("Mã được tạo bởi phiên bản ứng dụng khác.");
+  if (!payload.from?.nickname)
+    throw new Error("Mã thiếu thông tin người thương.");
+  payload.images =
+    payload.images && typeof payload.images === "object" ? payload.images : {};
+  return payload;
+}
+
+export function restoreFromPayload(payload) {
+  const state = emptyState();
+  state.me = profile(
+    { ...payload?.from, avatar: payload?.from?.avatar },
+    "me",
+    "Bạn",
+  );
+  state.anniversary = iso(payload?.anniversary, state.anniversary);
+  const cycle = migrate({ cycle: payload?.cycle }).cycle;
+  state.cycle = cycle || null;
+  state.diary = migrate({ diary: payload?.diary }).diary;
+  return state;
+}
+export function cycleEvents(cycle, today) {
+  if (!cycle?.reminders) return [];
+  const age = Math.floor(
+    (Date.parse(`${today}T00:00:00Z`) -
+      Date.parse(`${cycle.lastPeriod}T00:00:00Z`)) /
+      86400000,
+  );
+  if (
+    !Number.isFinite(age) ||
+    age < 0 ||
+    age > Math.min(90, cycle.cycleLength * 3)
+  )
+    return [];
+  const base = Math.floor(age / cycle.cycleLength);
+  const events = [];
+  for (let index = Math.max(1, base - 1); index <= base + 2; index++) {
+    const period = addDaysSafe(cycle.lastPeriod, index * cycle.cycleLength);
+    events.push({
+      key: `cycle:period_soon:${period}`,
+      day: addDaysSafe(period, -3),
+      category: "cycle",
+      title: "Một lời nhắc chăm sóc",
+      body: "Theo lịch ước tính, kỳ kinh có thể đến trong 3 ngày. Hỏi người thương cần gì và chuẩn bị thời gian nghỉ.",
+    });
+    events.push({
+      key: `cycle:period:${period}`,
+      day: period,
+      category: "cycle",
+      title: "Mốc đầu kỳ theo lịch ước tính",
+      body: "Đây là dự báo theo lịch, có thể lệch. Hãy hỏi người thương thay vì tự quyết định giúp.",
+    });
+    events.push({
+      key: `cycle:ovulation:${period}`,
+      day: addDaysSafe(period, -14),
+      category: "cycle",
+      title: "Mốc rụng trứng ước tính",
+      body: "Dự báo theo lịch có sai số, không dùng để tránh thai. Hôm nay có thể hỏi người thương cảm thấy thế nào.",
+    });
+  }
+  return events;
+}
+export function anniversaryEvents(state, today, years = 2) {
+  const start = new Date(state.anniversary);
+  if (!Number.isFinite(start.getTime())) return [];
+  const current = new Date(`${today}T00:00:00Z`).getUTCFullYear();
+  const events = [];
+  for (let offset = 0; offset <= years; offset++) {
+    const day = `${current + offset}-${String(start.getUTCMonth() + 1).padStart(2, "0")}-${String(start.getUTCDate()).padStart(2, "0")}`;
+    events.push({
+      key: `anniversary:${day}`,
+      day,
+      category: "anniversary",
+      title: "Một ngày của hai chúng mình",
+      body: "Hôm nay là ngày kỷ niệm. Dành chút thời gian cho nhau và lưu lại một khoảnh khắc nhé.",
+    });
+  }
+  return events;
+}
+export function dueAlerts(state, today) {
+  return [
+    ...cycleEvents(state.cycle, today),
+    ...anniversaryEvents(state, today),
+  ].filter((event) => event.day === today);
+}
+function addDaysSafe(value, days) {
+  return new Date(Date.parse(`${value}T00:00:00Z`) + days * 86400000)
+    .toISOString()
+    .slice(0, 10);
+}
+function cycleForecastSafe(lastPeriod, cycleLength, periodLength, today) {
+  const age = Math.floor(
+    (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${lastPeriod}T00:00:00Z`)) /
+      86400000,
+  );
+  if (!Number.isFinite(age) || age < 0) throw new Error("Chu kỳ chưa hợp lệ.");
+  const nextPeriod = addDaysSafe(
+    lastPeriod,
+    (Math.floor(age / cycleLength) + 1) * cycleLength,
+  );
+  return { nextPeriod };
+}

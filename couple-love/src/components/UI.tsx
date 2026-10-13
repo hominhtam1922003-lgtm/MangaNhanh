@@ -9,6 +9,34 @@ import {
   Alert,
 } from "react-native";
 import { SupabaseClient } from "@supabase/supabase-js";
+import { imageUri } from "../services/localdb";
+export function LocalAvatar({
+  name,
+  image,
+  size = 64,
+}: {
+  name: string;
+  image: string | null;
+  size?: number;
+}) {
+  const uri = imageUri(image);
+  return uri ? (
+    <Image
+      accessibilityLabel={"Ảnh của " + name}
+      source={{ uri }}
+      style={{ width: size, height: size, borderRadius: size / 2 }}
+    />
+  ) : (
+    <View
+      style={{ width: size, height: size, borderRadius: size / 2 }}
+      className="bg-pink-100 items-center justify-center"
+    >
+      <Text className="text-love text-2xl font-bold">
+        {Array.from(name)[0] || "♥"}
+      </Text>
+    </View>
+  );
+}
 export function Card({ children }: { children: React.ReactNode }) {
   return (
     <View className="bg-white rounded-3xl border border-pink-100 p-5 mb-4">

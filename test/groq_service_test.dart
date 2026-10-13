@@ -47,6 +47,7 @@ void main() {
       ],
     }),
     200,
+    encoding: utf8,
   );
   test(
     'Groq key tách Gemini, đọc lại xác nhận, key sai không ghi đè',

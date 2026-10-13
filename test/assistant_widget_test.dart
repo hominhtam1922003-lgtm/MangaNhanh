@@ -38,7 +38,7 @@ void main() {
   setUp(() {
     sqfliteFfiInit();
     database = AppDatabase(
-      factory: databaseFactoryFfi,
+      factory: databaseFactoryFfiNoIsolate,
       path: inMemoryDatabasePath,
     );
     controller = AppController(TaskRepository(database), ReminderService());

@@ -51,6 +51,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
       }
       _model = await widget.controller.repository.setting('groq.model') ?? '';
       _hasKey = await _service.hasKey();
+      if (mounted) {
+        setState(() {});
+      }
       if (_hasKey) {
         await _discover();
       }
@@ -218,254 +221,277 @@ class _AssistantScreenState extends State<AssistantScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Trợ lý AI'),
-      actions: [
-        IconButton(
-          tooltip: 'Cuộc trò chuyện mới',
-          onPressed: _busy ? null : _clear,
-          icon: const Icon(Icons.add_comment_outlined),
-        ),
-        IconButton(
-          tooltip: 'Cài đặt AI',
-          onPressed: _busy ? null : _settings,
-          icon: const Icon(Icons.tune_rounded),
-        ),
-      ],
-    ),
-    body: SafeArea(
-      child: PageFrame(
-        maxWidth: 960,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.auto_awesome, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _hasKey
-                          ? 'GroqCloud · ${_model.isEmpty ? 'Đang chọn mô hình' : _model}'
-                          : 'GroqCloud · Chưa thiết lập key',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _busy ? null : _settings,
-                    child: const Text('Thiết lập'),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: _messages.isEmpty
-                  ? ListView(
-                      padding: const EdgeInsets.all(24),
-                      children: [
-                        const Icon(Icons.forum_outlined, size: 54),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Bạn muốn hỏi gì hôm nay?',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.headlineSmall,
+  Widget build(BuildContext context) {
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Trợ lý AI'),
+        actions: [
+          IconButton(
+            tooltip: 'Cuộc trò chuyện mới',
+            onPressed: _busy ? null : _clear,
+            icon: const Icon(Icons.add_comment_outlined),
+          ),
+          IconButton(
+            tooltip: 'Cài đặt AI',
+            onPressed: _busy ? null : _settings,
+            icon: const Icon(Icons.tune_rounded),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: PageFrame(
+          maxWidth: 960,
+          child: LayoutBuilder(
+            builder: (context, box) => Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.auto_awesome, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _hasKey
+                              ? 'GroqCloud · ${_model.isEmpty ? 'Đang chọn mô hình' : _model}'
+                              : 'GroqCloud · Chưa thiết lập key',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Trò chuyện, giải thích bài học, tìm ý tưởng hoặc cùng lên kế hoạch. AI có thể sai; không tự tạo việc hay đặt chuông.',
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 20),
-                        Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 8,
-                          runSpacing: 8,
+                      ),
+                      TextButton(
+                        onPressed: _busy ? null : _settings,
+                        child: const Text('Thiết lập'),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: _messages.isEmpty
+                      ? ListView(
+                          padding: const EdgeInsets.all(24),
                           children: [
-                            for (final text in [
-                              'Giải thích dễ hiểu một chủ đề',
-                              'Giúp tôi lên kế hoạch tuần này',
-                              'Gợi ý cách tập trung khi học',
-                            ])
-                              ActionChip(
-                                label: Text(text),
-                                onPressed: () => _input.text = text,
+                            const Icon(Icons.forum_outlined, size: 54),
+                            const SizedBox(height: 20),
+                            Text(
+                              'Bạn muốn hỏi gì hôm nay?',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.headlineSmall,
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Trò chuyện, giải thích bài học, tìm ý tưởng hoặc cùng lên kế hoạch. AI có thể sai; không tự tạo việc hay đặt chuông.',
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 20),
+                            Wrap(
+                              alignment: WrapAlignment.center,
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (final text in [
+                                  'Giải thích dễ hiểu một chủ đề',
+                                  'Giúp tôi lên kế hoạch tuần này',
+                                  'Gợi ý cách tập trung khi học',
+                                ])
+                                  ActionChip(
+                                    label: Text(text),
+                                    onPressed: () => _input.text = text,
+                                  ),
+                              ],
+                            ),
+                            if (!_hasKey)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 24),
+                                child: FilledButton.icon(
+                                  onPressed: _busy ? null : _settings,
+                                  icon: const Icon(Icons.key),
+                                  label: const Text('Nhập GroqCloud API key'),
+                                ),
                               ),
                           ],
-                        ),
-                        if (!_hasKey)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 24),
-                            child: FilledButton.icon(
-                              onPressed: _busy ? null : _settings,
-                              icon: const Icon(Icons.key),
-                              label: const Text('Nhập GroqCloud API key'),
-                            ),
+                        )
+                      : ListView.builder(
+                          controller: _scroll,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
                           ),
-                      ],
-                    )
-                  : ListView.builder(
-                      controller: _scroll,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      itemCount: _messages.length,
-                      itemBuilder: (context, i) {
-                        final message = _messages[i],
-                            user = message.role == 'user';
-                        return Align(
-                          alignment: user
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 700),
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 14),
-                              child: Panel(
-                                color: user
-                                    ? Theme.of(
-                                        context,
-                                      ).colorScheme.primaryContainer
-                                    : null,
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
+                          itemCount: _messages.length,
+                          itemBuilder: (context, i) {
+                            final message = _messages[i],
+                                user = message.role == 'user';
+                            return Align(
+                              alignment: user
+                                  ? Alignment.centerRight
+                                  : Alignment.centerLeft,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 700,
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(bottom: 14),
+                                  child: Panel(
+                                    color: user
+                                        ? Theme.of(
+                                            context,
+                                          ).colorScheme.primaryContainer
+                                        : null,
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Expanded(
-                                          child: Text(
-                                            user ? 'Bạn' : 'Trợ lý AI',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ),
-                                        PopupMenuButton<String>(
-                                          tooltip: 'Thao tác tin nhắn',
-                                          onSelected: (value) async {
-                                            if (value == 'copy') {
-                                              await Clipboard.setData(
-                                                ClipboardData(
-                                                  text: message.content,
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                user ? 'Bạn' : 'Trợ lý AI',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w700,
                                                 ),
-                                              );
-                                            } else if (mounted) {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute<void>(
-                                                  builder: (_) => TaskEditor(
-                                                    controller:
-                                                        widget.controller,
-                                                    initialNotes:
-                                                        message.content,
+                                              ),
+                                            ),
+                                            PopupMenuButton<String>(
+                                              tooltip: 'Thao tác tin nhắn',
+                                              onSelected: (value) async {
+                                                if (value == 'copy') {
+                                                  await Clipboard.setData(
+                                                    ClipboardData(
+                                                      text: message.content,
+                                                    ),
+                                                  );
+                                                } else if (mounted) {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute<void>(
+                                                      builder: (_) =>
+                                                          TaskEditor(
+                                                            controller: widget
+                                                                .controller,
+                                                            initialNotes:
+                                                                message.content,
+                                                          ),
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                              itemBuilder: (_) => const [
+                                                PopupMenuItem(
+                                                  value: 'copy',
+                                                  child: Text('Sao chép'),
+                                                ),
+                                                PopupMenuItem(
+                                                  value: 'task',
+                                                  child: Text(
+                                                    'Tạo công việc từ tin nhắn',
                                                   ),
                                                 ),
-                                              );
-                                            }
-                                          },
-                                          itemBuilder: (_) => const [
-                                            PopupMenuItem(
-                                              value: 'copy',
-                                              child: Text('Sao chép'),
-                                            ),
-                                            PopupMenuItem(
-                                              value: 'task',
-                                              child: Text(
-                                                'Tạo công việc từ tin nhắn',
-                                              ),
+                                              ],
                                             ),
                                           ],
                                         ),
+                                        SelectableText(message.content),
                                       ],
                                     ),
-                                    SelectableText(message.content),
-                                  ],
+                                  ),
                                 ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: box.maxHeight * .48),
+                  child: SingleChildScrollView(
+                    reverse: true,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_busy) const LinearProgressIndicator(),
+                        if (_error != null)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            child: Text(
+                              _error!,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
                               ),
                             ),
                           ),
-                        );
-                      },
-                    ),
-            ),
-            if (_busy) const LinearProgressIndicator(),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Text(
-                  _error!,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-            if (_hasKey && MediaQuery.viewInsetsOf(context).bottom == 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Checkbox(
-                      value: _includeTasks,
-                      onChanged: _busy
-                          ? null
-                          : (v) => setState(() => _includeTasks = v!),
-                    ),
-                    const Expanded(
-                      child: Text(
-                        'Cho AI tham khảo tối đa 30 việc chưa xong',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: VietnameseInput(
-                      controller: _input,
-                      label: 'Nhắn cho trợ lý AI',
-                      minLines: 1,
-                      maxLines: MediaQuery.viewInsetsOf(context).bottom > 0
-                          ? 2
-                          : 4,
-                      maxLength: 4000,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 28),
-                    child: IconButton.filled(
-                      tooltip: 'Gửi tin nhắn',
-                      onPressed: _busy || !_hasKey ? null : _send,
-                      icon: const Icon(Icons.arrow_upward_rounded),
+                        if (_hasKey && !keyboardOpen)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: _includeTasks,
+                                  onChanged: _busy
+                                      ? null
+                                      : (v) =>
+                                            setState(() => _includeTasks = v!),
+                                ),
+                                const Expanded(
+                                  child: Text(
+                                    'Cho AI tham khảo tối đa 30 việc chưa xong',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Expanded(
+                                child: VietnameseInput(
+                                  controller: _input,
+                                  label: 'Nhắn cho trợ lý AI',
+                                  minLines: 1,
+                                  maxLines: keyboardOpen ? 2 : 4,
+                                  maxLength: 4000,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 28),
+                                child: IconButton.filled(
+                                  tooltip: 'Gửi tin nhắn',
+                                  onPressed: _busy || !_hasKey ? null : _send,
+                                  icon: const Icon(Icons.arrow_upward_rounded),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (!keyboardOpen)
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                            child: Text(
+                              'Bấm Gửi: câu hỏi và tối đa 20 tin gần đây được gửi đến GroqCloud. Lịch sử giữ tối đa 100 tin trên máy. Không gửi key trong chat.',
+                              style: TextStyle(fontSize: 10),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
-            if (MediaQuery.viewInsetsOf(context).bottom == 0)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(
-                  'Bấm Gửi: câu hỏi và tối đa 20 tin gần đây được gửi đến GroqCloud. Lịch sử giữ tối đa 100 tin trên máy. Không gửi key trong chat.',
-                  style: TextStyle(fontSize: 10),
                 ),
-              ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _AISettings extends StatefulWidget {

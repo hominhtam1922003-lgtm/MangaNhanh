@@ -139,3 +139,13 @@ create function public.preference_privacy() returns trigger language plpgsql sec
 create trigger preference_alert_privacy after update on public.preferences for each row execute function public.preference_privacy();
 revoke execute on function public.preference_privacy() from public,anon,authenticated;
 revoke create on schema public from public,anon,authenticated;
+
+-- Quyền tối thiểu rõ ràng, không phụ thuộc cấu hình grant mặc định của dự án.
+revoke all on public.couples,public.members,public.preferences,public.pairing_codes,public.pair_attempts,public.cycles,public.diary,public.push_tokens,public.push_jobs from authenticated;
+revoke all on public.profiles,public.couples,public.members,public.preferences,public.pairing_codes,public.pair_attempts,public.cycles,public.diary,public.push_tokens,public.alerts,public.push_jobs from anon;
+grant select on public.couples,public.members,public.preferences to authenticated;
+grant update(allow_cycle_alerts,allow_mood_alerts) on public.preferences to authenticated;
+grant select,insert,update,delete on public.cycles,public.diary,public.push_tokens to authenticated;
+grant all on public.profiles,public.couples,public.members,public.preferences,public.pairing_codes,public.pair_attempts,public.cycles,public.diary,public.push_tokens,public.alerts,public.push_jobs to service_role;
+insert into public.profiles(id) select id from auth.users on conflict(id) do nothing;
+insert into public.preferences(user_id) select id from public.profiles on conflict(user_id) do nothing;

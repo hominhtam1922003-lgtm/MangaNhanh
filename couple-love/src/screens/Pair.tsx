@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { View, Text, Alert } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -19,6 +19,7 @@ export default function Pair({
     [busy, setBusy] = useState(false),
     [scanner, setScanner] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
+  const joining = useRef(false);
   useEffect(() => {
     const t = setInterval(() => setTick(Date.now()), 1000);
     return () => clearInterval(t);
@@ -39,11 +40,13 @@ export default function Pair({
     }
   }
   async function join(value = code) {
+    if (joining.current) return;
     setScanner(false);
     if (!/^\d{6}$/.test(value)) {
       Alert.alert("Mã ghép đôi", "Nhập đúng 6 chữ số.");
       return;
     }
+    joining.current = true;
     setBusy(true);
     try {
       const r = await db.rpc("join_pair", { code: value });
@@ -53,6 +56,7 @@ export default function Pair({
     } catch (e) {
       Alert.alert("Chưa ghép đôi", explain(e));
     } finally {
+      joining.current = false;
       setBusy(false);
     }
   }

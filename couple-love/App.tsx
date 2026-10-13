@@ -126,7 +126,8 @@ function Content() {
         void sync.current?.load();
       } else {
         db.auth.stopAutoRefresh();
-        if (lockEnabled && !authenticating.current) setLocked(true);
+        if (lockEnabled && (state === "background" || !authenticating.current))
+          setLocked(true);
       }
     });
     if (AppState.currentState === "active") db.auth.startAutoRefresh();
@@ -151,9 +152,10 @@ function Content() {
         promptMessage: "Mở Hai Trái Tim",
         cancelLabel: "Để sau",
         disableDeviceFallback: true,
+        biometricsSecurityLevel: "strong",
         fallbackLabel: "",
       });
-      return r.success;
+      return r.success && AppState.currentState === "active";
     } finally {
       authenticating.current = false;
       setUnlocking(false);

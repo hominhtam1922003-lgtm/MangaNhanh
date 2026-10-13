@@ -21,7 +21,8 @@ export default function Home({
 }) {
   const [now, setNow] = useState(Date.now()),
     [reduced, setReduced] = useState(false),
-    [picker, setPicker] = useState(false);
+    [picker, setPicker] = useState(false),
+    [selectedDate, setSelectedDate] = useState(new Date());
   const couple = data.couple;
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -113,26 +114,35 @@ export default function Home({
             <Button
               label="Chọn ngày bắt đầu"
               secondary
-              onPress={() => setPicker(true)}
+              onPress={() => {
+                setSelectedDate(new Date(couple.anniversary));
+                setPicker(true);
+              }}
             />
             {picker && (
               <>
                 <DateTimePicker
-                  value={new Date(couple.anniversary)}
+                  value={selectedDate}
                   maximumDate={new Date()}
                   minimumDate={new Date("1900-01-01")}
                   mode="date"
                   display={Platform.OS === "ios" ? "spinner" : "default"}
                   onChange={(event, date) => {
                     if (Platform.OS === "android") setPicker(false);
-                    if (event.type === "set" && date) void setDate(date);
+                    if (event.type === "set" && date) {
+                      setSelectedDate(date);
+                      if (Platform.OS === "android") void setDate(date);
+                    }
                   }}
                 />
                 {Platform.OS === "ios" && (
                   <Button
-                    label="Đóng lịch"
+                    label="Lưu ngày đã chọn"
                     secondary
-                    onPress={() => setPicker(false)}
+                    onPress={() => {
+                      setPicker(false);
+                      void setDate(selectedDate);
+                    }}
                   />
                 )}
               </>

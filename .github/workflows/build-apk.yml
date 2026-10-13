@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  checks: write
 
 jobs:
   build-apk:
@@ -16,9 +17,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Lấy mã nguồn
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Cài Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -28,11 +29,13 @@ jobs:
           channel: stable
           cache: true
       - name: Thông tin môi trường
-        run: flutter --version
+        run: flutter --version 2>&1 | tee /tmp/lich-nhac-environment.log
       - name: Cài dependencies
         run: flutter pub get
       - name: Định dạng mã nguồn
-        run: dart format lib test
+        run: |
+          dart format lib test
+          git diff -- lib test > /tmp/lich-nhac-format.patch
       - name: Lưu mã đã định dạng và dependency lockfile
         uses: actions/upload-artifact@v4
         with:
@@ -43,11 +46,11 @@ jobs:
             test/
           retention-days: 7
       - name: Phân tích mã nguồn
-        run: flutter analyze
+        run: flutter analyze 2>&1 | tee /tmp/lich-nhac-analyze.log
       - name: Kiểm thử
-        run: flutter test
+        run: flutter test --reporter expanded 2>&1 | tee /tmp/lich-nhac-test.log
       - name: Build APK release để cài thử
-        run: flutter build apk --release
+        run: flutter build apk --release 2>&1 | tee /tmp/lich-nhac-build.log
       - name: Tải lên APK
         uses: actions/upload-artifact@v4
         with:
@@ -55,3 +58,48 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
+      - name: Công bố chẩn đoán qua GitHub Checks
+        if: always() && github.event_name != 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const files = [
+              ['/tmp/lich-nhac-environment.log', 'Môi trường'],
+              ['/tmp/lich-nhac-analyze.log', 'Analyze'],
+              ['/tmp/lich-nhac-test.log', 'Test'],
+              ['/tmp/lich-nhac-build.log', 'Build'],
+            ];
+            const text = files.map(([file, title]) =>
+              `## ${title}\n\n\`\`\`text\n${fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : 'Chưa chạy'}\n\`\`\``
+            ).join('\n\n');
+            const base = {
+              ...context.repo,
+              head_sha: context.sha,
+              status: 'completed',
+              conclusion: 'neutral',
+            };
+            await github.rest.checks.create({
+              ...base,
+              name: 'Flutter diagnostics',
+              output: {
+                title: 'Nhật ký xác minh Flutter',
+                summary: 'Log analyze/test/build; kết quả chính thức ở job build-apk.',
+                text: text.slice(-60000),
+              },
+            });
+            for (const [file, name] of [
+              ['pubspec.lock', 'Flutter dependency lock'],
+              ['/tmp/lich-nhac-format.patch', 'Flutter formatting patch'],
+            ]) {
+              if (!fs.existsSync(file)) continue;
+              await github.rest.checks.create({
+                ...base,
+                name,
+                output: {
+                  title: name,
+                  summary: 'Dữ liệu xác minh dùng để cố định dependency và định dạng mã nguồn.',
+                  text: fs.readFileSync(file, 'utf8').slice(0, 60000) || '(không có thay đổi)',
+                },
+              });
+            }

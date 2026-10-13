@@ -32,7 +32,7 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38404844843' }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38410199821' }}
     steps:
       - name: Kiểm tra nguồn APK đã build thành công
         id: verify
@@ -56,9 +56,7 @@ jobs:
           ARTIFACT_NAME: HaiTraiTim-1.2.0-APK
         run: |
           exec > >(tee /tmp/love-download.log) 2>&1
-          echo "BUILD_RUN_ID=$BUILD_RUN_ID · ARTIFACT_NAME=$ARTIFACT_NAME · repo=$GITHUB_REPOSITORY"
-          echo "Danh sách artifact của lần chạy:"
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID/artifacts" --jq '.total_count, (.artifacts[] | "\(.id) \(.name) expired=\(.expired)")' || true
+          echo "BUILD_RUN_ID=$BUILD_RUN_ID · ARTIFACT_NAME=$ARTIFACT_NAME"
           mkdir -p release-apk
           for attempt in 1 2 3 4 5; do
             artifact_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID/artifacts" \

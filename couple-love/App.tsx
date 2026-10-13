@@ -37,6 +37,12 @@ import {
   dueAlertActions,
   rescheduleReminders,
 } from "./src/services/localnotify";
+import {
+  RelayClient,
+  payloadKey,
+  relayPayloadFor,
+  roomFromState,
+} from "./src/services/relay";
 import HomeLocal from "./src/screens/local/HomeLocal";
 import CycleLocal from "./src/screens/local/CycleLocal";
 import DiaryLocal from "./src/screens/local/DiaryLocal";
@@ -389,8 +395,23 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   const [lockEnabled, setLockEnabled] = useState(false);
   const [locked, setLocked] = useState(true);
   const [unlocking, setUnlocking] = useState(false);
+  const [relayStatus, setRelayStatus] = useState<{
+    state: string;
+    broker: string | null;
+    partnerOnline: boolean;
+    partnerName?: string | null;
+  }>({ state: "off", broker: null, partnerOnline: false });
   const authenticating = useRef(false);
   const stateRef = useRef<State | null>(null);
+  const relayRef = useRef<RelayClient | null>(null);
+  const publishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deviceIdRef = useRef(
+    "d" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36),
+  );
+  const lastSentRef = useRef("");
+  const sentRoomRef = useRef("");
+  const joinedRef = useRef("");
+  const relayRoom = state ? roomFromState(state) : null;
   useEffect(() => {
     let alive = true;
     void (async () => {
@@ -503,6 +524,81 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     setLockEnabled(value);
     setLocked(false);
   }
+  // Gửi dữ liệu của mình cho người thương. Bỏ qua khi nội dung không đổi để
+  // hai máy không gửi qua gửi lại mãi; ép gửi khi người thương vừa trực tuyến.
+  function publishCurrent(force = false) {
+    const current = stateRef.current;
+    const client = relayRef.current;
+    if (!current || !client) return;
+    const payload = relayPayloadFor(current, deviceIdRef.current);
+    const key = payloadKey(payload);
+    if (!force && key === lastSentRef.current) return;
+    if (client.publishState(payload, current.me.nickname))
+      lastSentRef.current = key;
+  }
+  useEffect(() => {
+    if (!relayRoom || !state?.settings.relay) {
+      relayRef.current?.stop();
+      relayRef.current = null;
+      setRelayStatus({ state: "off", broker: null, partnerOnline: false });
+      return;
+    }
+    const client = new RelayClient({
+      room: relayRoom,
+      onPayload: (payload: Record<string, unknown>) => {
+        try {
+          update({ type: "partner.merge", state: payload });
+          setError("");
+        } catch (mergeError) {
+          setError(
+            mergeError instanceof Error
+              ? mergeError.message
+              : "Không gộp được dữ liệu nhận qua kết nối.",
+          );
+        }
+      },
+      onStatus: (status: {
+        state: string;
+        broker: string | null;
+        partnerOnline: boolean;
+      }) => setRelayStatus(status),
+    });
+    relayRef.current = client;
+    client.start();
+    return () => {
+      client.stop();
+      relayRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [relayRoom?.id, relayRoom?.key, state?.settings.relay]);
+  useEffect(() => {
+    if (!state || !relayRef.current) return;
+    if (sentRoomRef.current !== (relayRoom?.id ?? "")) {
+      sentRoomRef.current = relayRoom?.id ?? "";
+      lastSentRef.current = "";
+    }
+    if (publishTimer.current) clearTimeout(publishTimer.current);
+    publishTimer.current = setTimeout(() => publishCurrent(false), 700);
+    return () => {
+      if (publishTimer.current) clearTimeout(publishTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, relayRoom?.id]);
+  // Người thương vừa mở app: gửi ngay toàn bộ dữ liệu của mình cho họ và báo
+  // cho chính mình biết là hai máy đã ghép nối (cả hai bên đều nhận như nhau).
+  useEffect(() => {
+    if (!relayStatus.partnerOnline) return;
+    publishCurrent(true);
+    const name = relayStatus.partnerName || stateRef.current?.partner?.nickname;
+    if (!name || joinedRef.current === name) return;
+    joinedRef.current = name;
+    Alert.alert(
+      "Đã ghép nối với " + name,
+      "Hai máy đã chung dữ liệu và tự cập nhật cho nhau khi cùng mở app.",
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [relayStatus.partnerOnline, relayStatus.partnerName]);
+
   if (!state) {
     return (
       <View className="flex-1 bg-pink-50 items-center justify-center">
@@ -563,9 +659,28 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             <Text className="text-xl font-bold text-ink">
               Hai Trái Tim <Text className="text-love">♡</Text>
             </Text>
-            <Text className="text-xs text-stone-500 mt-1">
-              Chạy trên máy · không cần máy chủ
-            </Text>
+            <View className="flex-row items-center mt-1">
+              <View
+                className={`w-2 h-2 rounded-full mr-2 ${
+                  relayStatus.state === "online"
+                    ? "bg-emerald-500"
+                    : relayStatus.state === "alone"
+                      ? "bg-amber-400"
+                      : relayStatus.state === "connecting"
+                        ? "bg-sky-400"
+                        : "bg-stone-300"
+                }`}
+              />
+              <Text className="text-xs text-stone-500">
+                {relayStatus.state === "online"
+                  ? `Đã kết nối · ${relayStatus.partnerName ?? "người thương"} đang trực tuyến`
+                  : relayStatus.state === "alone"
+                    ? "Đã nối trạm · chờ người thương"
+                    : relayStatus.state === "connecting"
+                      ? "Đang kết nối tức thời…"
+                      : "Chạy trên máy · không cần máy chủ"}
+              </Text>
+            </View>
           </View>
           {tab === "pair" && (
             <Pressable
@@ -654,6 +769,8 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             <PairLocal
               {...props}
               initialCode={state.links.length > 0 ? "1" : ""}
+              relayStatus={relayStatus}
+              syncNow={() => publishCurrent(true)}
             />
           ) : tab === "cycle" ? (
             <CycleLocal {...props} />

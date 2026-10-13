@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import '../models/task.dart';
 import 'weather_api.dart';
+import 'groq_rate_limit.dart';
 
 class ChatMessage {
   const ChatMessage(this.role, this.content);
@@ -26,10 +27,20 @@ class GroqReply {
 class _UnavailableModel implements Exception {}
 
 class GroqService {
-  GroqService({http.Client? client, FlutterSecureStorage? storage})
+  GroqService({http.Client? client, FlutterSecureStorage? storage, DateTime Function()? now})
     : _client = client ?? http.Client(),
-      storage = storage ?? const FlutterSecureStorage();
+      storage = storage ?? const FlutterSecureStorage(), _now = now ?? DateTime.now;
   final http.Client _client;
+  final DateTime Function() _now;
+  DateTime? _blockedUntil, _modelsAt;
+  List<String>? _cachedModels;
+  String? _modelsKey;
+  bool _sending = false;
+  DateTime? get nextAllowedAt => _blockedUntil;
+  void invalidateModels() { _cachedModels = null; _modelsKey = null; _modelsAt = null; }
+  void _guardCooldown() {
+    if (_blockedUntil?.isAfter(_now()) == true) { throw GroqRateLimit(_blockedUntil!); }
+  }
   void dispose() => _client.close();
   final FlutterSecureStorage storage;
   Future<bool> hasKey() async =>
@@ -43,6 +54,7 @@ class GroqService {
         'Nhập GroqCloud API key bắt đầu bằng gsk_. Gemini key không dùng được ở đây.',
       );
     }
+    invalidateModels();
     try {
       await storage.write(key: 'groq.key', value: key);
       if (await storage.read(key: 'groq.key') != key) {
@@ -57,7 +69,7 @@ class GroqService {
     }
   }
 
-  Future<void> deleteKey() => storage.delete(key: 'groq.key');
+  Future<void> deleteKey() async { invalidateModels(); await storage.delete(key: 'groq.key'); }
   Future<String> _key() async {
     final key = await storage.read(key: 'groq.key');
     if (key == null || key.isEmpty) {
@@ -86,9 +98,12 @@ class GroqService {
         );
       }
       if (response.statusCode == 429) {
-        throw const UserMessage(
-          'GroqCloud đã chạm hạn mức. Chờ rồi gửi lại; app không tự gửi liên tục hoặc bật thanh toán.',
-        );
+        String? message;
+        try { message = ((jsonDecode(utf8.decode(response.bodyBytes)) as Map)['error'] as Map?)?['message'] as String?; } catch (_) { }
+        final daily = message != null && RegExp(r'per day|daily|\btpd\b|\brpd\b', caseSensitive: false).hasMatch(message);
+        final at = retryTime(response.headers, _now(), message: message, daily: daily);
+        _blockedUntil = at;
+        throw GroqRateLimit(at, daily: daily);
       }
       String? code;
       try {
@@ -135,6 +150,8 @@ class GroqService {
 
   Future<List<String>> models() async {
     final key = await _key();
+    if (_cachedModels != null && _modelsKey == key && _modelsAt != null && _now().difference(_modelsAt!) < const Duration(minutes: 10)) { return List.of(_cachedModels!); }
+    _guardCooldown();
     final response = await _request(
       () => _client.get(
         Uri.https('api.groq.com', '/openai/v1/models'),
@@ -163,6 +180,7 @@ class GroqService {
           'GroqCloud chưa trả mô hình chat khả dụng cho tài khoản này. Kiểm tra quyền trong console.groq.com.',
         );
       }
+      _cachedModels = List.of(models); _modelsKey = key; _modelsAt = _now();
       return models;
     } on UserMessage {
       rethrow;
@@ -187,7 +205,20 @@ class GroqService {
     );
   }
 
-  Future<GroqReply> chat(
+  Future<GroqReply> chat(String text, {String preferred = '', List<ChatMessage> history = const [], List<Task> contextTasks = const []}) async {
+    if (text.trim().isEmpty || text.length > 4000) { throw const UserMessage('Nhập tin nhắn từ 1 đến 4.000 ký tự.'); }
+    if (_sending) { throw const UserMessage('Đang xử lý câu hỏi trước. Không gửi trùng yêu cầu.'); }
+    _guardCooldown();
+    _sending = true;
+    try { return await _chatRequest(text, preferred: preferred, history: history, contextTasks: contextTasks); }
+    finally {
+      _sending = false;
+      final minimum = _now().add(const Duration(seconds: 5));
+      if (_blockedUntil == null || _blockedUntil!.isBefore(minimum)) { _blockedUntil = minimum; }
+    }
+  }
+
+  Future<GroqReply> _chatRequest(
     String text, {
     String preferred = '',
     List<ChatMessage> history = const [],
@@ -200,8 +231,8 @@ class GroqService {
     var candidates = await models();
     final rejected = <String>{};
     final recent = <ChatMessage>[];
-    var remaining = 16000;
-    for (final message in history.reversed.take(20)) {
+    var remaining = 3000;
+    for (final message in history.reversed.take(6)) {
       if (!['user', 'assistant'].contains(message.role) ||
           message.content.length > remaining) {
         break;
@@ -213,7 +244,7 @@ class GroqService {
       recent.removeAt(0);
     }
     final context = contextTasks
-        .take(30)
+        .take(10)
         .map(
           (t) => {
             'title': t.title,
@@ -252,7 +283,7 @@ class GroqService {
               'model': model,
               'messages': messages,
               'temperature': .6,
-              'max_completion_tokens': 2048,
+              'max_completion_tokens': 512,
               'stream': false,
             }),
           ),
@@ -281,6 +312,7 @@ class GroqService {
         }
       } on _UnavailableModel {
         rejected.add(model);
+        invalidateModels();
         candidates = await models();
       }
     }

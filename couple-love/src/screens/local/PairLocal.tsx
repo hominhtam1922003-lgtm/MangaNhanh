@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, Share, Text, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -13,51 +13,115 @@ import {
   confirm,
 } from "../../components/UI";
 import { codeChunks, importPayload, linkCode } from "../../services/localsync";
+import {
+  createRoom,
+  makeCode,
+  roomFromCode,
+  roomFromQr,
+  roomToQr,
+} from "../../services/relay";
 import { joinCodes } from "../../logic/localState.mjs";
 import type { State } from "../../services/localdb";
-type Receipt = { name: string; cycle: boolean; diary: number; images: number };
+type Room = { id: string; key: string; mode: string; code?: string | null };
+type Status = {
+  state: string;
+  broker: string | null;
+  partnerOnline: boolean;
+  partnerName?: string | null;
+};
+const digitsOf = (text: string) => text.replace(/\D/g, "").slice(0, 6);
+const prettyCode = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}`;
 export default function PairLocal({
   state,
   update,
   initialCode,
+  relayStatus,
+  syncNow,
 }: {
   state: State;
   update: (action: Record<string, unknown>) => void;
   initialCode: string;
+  relayStatus: Status;
+  syncNow: () => void;
 }) {
-  const [step, setStep] = useState<"scan" | "reply">(
-    state.partner ? "reply" : "scan",
-  );
-  const [chunk, setChunk] = useState(0);
+  const [mode, setMode] = useState<"code" | "manual">("code");
+  const [extra, setExtra] = useState(false);
+  const [joinValue, setJoinValue] = useState("");
   const [scanner, setScanner] = useState(false);
-  const [scanned, setScanned] = useState<string[]>([]);
   const [pasted, setPasted] = useState("");
-  const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
+  const handled = useRef("");
+  const room: Room | null = (state.relay as Room | null) ?? null;
+  const partnerName =
+    relayStatus.partnerName ?? state.partner?.nickname ?? null;
   const chunks = useMemo(() => codeChunks(linkCode(state)), [state]);
   const partnerDiary = state.diary.filter(
     (entry) => entry.authorId === "partner",
   ).length;
-  function apply(raw: string) {
+  const online = relayStatus.state === "online";
+  const statusLine = online
+    ? `Đã ghép nối với ${partnerName ?? "người thương"} — hai máy đang chung dữ liệu`
+    : relayStatus.state === "alone"
+      ? room
+        ? "Đã nối trạm · đang chờ người thương nhập mã"
+        : "Đã nối trạm · hãy tạo mã 6 số ở bước 1"
+      : relayStatus.state === "connecting"
+        ? "Đang kết nối tới trạm trung chuyển…"
+        : "Chưa bật kết nối tức thời (bật ở Cài đặt)";
+  useEffect(() => {
+    if (!room || room.mode !== "code") return;
+    if (online || state.partner) return;
+    void syncNow();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room?.id, online, state.partner?.nickname]);
+  function startCodeRoom() {
+    const code = makeCode();
+    update({ type: "relay.set", room: { ...roomFromCode(code), code } });
+  }
+  function startQrRoom() {
+    const created = createRoom();
+    update({ type: "relay.set", room: { ...created, code: null } });
+    Alert.alert(
+      "Đã tạo mã QR",
+      "Cho người thương quét mã này. Khi họ quét xong là hai máy chung dữ liệu luôn, bạn không phải quét lại.",
+    );
+  }
+  function joinWith(text: string) {
+    try {
+      const value = String(text).trim();
+      const digits = digitsOf(value);
+      const target =
+        value.startsWith("HTT2:") || digits.length === 6
+          ? roomFromQr(value.startsWith("HTT2:") ? value : digits)
+          : null;
+      if (!target) throw new Error("Mã kết nối phải gồm đúng 6 chữ số.");
+      if (handled.current === target.id) return;
+      handled.current = target.id;
+      update({ type: "relay.set", room: { ...target, code: digits } });
+      setScanner(false);
+      setJoinValue("");
+    } catch (error) {
+      Alert.alert(
+        "Chưa kết nối được",
+        error instanceof Error ? error.message : "Mã không hợp lệ.",
+      );
+    }
+  }
+  function applyManual(raw: string) {
     try {
       const codes = raw
         .split("\n")
         .map((line) => line.trim())
         .filter(Boolean);
-      const payloadText = codes.length > 1 ? joinCodes(codes) : codes[0];
-      const { payload, images, diaryCount } = importPayload(payloadText);
+      const { payload, images, diaryCount } = importPayload(
+        codes.length > 1 ? joinCodes(codes) : codes[0],
+      );
       update({ type: "partner.merge", state: payload });
-      setReceipt({
-        name: payload.from.nickname,
-        cycle: Boolean(payload.cycle),
-        diary: diaryCount,
-        images,
-      });
       setPasted("");
-      setScanned([]);
-      setScanner(false);
-      setStep("reply");
-      setChunk(0);
+      Alert.alert(
+        "Đã nhận dữ liệu",
+        `${payload.from.nickname}: ${diaryCount} kỷ niệm${images ? `, ${images} ảnh` : ""}.`,
+      );
     } catch (error) {
       Alert.alert(
         "Mã chưa hợp lệ",
@@ -65,30 +129,13 @@ export default function PairLocal({
       );
     }
   }
-  function acceptScanned(value: string) {
-    const all = [...scanned, value];
-    setScanned(all);
-    if (all.length > 1) {
-      const complete = all.join("\n");
-      if (complete.includes(`/${all.length}:`)) {
-        apply(complete);
-        return;
-      }
-    }
-    apply(value);
-  }
-  async function openScanner(open: boolean) {
-    const result = permission?.granted ? permission : await requestPermission();
-    if (!result.granted) {
-      Alert.alert(
-        "Quyền máy ảnh",
-        "Hãy cấp quyền máy ảnh hoặc dán mã thủ công.",
-      );
-      return;
-    }
-    setScanned([]);
-    setScanner(open);
-  }
+  const statusDot = online
+    ? "bg-emerald-500"
+    : relayStatus.state === "alone"
+      ? "bg-amber-400"
+      : relayStatus.state === "connecting"
+        ? "bg-sky-400"
+        : "bg-stone-300";
   return (
     <>
       <LinearGradient
@@ -96,36 +143,36 @@ export default function PairLocal({
         className="rounded-3xl p-5 mb-4"
       >
         <Text className="text-4xl mb-2">💞</Text>
-        <Title>Nối hai máy trong 2 bước</Title>
+        <Title>Ở xa vẫn chung một nhà — bằng mã 6 số</Title>
         <Note>
-          Không cần máy chủ. Bước 1: bạn quét mã của người thương để nhận dữ
-          liệu của họ. Bước 2: đưa mã phản hồi của bạn cho người thương quét —
-          mã này đã gồm cả hai bên, nên người thương cũng có đủ dữ liệu của bạn.
+          Một bạn bấm “Tạo mã 6 số”, bạn kia nhập đúng 6 số đó. Kết nối xong là
+          hai máy tự gửi dữ liệu cho nhau và cùng nhận ghép nối, không phải quét
+          hay nhập lại ở bên nào. Cả hai máy cần có Internet (WiFi hoặc 4G).
         </Note>
       </LinearGradient>
       <View className="flex-row mb-4">
         {(
           [
-            ["scan", "Bước 1 · Quét mã"],
-            ["reply", "Bước 2 · Mã phản hồi"],
+            ["code", "Mã 6 số"],
+            ["manual", "Không có mạng"],
           ] as const
         ).map(([id, label]) => (
           <Pressable
             key={id}
             accessibilityRole="tab"
-            accessibilityState={{ selected: step === id }}
-            onPress={() => setStep(id)}
+            accessibilityState={{ selected: mode === id }}
+            onPress={() => setMode(id)}
             className="flex-1 mx-1"
           >
             <LinearGradient
               colors={
-                step === id ? ["#f6699f", "#d61f69"] : ["#ffe3ee", "#fff1f5"]
+                mode === id ? ["#f6699f", "#d61f69"] : ["#ffe3ee", "#fff1f5"]
               }
               className="rounded-2xl py-3 items-center"
             >
               <Text
                 className={
-                  step === id
+                  mode === id
                     ? "text-white font-bold"
                     : "text-love font-semibold"
                 }
@@ -136,154 +183,245 @@ export default function PairLocal({
           </Pressable>
         ))}
       </View>
-      {receipt ? (
-        <Card>
-          <Title small>Đã nhận từ {receipt.name} 🎉</Title>
-          <Note>
-            {receipt.cycle ? "Có dữ liệu chu kỳ · " : ""}
-            {receipt.diary ? `${receipt.diary} kỷ niệm · ` : ""}
-            {receipt.images ? `${receipt.images} ảnh · ` : ""}hồ sơ và cảm xúc
-            đã về máy bạn.
-          </Note>
-          <Note>
-            Giờ sang <Text className="font-bold">Bước 2</Text> và cho người
-            thương quét mã bên dưới. Khi họ quét, dữ liệu của bạn (và cả những
-            gì vừa nhận) sẽ sang máy họ — hai bên có đủ, không cần làm lại từ
-            đầu.
-          </Note>
-          <Button
-            label="Đưa mã phản hồi ngay"
-            onPress={() => setStep("reply")}
-          />
-        </Card>
-      ) : null}
-      {step === "scan" ? (
-        <Card>
-          <Title small>Quét mã của người thương</Title>
-          <Note>
-            Người thương mở mục Ghép nối → tab “Mã phản hồi”, rồi bạn quét QR
-            đó. Nếu mã bị chia nhiều phần thì quét lần lượt từng phần (app tự
-            ghép lại).
-          </Note>
-          <Button
-            label={scanner ? "Đóng máy quét" : "Mở máy quét QR"}
-            onPress={() => void openScanner(!scanner)}
-          />
-          {scanner ? (
-            <CameraView
-              style={{ height: 290, borderRadius: 22, marginVertical: 10 }}
-              barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-              onBarcodeScanned={({ data }) => {
-                const value = data.trim();
-                if (!value.startsWith("HTT1:")) return;
-                if (scanned[scanned.length - 1] === value) return;
-                acceptScanned(value);
-              }}
+      {mode === "code" ? (
+        <>
+          <Card>
+            <View className="flex-row items-center mb-2">
+              <View className={`w-3 h-3 rounded-full mr-3 ${statusDot}`} />
+              <Text className="text-ink font-semibold flex-1">
+                {statusLine}
+              </Text>
+            </View>
+            {state.partner ? (
+              <View className="flex-row items-center my-3">
+                <LocalAvatar
+                  name={state.partner.nickname}
+                  image={state.partner.avatar}
+                  size={48}
+                />
+                <View className="ml-4 flex-1">
+                  <Text className="text-ink font-bold">
+                    {state.partner.nickname}
+                  </Text>
+                  <Text className="text-sm text-stone-500">
+                    Cảm xúc: {state.partner.moodNote || "chưa có ghi chú"} ·{" "}
+                    {partnerDiary} kỷ niệm nhận được
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <Note>
+                Chưa nhận được dữ liệu của người thương. Làm xong bước 1 và bước
+                2 là dữ liệu về ngay.
+              </Note>
+            )}
+            <Button
+              label="Gửi lại toàn bộ dữ liệu ngay"
+              busy={!room}
+              onPress={syncNow}
+              disabled={!room}
             />
-          ) : null}
+            {room ? (
+              <Note>
+                Trạm trung chuyển (
+                {relayStatus.broker?.replace("wss://", "") ?? "chưa nối"}) chỉ
+                thấy dữ liệu đã mã hóa. Khóa phòng chỉ nằm trong máy hai bạn.
+              </Note>
+            ) : null}
+          </Card>
+          <Card>
+            <Title small>Bước 1 — Bạn tạo mã cho người thương</Title>
+            <Note>
+              Bấm tạo mã rồi gửi 6 số này cho người thương qua tin nhắn bất kỳ.
+              Bạn không phải làm gì thêm.
+            </Note>
+            {room && room.mode === "code" && room.code ? (
+              <View className="items-center py-4">
+                <Text
+                  selectable
+                  accessibilityLabel={`Mã kết nối ${room.code}`}
+                  className="text-6xl font-bold tracking-widest text-love"
+                >
+                  {prettyCode(room.code)}
+                </Text>
+                <Text className="text-sm text-stone-500 mt-2">
+                  {online
+                    ? "Người thương đã vào phòng."
+                    : "Đang chờ người thương nhập mã…"}
+                </Text>
+              </View>
+            ) : null}
+            <Button
+              label={
+                room && room.mode === "code"
+                  ? "Tạo mã 6 số khác"
+                  : "Tạo mã 6 số"
+              }
+              onPress={startCodeRoom}
+            />
+            {room && room.mode === "code" && room.code ? (
+              <Button
+                label="Gửi mã cho người thương"
+                secondary
+                onPress={() =>
+                  void Share.share({
+                    message:
+                      `Mã kết nối Hai Trái Tim của mình: ${room.code}\n` +
+                      "Bạn mở app → mục Ghép nối → nhập 6 số này là hai máy chung dữ liệu luôn nhé.",
+                  }).catch(() => {})
+                }
+              />
+            ) : null}
+          </Card>
+          <Card>
+            <Title small>Bước 2 — Bạn nhập mã người thương gửi</Title>
+            <Note>
+              Nhập đúng 6 chữ số người thương gửi. Vào phòng là máy bạn gửi dữ
+              liệu của mình đi và nhận dữ liệu của họ về, cả hai bên cùng thấy
+              đã ghép nối.
+            </Note>
+            <Input
+              label="Mã 6 số của người thương"
+              value={joinValue}
+              onChangeText={(text) => setJoinValue(digitsOf(text))}
+              keyboardType="number-pad"
+              maxLength={6}
+              placeholder="Ví dụ 482913"
+            />
+            <Button
+              label={
+                joinValue.length === 6 ? `Kết nối với ${joinValue}` : "Kết nối"
+              }
+              disabled={joinValue.length !== 6}
+              onPress={() => joinWith(joinValue)}
+            />
+            {room && relayStatus.state !== "off" ? (
+              <Button
+                label="Rời phòng kết nối"
+                secondary
+                onPress={() =>
+                  void (async () => {
+                    if (
+                      !(await confirm(
+                        "Rời phòng?",
+                        "Tắt kết nối tức thời. Dữ liệu đã nhận vẫn giữ trên máy.",
+                      ))
+                    )
+                      return;
+                    update({ type: "relay.set", room: null });
+                  })()
+                }
+              />
+            ) : null}
+          </Card>
+          <Card>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cách khác: quét mã QR hoặc dán mã"
+              onPress={() => setExtra(!extra)}
+            >
+              <Text className="text-love font-semibold">
+                {extra ? "▲ Ẩn cách khác" : "▼ Cách khác: quét mã QR / dán mã"}
+              </Text>
+            </Pressable>
+            {extra ? (
+              <>
+                <Note>
+                  Dùng khi bạn thích quét hơn là nhập số. Cách này cũng cần
+                  Internet và vẫn chỉ cần một bên quét.
+                </Note>
+                <View className="flex-row">
+                  <View className="flex-1 mr-1">
+                    <Button label="Tạo mã QR" secondary onPress={startQrRoom} />
+                  </View>
+                  <View className="flex-1 ml-1">
+                    <Button
+                      label={scanner ? "Đóng máy quét" : "Quét mã QR"}
+                      secondary
+                      onPress={() =>
+                        void (async () => {
+                          const result = permission?.granted
+                            ? permission
+                            : await requestPermission();
+                          if (!result.granted) {
+                            Alert.alert(
+                              "Quyền máy ảnh",
+                              "Hãy cấp quyền máy ảnh hoặc dùng mã 6 số ở bước 2.",
+                            );
+                            return;
+                          }
+                          setScanner(!scanner);
+                        })()
+                      }
+                    />
+                  </View>
+                </View>
+                {room && room.mode === "qr" ? (
+                  <LinearGradient
+                    colors={["#ffffff", "#fff1f5"]}
+                    className="items-center rounded-3xl py-5 my-3"
+                  >
+                    <QRCode value={roomToQr(room)} size={220} color="#d61f69" />
+                    <Text selectable className="text-xs text-stone-500 mt-3">
+                      {roomToQr(room)}
+                    </Text>
+                  </LinearGradient>
+                ) : null}
+                {scanner ? (
+                  <CameraView
+                    style={{
+                      height: 280,
+                      borderRadius: 22,
+                      marginVertical: 10,
+                    }}
+                    barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                    onBarcodeScanned={({ data }) => {
+                      if (data.startsWith("HTT2:")) joinWith(data);
+                    }}
+                  />
+                ) : null}
+              </>
+            ) : null}
+          </Card>
+        </>
+      ) : (
+        <Card>
+          <Title small>Khi không có mạng ở một bên</Title>
+          <Note>
+            Cách này không cần Internet nhưng phải đưa mã qua lại hai lần: bạn
+            gửi mã của mình, người thương dán vào đây, rồi gửi mã phản hồi lại
+            cho bạn dán. Có mạng thì hãy dùng “Mã 6 số” cho nhanh.
+          </Note>
           <Input
-            label="Hoặc dán mã người thương gửi"
+            label="Dán mã của người thương"
             value={pasted}
             onChangeText={setPasted}
             multiline
           />
           <Button
-            label="Ghép nối bằng mã đã dán"
+            label="Nhận dữ liệu từ mã đã dán"
             disabled={pasted.trim().length < 10}
-            onPress={() => apply(pasted.trim())}
+            onPress={() => applyManual(pasted)}
           />
-        </Card>
-      ) : (
-        <Card>
-          <Title small>Mã phản hồi của bạn</Title>
-          <Text className="text-xs text-stone-500 mt-2">
-            Trong mã: {state.me.nickname}
-            {state.cycle ? " · dữ liệu chu kỳ của bạn" : ""}
-            {partnerDiary ? ` · ${partnerDiary} kỷ niệm của người thương` : ""}
-            {state.diary.length
-              ? ` · ${state.diary.length} kỷ niệm trên máy`
-              : ""}
-          </Text>
-          {chunks.length > 1 ? (
-            <Note>
-              Mã dài nên chia thành {chunks.length} phần. Hiện lần lượt từng
-              phần cho người thương quét.
-            </Note>
-          ) : (
-            <Note>
-              Cho người thương quét mã này để họ nhận đủ dữ liệu của bạn.
-            </Note>
-          )}
-          <LinearGradient
-            colors={["#ffffff", "#fff1f5"]}
-            className="items-center rounded-3xl py-5 my-2"
-          >
-            <QRCode
-              value={chunks[Math.min(chunk, chunks.length - 1)]}
-              size={244}
-              color="#d61f69"
-            />
-          </LinearGradient>
-          {chunks.length > 1 ? (
-            <View className="flex-row items-center justify-between">
-              <Button
-                label="Phần trước"
-                secondary
-                disabled={chunk === 0}
-                onPress={() => setChunk(chunk - 1)}
-              />
-              <Text className="text-ink">
-                Phần {Math.min(chunk, chunks.length - 1) + 1}/{chunks.length}
-              </Text>
-              <Button
-                label="Phần sau"
-                secondary
-                disabled={chunk >= chunks.length - 1}
-                onPress={() => setChunk(chunk + 1)}
-              />
-            </View>
-          ) : null}
           <Button
-            label="Chia sẻ mã qua tin nhắn"
+            label="Chia sẻ mã phản hồi của bạn"
             secondary
             onPress={() =>
               void Share.share({
                 message:
-                  "Mã Hai Trái Tim của mình đây, bạn mở ứng dụng → Ghép nối → Bước 1 → dán mã này nhé:\n" +
+                  "Mã Hai Trái Tim của mình đây, bạn dán vào mục “Không có mạng” nhé:\n" +
                   chunks.join("\n"),
               }).catch(() => {})
             }
-          />
-          <Button
-            label="Mình cần quét mã mới từ người thương"
-            secondary
-            onPress={() => setStep("scan")}
           />
         </Card>
       )}
       {state.partner ? (
         <Card>
-          <View className="flex-row items-center mb-4">
-            <LocalAvatar
-              name={state.partner.nickname}
-              image={state.partner.avatar}
-              size={48}
-            />
-            <View className="ml-4 flex-1">
-              <Title small>{state.partner.nickname}</Title>
-              <Note>
-                Đã trao đổi {state.links.length} lần · lần gần nhất{" "}
-                {new Date(
-                  state.links[state.links.length - 1]?.linkedAt ||
-                    state.anniversary,
-                ).toLocaleString("vi-VN")}
-              </Note>
-            </View>
-          </View>
+          <Title small>Hủy ghép nối</Title>
           <Note>
-            Không có máy chủ nên cảm xúc và kỷ niệm mới sẽ không tự sang máy
-            kia: hai bạn lặp lại Bước 1 → Bước 2 mỗi khi muốn cập nhật. App tự
-            gộp, không tạo trùng kỷ niệm hay lời nhắc.
+            Đang nhận dữ liệu của {state.partner.nickname}. Dữ liệu của bạn vẫn
+            giữ nguyên nếu hủy.
           </Note>
           <Button
             label="Hủy nối với người thương"
@@ -293,7 +431,7 @@ export default function PairLocal({
                 if (
                   !(await confirm(
                     "Hủy nối?",
-                    "Hồ sơ người thương và các kỷ niệm do người thương gửi sẽ bị xóa khỏi máy này. Dữ liệu của bạn vẫn giữ nguyên.",
+                    "Hồ sơ người thương và kỷ niệm do người thương gửi sẽ bị xóa khỏi máy này. Dữ liệu của bạn vẫn giữ nguyên.",
                   ))
                 )
                   return;
@@ -306,9 +444,12 @@ export default function PairLocal({
       <Card>
         <Title small>Cần biết</Title>
         <Note>
-          Mã chứa hồ sơ, ngày bắt đầu, dữ liệu chu kỳ và cảm xúc — hãy chỉ gửi
-          cho đúng người thương. Muốn gửi kèm nhật ký và ảnh thì dùng nút “Xuất
-          và chia sẻ tệp dữ liệu” trong Cài đặt.
+          Kết nối tức thời đi qua một trạm trung chuyển công cộng miễn phí
+          (không phải máy chủ của bạn) nên hai máy tìm thấy nhau ở bất cứ đâu,
+          nhưng nội dung luôn được mã hóa đầu-cuối và chỉ mở được bằng mã 6 số
+          của hai bạn. Khi cả hai cùng mở app thì dữ liệu cập nhật liên tục; khi
+          một bên đóng app, dữ liệu mới sẽ được gửi bù ở lần mở sau. Muốn gửi cả
+          nhật ký kèm ảnh thì dùng “Xuất và chia sẻ tệp dữ liệu” trong Cài đặt.
         </Note>
         {initialCode ? <Note>Bạn mở mục này từ Cài đặt.</Note> : null}
       </Card>

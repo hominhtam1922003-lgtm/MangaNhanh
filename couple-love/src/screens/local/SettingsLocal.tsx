@@ -155,7 +155,11 @@ export default function SettingsLocal({
                       "Chưa được cấp quyền thông báo. Bạn có thể bật lại trong cài đặt hệ thống.",
                     );
                 }
-                update({ type: "settings.set", notify: value });
+                update({
+                  type: "settings.set",
+                  notify: value,
+                  relay: state.settings.relay,
+                });
               })
             }
             trackColor={{ true: "#e64980" }}
@@ -165,6 +169,28 @@ export default function SettingsLocal({
           Lời nhắc dùng lịch của máy: mốc 08:00 trước kỳ 3 ngày, đầu kỳ và mốc
           rụng trứng ước tính, kèm ngày kỷ niệm. Máy có thể trì hoãn thông báo;
           đây không phải báo thức reo như chuông.
+        </Note>
+        <View className="flex-row justify-between items-center my-3">
+          <Text className="text-ink flex-1">
+            Kết nối tức thời với người thương
+          </Text>
+          <Switch
+            accessibilityLabel="Kết nối tức thời"
+            value={state.settings.relay}
+            onValueChange={(value) =>
+              update({
+                type: "settings.set",
+                notify: state.settings.notify,
+                relay: value,
+              })
+            }
+            trackColor={{ true: "#e64980" }}
+          />
+        </View>
+        <Note>
+          Bật để hai máy tự gửi dữ liệu cho nhau qua trạm trung chuyển công cộng
+          miễn phí, dùng mã 6 số trong mục Ghép nối. Tắt nếu bạn chỉ muốn dữ
+          liệu nằm trên máy mình; khi đó dùng “Xuất và chia sẻ tệp dữ liệu”.
         </Note>
       </Card>
       <Card>

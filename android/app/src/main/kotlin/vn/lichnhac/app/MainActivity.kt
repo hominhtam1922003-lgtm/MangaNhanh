@@ -14,6 +14,17 @@ import android.net.Uri
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "vn.lichnhac.app/text_input")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "editVietnamese" -> VietnameseEditor.show(this, call.argument<String>("text") ?: "", result)
+                    "keyboardSettings" -> {
+                        try { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)); result.success(null) }
+                        catch (_: Exception) { result.error("KEYBOARD_SETTINGS", "Không mở được cài đặt bàn phím.", null) }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "vn.lichnhac.app/alarms")
             .setMethodCallHandler { call, result ->
                 try {

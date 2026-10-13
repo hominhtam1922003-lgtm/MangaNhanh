@@ -42,7 +42,8 @@ export type State = {
   cycle: CycleRecord | null;
   diary: DiaryEntry[];
   alerts: AlertRecord[];
-  settings: { biometric: boolean; notify: boolean };
+  settings: { biometric: boolean; notify: boolean; relay: boolean };
+  relay: { id: string; key: string; mode: string; code: string | null } | null;
   links: { id: string; name: string; linkedAt: string }[];
 };
 const stateFile = () => new File(Paths.document, "love-state.json");

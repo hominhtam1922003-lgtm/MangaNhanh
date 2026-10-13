@@ -138,6 +138,8 @@ export function Input({
   secure = false,
   multiline = false,
   keyboardType = "default",
+  maxLength,
+  placeholder,
 }: {
   label: string;
   value: string;
@@ -145,6 +147,8 @@ export function Input({
   secure?: boolean;
   multiline?: boolean;
   keyboardType?: "default" | "number-pad" | "email-address";
+  maxLength?: number;
+  placeholder?: string;
 }) {
   return (
     <View className="mb-3">
@@ -156,6 +160,8 @@ export function Input({
         secureTextEntry={secure}
         multiline={multiline}
         keyboardType={keyboardType}
+        maxLength={maxLength}
+        placeholder={placeholder}
         autoCapitalize={
           secure || keyboardType === "email-address" ? "none" : "sentences"
         }

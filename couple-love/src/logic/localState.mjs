@@ -46,7 +46,8 @@ export function emptyState(now = new Date().toISOString()) {
     cycle: null,
     diary: [],
     alerts: [],
-    settings: { biometric: false, notify: false },
+    settings: { biometric: false, notify: false, relay: true },
+    relay: null,
     links: [],
   };
 }
@@ -101,7 +102,23 @@ export function migrate(raw, now = new Date().toISOString()) {
   state.settings = {
     biometric: raw.settings?.biometric === true,
     notify: raw.settings?.notify === true,
+    relay: raw.settings?.relay !== false,
   };
+  const relay = raw.relay;
+  state.relay =
+    relay &&
+    typeof relay === "object" &&
+    text(relay.id, 60) &&
+    text(relay.key, 90)
+      ? {
+          id: text(relay.id, 60),
+          key: text(relay.key, 90),
+          mode: relay.mode === "code" ? "code" : "qr",
+          code: /^\d{6}$/.test(String(relay.code ?? ""))
+            ? String(relay.code)
+            : null,
+        }
+      : null;
   state.links = Array.isArray(raw.links)
     ? raw.links
         .filter((l) => l && typeof l === "object")
@@ -233,8 +250,27 @@ export function reduce(state, action) {
     );
   } else if (type === "alerts.clear") {
     next.alerts = [];
+  } else if (type === "relay.set") {
+    if (!action.room) next.relay = null;
+    else {
+      const id = text(action.room.id, 60);
+      const key = text(action.room.key, 90);
+      if (!id || !key) throw new Error("Phòng kết nối không hợp lệ.");
+      next.relay = {
+        id,
+        key,
+        mode: action.room.mode === "code" ? "code" : "qr",
+        code: /^\d{6}$/.test(String(action.room.code ?? ""))
+          ? String(action.room.code)
+          : null,
+      };
+    }
   } else if (type === "settings.set") {
-    next.settings = { ...next.settings, notify: action.notify === true };
+    next.settings = {
+      ...next.settings,
+      notify: action.notify === true,
+      relay: action.relay !== false,
+    };
   } else if (type === "partner.merge") {
     const raw =
       action.state && typeof action.state === "object" ? action.state : {};

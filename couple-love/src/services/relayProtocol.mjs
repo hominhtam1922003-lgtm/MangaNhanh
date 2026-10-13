@@ -4,6 +4,7 @@ import nacl from "tweetnacl";
 
 export const BROKERS = [
   "wss://broker.emqx.io:8084/mqtt",
+  "wss://mqtt.eclipseprojects.io:443/mqtt", // cổng 443, dễ qua được mạng di động / WiFi chặn cổng lạ
   "wss://broker.hivemq.com:8884/mqtt",
   "wss://test.mosquitto.org:8081/mqtt",
 ];
@@ -297,7 +298,7 @@ export class RelayClient {
   start() {
     this.stopped = false;
     this.connect();
-    this.timers.push(setInterval(() => this.keepalive(), 20000));
+    this.timers.push(setInterval(() => this.keepalive(), 10000));
     this.timers.push(setInterval(() => this.checkPresence(), 5000));
   }
   stop() {
@@ -426,6 +427,7 @@ export class RelayClient {
             message?.kind === "hello" ||
             message?.kind === "state"
           ) {
+            const firstContact = !this.partnerOnline;
             this.partnerSeen = Date.now();
             const name =
               message.name ||
@@ -436,6 +438,9 @@ export class RelayClient {
             if (message.kind === "state" && message.payload)
               this.onPayload(message.payload, name);
             this.emitStatus();
+            // Người thương vừa lộ diện: trả lời ngay một tiếng "hello" để máy kia
+            // biết mình cũng đang trực tuyến, không phải chờ nhịp giữ kết nối.
+            if (firstContact) this.publishHello();
           }
         } catch {}
       }

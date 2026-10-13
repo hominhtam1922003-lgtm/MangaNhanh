@@ -117,6 +117,7 @@ export function migrate(raw, now = new Date().toISOString()) {
           code: /^\d{6}$/.test(String(relay.code ?? ""))
             ? String(relay.code)
             : null,
+          role: relay.role === "guest" ? "guest" : "host",
         }
       : null;
   state.links = Array.isArray(raw.links)
@@ -263,6 +264,7 @@ export function reduce(state, action) {
         code: /^\d{6}$/.test(String(action.room.code ?? ""))
           ? String(action.room.code)
           : null,
+        role: action.room.role === "guest" ? "guest" : "host",
       };
     }
   } else if (type === "settings.set") {

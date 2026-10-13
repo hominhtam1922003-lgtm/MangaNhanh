@@ -22,7 +22,13 @@ import {
 } from "../../services/relay";
 import { joinCodes } from "../../logic/localState.mjs";
 import type { State } from "../../services/localdb";
-type Room = { id: string; key: string; mode: string; code?: string | null };
+type Room = {
+  id: string;
+  key: string;
+  mode: string;
+  code?: string | null;
+  role?: string | null;
+};
 type Status = {
   state: string;
   broker: string | null;
@@ -50,8 +56,10 @@ export default function PairLocal({
   const [scanner, setScanner] = useState(false);
   const [pasted, setPasted] = useState("");
   const [permission, requestPermission] = useCameraPermissions();
+  const [slow, setSlow] = useState(false);
   const handled = useRef("");
   const room: Room | null = (state.relay as Room | null) ?? null;
+  const guest = room?.role === "guest";
   const partnerName =
     relayStatus.partnerName ?? state.partner?.nickname ?? null;
   const chunks = useMemo(() => codeChunks(linkCode(state)), [state]);
@@ -76,11 +84,17 @@ export default function PairLocal({
   }, [room?.id, online, state.partner?.nickname]);
   function startCodeRoom() {
     const code = makeCode();
-    update({ type: "relay.set", room: { ...roomFromCode(code), code } });
+    update({
+      type: "relay.set",
+      room: { ...roomFromCode(code), code, role: "host" },
+    });
   }
   function startQrRoom() {
     const created = createRoom();
-    update({ type: "relay.set", room: { ...created, code: null } });
+    update({
+      type: "relay.set",
+      room: { ...created, code: null, role: "host" },
+    });
     Alert.alert(
       "Đã tạo mã QR",
       "Cho người thương quét mã này. Khi họ quét xong là hai máy chung dữ liệu luôn, bạn không phải quét lại.",
@@ -97,7 +111,10 @@ export default function PairLocal({
       if (!target) throw new Error("Mã kết nối phải gồm đúng 6 chữ số.");
       if (handled.current === target.id) return;
       handled.current = target.id;
-      update({ type: "relay.set", room: { ...target, code: digits } });
+      update({
+        type: "relay.set",
+        room: { ...target, code: digits, role: "guest" },
+      });
       setScanner(false);
       setJoinValue("");
     } catch (error) {
@@ -107,6 +124,15 @@ export default function PairLocal({
       );
     }
   }
+  useEffect(() => {
+    if (relayStatus.state === "online" || relayStatus.state === "off") {
+      setSlow(false);
+      return;
+    }
+    const timer = setTimeout(() => setSlow(true), 20000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [relayStatus.state, relayStatus.broker]);
   function applyManual(raw: string) {
     try {
       const codes = raw
@@ -215,6 +241,13 @@ export default function PairLocal({
                 2 là dữ liệu về ngay.
               </Note>
             )}
+            {slow ? (
+              <Note>
+                Máy này chưa tới được trạm trung chuyển nào. Hãy kiểm tra
+                WiFi/4G của máy (máy ảo Android cũng cần bật mạng), rồi bấm “Gửi
+                lại toàn bộ dữ liệu ngay” để thử lại.
+              </Note>
+            ) : null}
             <Button
               label="Gửi lại toàn bộ dữ liệu ngay"
               busy={!room}
@@ -230,10 +263,15 @@ export default function PairLocal({
             ) : null}
           </Card>
           <Card>
-            <Title small>Bước 1 — Bạn tạo mã cho người thương</Title>
+            <Title small>
+              {guest
+                ? "Bạn đang vào phòng của người thương"
+                : "Bước 1 — Bạn tạo mã cho người thương"}
+            </Title>
             <Note>
-              Bấm tạo mã rồi gửi 6 số này cho người thương qua tin nhắn bất kỳ.
-              Bạn không phải làm gì thêm.
+              {guest
+                ? "Bạn đã nhập mã của người thương nên không phải gửi mã cho ai nữa. Cứ để app mở; khi dòng trạng thái ghi “Đã ghép nối với …” là hai máy đã chung dữ liệu."
+                : "Bấm tạo mã rồi gửi 6 số này cho người thương qua tin nhắn bất kỳ. Bạn không phải làm gì thêm."}
             </Note>
             {room && room.mode === "code" && room.code ? (
               <View className="items-center py-4">
@@ -246,20 +284,25 @@ export default function PairLocal({
                 </Text>
                 <Text className="text-sm text-stone-500 mt-2">
                   {online
-                    ? "Người thương đã vào phòng."
-                    : "Đang chờ người thương nhập mã…"}
+                    ? `Đã ghép nối với ${partnerName ?? "người thương"}.`
+                    : guest
+                      ? "Đang chờ người thương mở app…"
+                      : "Đang chờ người thương nhập mã…"}
                 </Text>
               </View>
             ) : null}
             <Button
               label={
-                room && room.mode === "code"
-                  ? "Tạo mã 6 số khác"
-                  : "Tạo mã 6 số"
+                guest
+                  ? "Tạo phòng mới của bạn (đổi mã khác)"
+                  : room && room.mode === "code"
+                    ? "Tạo mã 6 số khác"
+                    : "Tạo mã 6 số"
               }
+              secondary={guest}
               onPress={startCodeRoom}
             />
-            {room && room.mode === "code" && room.code ? (
+            {room && room.mode === "code" && room.code && !guest ? (
               <Button
                 label="Gửi mã cho người thương"
                 secondary

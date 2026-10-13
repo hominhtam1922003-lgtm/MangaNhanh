@@ -14,6 +14,7 @@ export type Room = {
   key: string;
   mode: string;
   code?: string | null;
+  role?: string | null;
 };
 export type RelayStatus = {
   state: string;
@@ -30,6 +31,7 @@ export function roomFromState(state: State): Room | null {
     key: relay.key,
     mode: relay.mode ?? "qr",
     code: (relay as { code?: string | null }).code ?? null,
+    role: (relay as { role?: string | null }).role ?? "host",
   };
 }
 export function relayPayloadFor(state: State, deviceId: string) {

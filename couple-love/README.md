@@ -155,7 +155,7 @@ EXPO_OFFLINE=1 npx expo export --platform ios
 EXPO_OFFLINE=1 npx expo prebuild --platform android --no-install --clean
 ```
 
-`tests/relay.test.mjs` kiểm tra phần kết nối tức thời: mã hóa/giải mã gói, sai khóa thì không đọc được, mã 6 số hai máy vào cùng một phòng, bộ mã hóa/giải mã gói MQTT ghép đúng khi dữ liệu về từng byte, mỗi máy chỉ gửi dữ liệu của mình và gói gửi đi không đổi sau khi gộp (không lặp), gói lớn tự cắt bớt, và trạng thái chỉ báo khi có thay đổi kèm tên người thương.
+`tests/relay.test.mjs` (5 bài) kiểm tra phần kết nối tức thời: mã hóa/giải mã gói, sai khóa thì không đọc được, mã 6 số hai máy vào cùng một phòng, bộ mã hóa/giải mã gói MQTT ghép đúng khi dữ liệu về từng byte, mỗi máy chỉ gửi dữ liệu của mình và gói gửi đi không đổi sau khi gộp (không lặp), gói lớn tự cắt bớt, trạng thái chỉ báo khi có thay đổi kèm tên người thương — và bài cuối dựng **broker giả có dội bản tin** để chứng minh: máy ở một mình không tự nhận mình là người thương, hai máy nhập cùng mã 6 số thì **cả hai** cùng nhận dữ liệu và cùng hiện ghép nối.
 
 Tests Node gồm logic lịch và **PostgreSQL thực chạy WASM bằng PGlite + pgcrypto**, áp dụng migration thật trong fixture auth/storage để kiểm tra ghép đôi, hết hạn, giới hạn thử, RLS, privacy revocation, nhật ký/ảnh, hàng chờ và lời nhắc kép. Fixture không thay cho Supabase cloud / Realtime / mạng push thật.
 

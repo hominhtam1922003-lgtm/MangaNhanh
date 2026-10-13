@@ -9,7 +9,7 @@ on:
       run_id:
         description: ID lần chạy "APK Hai Trái Tim" đã thành công
         required: true
-        default: '38404844843'
+        default: '38410199821'
         type: string
 
 permissions:

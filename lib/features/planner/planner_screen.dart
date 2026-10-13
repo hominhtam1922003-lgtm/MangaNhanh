@@ -41,12 +41,13 @@ class _PlannerScreenState extends State<PlannerScreen> {
       final key = await _service.hasKey();
       final model =
           await widget.controller.repository.setting('gemini.model') ?? _model;
-      if (mounted)
+      if (mounted) {
         setState(() {
           _hasKey = key;
           _model = model;
           _models = [model];
         });
+      }
     } catch (_) {
       _message = 'Chưa đọc được cấu hình bảo mật. Hãy thử lại.';
     } finally {
@@ -67,12 +68,13 @@ class _PlannerScreenState extends State<PlannerScreen> {
     try {
       await action();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => _message = e is UserMessage
               ? e.message
               : 'Chưa thực hiện được thao tác. Dữ liệu công việc không bị thay đổi.',
         );
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -83,18 +85,20 @@ class _PlannerScreenState extends State<PlannerScreen> {
   Future<void> _saveKey() => _action(() async {
     await _service.saveKey(_key.text);
     _key.clear();
-    if (mounted)
+    if (mounted) {
       setState(() {
         _hasKey = true;
         _message = 'Đã lưu key trong vùng lưu trữ bảo mật trên thiết bị.';
       });
+    }
   });
   Future<void> _modelsLoad() => _action(() async {
     final models = await _service.models();
-    if (models.isEmpty)
+    if (models.isEmpty) {
       throw const UserMessage(
         'Không có mô hình hỗ trợ tạo nội dung cho key này.',
       );
+    }
     final selected = models.contains(_model)
         ? _model
         : models.firstWhere(
@@ -102,12 +106,13 @@ class _PlannerScreenState extends State<PlannerScreen> {
             orElse: () => models.first,
           );
     await widget.controller.repository.setSetting('gemini.model', selected);
-    if (mounted)
+    if (mounted) {
       setState(() {
         _models = models;
         _model = selected;
         _message = 'Đã lấy danh sách mô hình từ Google.';
       });
+    }
   });
   Future<void> _generate() => _action(() async {
     final result = await _service.plan(
@@ -117,12 +122,13 @@ class _PlannerScreenState extends State<PlannerScreen> {
           ? widget.controller.tasks.where((t) => !t.completed).take(30).toList()
           : [],
     );
-    if (mounted)
+    if (mounted) {
       setState(() {
         _drafts = result;
         _selected.clear();
         _selected.addAll(List.generate(result.length, (i) => i));
       });
+    }
   });
   Future<void> _savePlan() async {
     final tasks = _selected.toList()..sort();
@@ -141,12 +147,13 @@ class _PlannerScreenState extends State<PlannerScreen> {
     }
     await _action(() async {
       await widget.controller.saveMany(tasks.map((i) => _drafts[i]).toList());
-      if (mounted)
+      if (mounted) {
         setState(() {
           _drafts = [];
           _selected.clear();
           _message = 'Đã lưu kế hoạch. Bạn có thể xem trong Công việc.';
         });
+      }
     });
   }
 

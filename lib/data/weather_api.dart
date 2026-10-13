@@ -34,12 +34,14 @@ class WeatherApi {
       final response = await _client
           .get(uri)
           .timeout(const Duration(seconds: 20));
-      if (response.statusCode == 429)
+      if (response.statusCode == 429) {
         throw const UserMessage(
           'Nguồn thời tiết đang giới hạn lượt truy cập. Thử lại sau.',
         );
-      if (response.statusCode != 200)
+      }
+      if (response.statusCode != 200) {
         throw const UserMessage('Nguồn thời tiết chưa sẵn sàng. Hãy thử lại.');
+      }
       return WeatherData.fromApi(
         jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>,
         place,
@@ -55,8 +57,9 @@ class WeatherApi {
   }
 
   Future<List<WeatherPlace>> search(String text) async {
-    if (text.trim().length < 2)
+    if (text.trim().length < 2) {
       throw const UserMessage('Nhập ít nhất 2 ký tự địa điểm.');
+    }
     try {
       final response = await _client
           .get(
@@ -68,8 +71,9 @@ class WeatherApi {
             }),
           )
           .timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200)
+      if (response.statusCode != 200) {
         throw const UserMessage('Chưa thể tìm địa điểm.');
+      }
       final json =
           jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       return (json['results'] as List? ?? []).map((r) {

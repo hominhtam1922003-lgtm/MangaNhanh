@@ -31,12 +31,13 @@ class _HolidaysScreenState extends State<HolidaysScreen> {
             await widget.repository.setting('holiday.before') ?? '',
           ) ??
           1;
-      if (mounted)
+      if (mounted) {
         setState(() {
           _enabled = enabled == 'true';
           _all = all == 'true';
           _before = [1, 3, 7].contains(before) ? before : 1;
         });
+      }
     } catch (_) {
       _message = 'Chưa đọc được cài đặt. Hãy thử lại.';
     } finally {
@@ -55,11 +56,13 @@ class _HolidaysScreenState extends State<HolidaysScreen> {
       final message = await HolidayService(
         widget.repository,
       ).schedule(requestPermission: _enabled);
-      if (mounted)
+      if (mounted) {
         setState(() => _message = message ?? 'Đã cập nhật nhắc ngày lễ.');
+      }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() => _message = 'Chưa lưu được cài đặt. Vui lòng thử lại.');
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);

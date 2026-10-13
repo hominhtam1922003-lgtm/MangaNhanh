@@ -18,7 +18,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
     try {
       await action();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -28,6 +28,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
             ),
           ),
         );
+      }
     }
   }
 
@@ -385,12 +386,14 @@ class _PlacePickerState extends State<PlacePicker> {
     });
     try {
       final result = await widget.api.search(_query.text);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _results = result;
-          if (result.isEmpty)
+          if (result.isEmpty) {
             _error = 'Không thấy địa điểm. Thử tên không dấu hoặc nhập tọa độ.';
+          }
         });
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _error = e.toString());

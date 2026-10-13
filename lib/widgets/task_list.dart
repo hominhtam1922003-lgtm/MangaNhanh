@@ -53,69 +53,91 @@ class TaskList extends StatelessWidget {
     if (tasks.isEmpty) {
       return EmptyState(title: emptyTitle, message: emptyMessage);
     }
-    final colors = Theme.of(context).colorScheme;
     return Column(
-      children: tasks.map((task) {
-        final overdue = task.isOverdue(DateTime.now());
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: ListTile(
-            contentPadding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
-            leading: Semantics(
-              label:
-                  '${task.completed ? 'Đánh dấu chưa xong' : 'Hoàn thành'}: ${task.title}',
-              child: Checkbox(
-                value: task.completed,
-                onChanged: busy ? null : (_) => onToggle(task),
-              ),
+      children: tasks
+          .map(
+            (task) => TaskCard(
+              key: ValueKey(task.id ?? task.title),
+              task: task,
+              onEdit: onEdit,
+              onToggle: onToggle,
+              busy: busy,
             ),
-            title: Text(
-              task.title,
-              style: TextStyle(
-                decoration: task.completed ? TextDecoration.lineThrough : null,
+          )
+          .toList(),
+    );
+  }
+}
+
+class TaskCard extends StatelessWidget {
+  const TaskCard({
+    super.key,
+    required this.task,
+    required this.onEdit,
+    required this.onToggle,
+    this.busy = false,
+  });
+  final Task task;
+  final ValueChanged<Task> onEdit, onToggle;
+  final bool busy;
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final overdue = task.isOverdue(DateTime.now());
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: ListTile(
+        contentPadding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+        leading: Semantics(
+          label:
+              '${task.completed ? 'Đánh dấu chưa xong' : 'Hoàn thành'}: ${task.title}',
+          child: Checkbox(
+            value: task.completed,
+            onChanged: busy ? null : (_) => onToggle(task),
+          ),
+        ),
+        title: Text(
+          task.title,
+          style: TextStyle(
+            decoration: task.completed ? TextDecoration.lineThrough : null,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${displayDate(task.dueDate)} • '
+                '${task.dueMinutes == null ? 'Cả ngày' : displayTime(task.dueMinutes!)}',
+                style: TextStyle(color: overdue ? colors.error : null),
               ),
-            ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
                 children: [
+                  Text(task.category.label),
                   Text(
-                    '${displayDate(task.dueDate)} • '
-                    '${task.dueMinutes == null ? 'Cả ngày' : displayTime(task.dueMinutes!)}',
-                    style: TextStyle(color: overdue ? colors.error : null),
+                    'Ưu tiên ${task.priority.label.toLowerCase()}',
+                    style: TextStyle(
+                      fontWeight: task.priority == TaskPriority.high
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      Text(task.category.label),
-                      Text(
-                        'Ưu tiên ${task.priority.label.toLowerCase()}',
-                        style: TextStyle(
-                          fontWeight: task.priority == TaskPriority.high
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                        ),
-                      ),
-                      if (overdue)
-                        Text('Quá hạn', style: TextStyle(color: colors.error)),
-                      if (task.completed) const Text('Đã xong'),
-                      if (task.reminder && !task.completed)
-                        const Icon(
-                          Icons.notifications_active_outlined,
-                          size: 16,
-                        ),
-                    ],
-                  ),
+                  if (overdue)
+                    Text('Quá hạn', style: TextStyle(color: colors.error)),
+                  if (task.completed) const Text('Đã xong'),
+                  if (task.reminder && !task.completed)
+                    const Icon(Icons.notifications_active_outlined, size: 16),
                 ],
               ),
-            ),
-            onTap: busy ? null : () => onEdit(task),
+            ],
           ),
-        );
-      }).toList(),
+        ),
+        onTap: busy ? null : () => onEdit(task),
+      ),
     );
   }
 }

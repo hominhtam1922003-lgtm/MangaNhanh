@@ -13,18 +13,20 @@ class GeminiService {
   Future<bool> hasKey() async =>
       (await storage.read(key: 'gemini.key'))?.isNotEmpty ?? false;
   Future<void> saveKey(String key) async {
-    if (key.trim().length < 20)
+    if (key.trim().length < 20) {
       throw const UserMessage('API key chưa hợp lệ. Vui lòng kiểm tra lại.');
+    }
     await storage.write(key: 'gemini.key', value: key.trim());
   }
 
   Future<void> deleteKey() => storage.delete(key: 'gemini.key');
   Future<String> _key() async {
     final key = await storage.read(key: 'gemini.key');
-    if (key == null || key.isEmpty)
+    if (key == null || key.isEmpty) {
       throw const UserMessage(
         'Nhập và lưu Gemini API key trên thiết bị trước.',
       );
+    }
     return key;
   }
 
@@ -54,22 +56,26 @@ class GeminiService {
   Future<http.Response> _request(Future<http.Response> Function() call) async {
     try {
       final response = await call().timeout(const Duration(seconds: 35));
-      if (response.statusCode == 429)
+      if (response.statusCode == 429) {
         throw const UserMessage(
           'Gemini hết hạn mức hoặc đang giới hạn truy cập. Kiểm tra quota trong Google AI Studio.',
         );
-      if (response.statusCode == 401 || response.statusCode == 403)
+      }
+      if (response.statusCode == 401 || response.statusCode == 403) {
         throw const UserMessage(
           'Gemini từ chối API key/quyền truy cập. Kiểm tra key và giới hạn ứng dụng.',
         );
-      if (response.statusCode == 404)
+      }
+      if (response.statusCode == 404) {
         throw const UserMessage(
           'Mô hình không còn sẵn sàng. Bấm tải danh sách mô hình và chọn lại.',
         );
-      if (response.statusCode != 200)
+      }
+      if (response.statusCode != 200) {
         throw const UserMessage(
           'Gemini chưa xử lý được yêu cầu. Thử nội dung ngắn hơn hoặc thử lại sau.',
         );
+      }
       return response;
     } on UserMessage {
       rethrow;
@@ -85,10 +91,12 @@ class GeminiService {
     String model, {
     List<Task> contextTasks = const [],
   }) async {
-    if (text.trim().isEmpty || text.length > 4000)
+    if (text.trim().isEmpty || text.length > 4000) {
       throw const UserMessage('Nhập yêu cầu từ 1 đến 4.000 ký tự.');
-    if (!RegExp(r'^gemini-[a-zA-Z0-9._-]+$').hasMatch(model))
+    }
+    if (!RegExp(r'^gemini-[a-zA-Z0-9._-]+$').hasMatch(model)) {
       throw const UserMessage('Chọn mô hình Gemini hợp lệ.');
+    }
     final key = await _key();
     final now = DateTime.now();
     final existing = contextTasks
@@ -172,8 +180,9 @@ class GeminiService {
       final json =
           jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       final candidate = (json['candidates'] as List).first as Map;
-      if (candidate['finishReason'] != 'STOP')
+      if (candidate['finishReason'] != 'STOP') {
         throw const FormatException('Chưa hoàn thành');
+      }
       final parts = candidate['content']['parts'] as List;
       final text = parts
           .where((p) => p['thought'] != true)
@@ -191,24 +200,31 @@ class GeminiService {
 List<Task> parsePlan(String response) {
   final json = jsonDecode(response) as Map<String, dynamic>;
   final rows = json['tasks'] as List;
-  if (rows.isEmpty || rows.length > 10)
+  if (rows.isEmpty || rows.length > 10) {
     throw const FormatException('Số lượng công việc không hợp lệ');
+  }
   return rows.map((r) {
     final j = r as Map<String, dynamic>;
     final title = j['title'] as String;
-    if (validateTitle(title) != null)
+    if (validateTitle(title) != null) {
       throw const FormatException('Tiêu đề không hợp lệ');
+    }
     final dateText = j['date'] as String;
-    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(dateText))
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(dateText)) {
       throw const FormatException('Ngày không hợp lệ');
+    }
     final date = DateTime.parse(dateText);
-    if (localDateKey(date) != dateText || date.year < 1900 || date.year > 2100)
+    if (localDateKey(date) != dateText ||
+        date.year < 1900 ||
+        date.year > 2100) {
       throw const FormatException('Ngày ngoài phạm vi');
+    }
     int? minutes;
     if (j['time'] != null) {
       final time = j['time'] as String;
-      if (!RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d$').hasMatch(time))
+      if (!RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d$').hasMatch(time)) {
         throw const FormatException('Giờ không hợp lệ');
+      }
       minutes =
           int.parse(time.substring(0, 2)) * 60 + int.parse(time.substring(3));
     }

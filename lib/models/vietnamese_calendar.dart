@@ -16,8 +16,9 @@ int _jd(int day, int month, int year) {
   final m = month + 12 * a - 3;
   var result =
       day + (153 * m + 2) ~/ 5 + 365 * y + y ~/ 4 - y ~/ 100 + y ~/ 400 - 32045;
-  if (result < 2299161)
+  if (result < 2299161) {
     result = day + (153 * m + 2) ~/ 5 + 365 * y + y ~/ 4 - 32083;
+  }
   return result;
 }
 

@@ -258,8 +258,9 @@ List<WeatherAlert> evaluateWeather(
 ) {
   if (!settings.enabled ||
       data.stale(now) ||
-      now.toUtc().difference(data.observedAt) > const Duration(minutes: 90))
+      now.toUtc().difference(data.observedAt) > const Duration(minutes: 90)) {
     return [];
+  }
   final horizon = now.toUtc().add(const Duration(hours: 3));
   final hours = data.hours.where(
     (h) =>

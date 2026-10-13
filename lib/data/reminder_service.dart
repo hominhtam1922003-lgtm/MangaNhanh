@@ -29,8 +29,9 @@ class ReminderService {
       final enabled = await android?.areNotificationsEnabled() ?? true;
       var hasFutureReminder = false;
       for (final task in tasks) {
-        if (!task.reminder || task.completed || task.dueMinutes == null)
+        if (!task.reminder || task.completed || task.dueMinutes == null) {
           continue;
+        }
         final date = tz.TZDateTime(
           tz.local,
           task.dueDate.year,

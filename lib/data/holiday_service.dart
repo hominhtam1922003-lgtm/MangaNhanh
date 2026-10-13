@@ -37,8 +37,10 @@ class HolidayService {
           holiday.date.day - before,
           9,
         );
-        if (!at.isAfter(now) || at.difference(now) > const Duration(days: 370))
+        if (!at.isAfter(now) ||
+            at.difference(now) > const Duration(days: 370)) {
           continue;
+        }
         await NotificationHub.plugin.zonedSchedule(
           id: holiday.id,
           title: 'Sắp đến ${holiday.title}',

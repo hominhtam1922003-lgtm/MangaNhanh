@@ -40,8 +40,9 @@ class WeatherController extends ChangeNotifier {
     data = cached == null ? null : WeatherData.decode(cached);
     if (data != null &&
         (data!.place.latitude != settings.place.latitude ||
-            data!.place.longitude != settings.place.longitude))
+            data!.place.longitude != settings.place.longitude)) {
       data = null;
+    }
     backgroundAt = await repository.setting('weather.background');
     notifyListeners();
   }
@@ -117,8 +118,9 @@ class WeatherController extends ChangeNotifier {
         );
       }
       var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied)
+      if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
+      }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         throw const UserMessage(

@@ -72,8 +72,9 @@ Future<void> sendWeatherAlerts(
   for (final alert in alerts) {
     final key = 'weather.alert.${alert.type}';
     final last = DateTime.tryParse(await repository.setting(key) ?? '');
-    if (last != null && now.difference(last) < const Duration(hours: 4))
+    if (last != null && now.difference(last) < const Duration(hours: 4)) {
       continue;
+    }
     final local = data.placeTime(alert.at);
     await NotificationHub.plugin.show(
       id: ids[alert.type]!,

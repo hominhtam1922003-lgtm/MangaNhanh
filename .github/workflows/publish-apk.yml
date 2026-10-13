@@ -15,6 +15,7 @@ on:
 permissions:
   actions: read
   contents: write
+  checks: write
 
 concurrency:
   group: publish-lich-nhac-apk
@@ -74,6 +75,7 @@ jobs:
           VERIFIED_SHA: ${{ steps.verify.outputs.sha }}
           RELEASE_TAG: ${{ steps.verify.outputs.tag }}
         run: |
+          exec > >(tee /tmp/lich-nhac-publish.log) 2>&1
           cat > /tmp/release-notes.md <<EOF
           APK thử nghiệm **Lịch Nhắc 1.2.0**, dành cho **Android 7.0+**.
 
@@ -98,3 +100,16 @@ jobs:
             gh release create "$RELEASE_TAG" release-apk/LichNhac-1.2.0.apk release-apk/LichNhac-1.2.0.apk.sha256 --target "$VERIFIED_SHA" --title "Lịch Nhắc 1.2.0 — APK thử nghiệm" --notes-file /tmp/release-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
           fi
           echo "APK tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/LichNhac-1.2.0.apk" >> "$GITHUB_STEP_SUMMARY"
+      - name: Công bố chẩn đoán đăng APK
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const path = '/tmp/lich-nhac-publish.log';
+            await github.rest.checks.create({
+              ...context.repo, head_sha: context.sha,
+              name: 'APK publication diagnostics', status: 'completed', conclusion: 'neutral',
+              output: { title: 'Nhật ký đăng APK trực tiếp', summary: 'Nguồn APK không build lại.',
+                text: fs.existsSync(path) ? fs.readFileSync(path, 'utf8').slice(-50000) : 'Chưa chạy bước đăng Release.' }
+            });

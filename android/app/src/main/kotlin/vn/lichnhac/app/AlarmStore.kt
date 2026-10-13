@@ -42,7 +42,9 @@ object AlarmStore {
         c.getSystemService(AlarmManager::class.java).setAlarmClock(AlarmManager.AlarmClockInfo(r.at, show), pending(c, r.id))
     }
     @Synchronized fun sync(c: Context, desired: List<AlarmRecord>): Boolean {
-        val existing = read(c).associateBy { it.id }
+        val zone = java.util.TimeZone.getDefault().id
+        val oldZone = prefs(c).getString("zone", zone) ?: zone
+        val existing = read(c).map { AlarmPolicy.rebase(it, oldZone, zone) }.associateBy { it.id }
         val ids = desired.map { it.id }.toSet()
         existing.values.filter { it.id !in ids }.forEach { cancel(c, it.id) }
         AlarmService.instance?.prune(desired.associate { it.id to it.original })

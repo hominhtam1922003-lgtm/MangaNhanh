@@ -12,9 +12,10 @@ import java.util.ArrayDeque
 class AlarmService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private val queue = ArrayDeque<AlarmRecord>()
-    var current: AlarmRecord? = null
+    @Volatile var current: AlarmRecord? = null
         private set
     private var player: MediaPlayer? = null
+    val isSoundPlaying: Boolean get() = try { player?.isPlaying == true } catch (_: Exception) { false }
     private var wakeLock: PowerManager.WakeLock? = null
     private var vibrator: Vibrator? = null
     private val timeout = Runnable { current?.let { dismiss(it.id) } }
@@ -96,7 +97,7 @@ class AlarmService : Service() {
     fun stopAll() { queue.clear(); current?.let { AlarmStore.remove(this, it.id) }; quiet(); current = null; stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
     override fun onDestroy() { quiet(); current = null; instance = null; sendBroadcast(Intent("vn.lichnhac.ALARM_UPDATE").setPackage(packageName)); super.onDestroy() }
     companion object {
-        var instance: AlarmService? = null
+        @Volatile var instance: AlarmService? = null
         const val NOTIFICATION_ID = 1800000000
         private fun action(c: Context, id: Int, action: String) = PendingIntent.getBroadcast(c,
             id xor action.hashCode(), Intent(c, AlarmReceiver::class.java).setAction(action).putExtra("id", id),

@@ -16,8 +16,9 @@ void main() {
     values = {};
     messenger.setMockMethodCallHandler(channel, (call) async {
       final args = call.arguments as Map;
-      if (call.method == 'write')
+      if (call.method == 'write') {
         values[args['key'] as String] = args['value'] as String;
+      }
       if (call.method == 'read') return values[args['key']];
       if (call.method == 'delete') values.remove(args['key']);
       return null;

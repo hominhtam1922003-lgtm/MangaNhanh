@@ -11,7 +11,7 @@ import android.view.WindowManager
 import android.widget.*
 
 class AlarmActivity : Activity() {
-    private lateinit var title: TextView
+    private lateinit var titleView: TextView
     private lateinit var clock: TextView
     private var alarmId = -1
     private val receiver = object : BroadcastReceiver() {
@@ -31,7 +31,7 @@ class AlarmActivity : Activity() {
         fun text(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(0,dp(12),0,dp(12)) }
         content.addView(text("LỊCH NHẮC · BÁO THỨC", 16f))
         clock = text("", 56f); content.addView(clock)
-        title = text("", 28f).apply { setTypeface(typeface, Typeface.BOLD) }; content.addView(title)
+        titleView = text("", 28f).apply { setTypeface(typeface, Typeface.BOLD) }; content.addView(titleView)
         content.addView(text("Chuông tự dừng sau 5 phút. Dừng chuông không tự đánh dấu công việc hoàn thành.", 15f))
         fun button(label: String, color: Int, click: () -> Unit) {
             val b = Button(this).apply {
@@ -63,7 +63,7 @@ class AlarmActivity : Activity() {
     private fun update() {
         val record = AlarmService.instance?.current
         if (record == null) { finish(); return }
-        alarmId = record.id; title.text = record.title
+        alarmId = record.id; titleView.text = record.title
         clock.text = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
     }
     override fun onDestroy() { unregisterReceiver(receiver); super.onDestroy() }

@@ -34,8 +34,9 @@ class ForecastChart extends StatelessWidget {
         .map((h) => h.temperature)
         .whereType<double>()
         .toList();
-    if (hours.length < 2 || temperatures.isEmpty)
+    if (hours.length < 2 || temperatures.isEmpty) {
       return const Text('Chưa đủ số liệu cho biểu đồ nhiệt độ.');
+    }
     final lo = temperatures.reduce(math.min),
         hi = temperatures.reduce(math.max);
     final color = Theme.of(context).colorScheme.primary;

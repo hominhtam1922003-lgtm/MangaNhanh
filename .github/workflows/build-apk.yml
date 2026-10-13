@@ -60,6 +60,18 @@ jobs:
         run: flutter build apk --release 2>&1 | tee /tmp/lich-nhac-build.log
       - name: Kiểm thử chính sách báo thức Android
         run: (cd android && ./gradlew testReleaseUnitTest) 2>&1 | tee /tmp/lich-nhac-native-test.log
+      - name: Build ứng dụng và APK instrumentation cho kiểm thử chuông
+        run: (cd android && ./gradlew assembleDebug assembleDebugAndroidTest) 2>&1 | tee /tmp/lich-nhac-instrumentation-build.log
+      - name: Cho phép tăng tốc máy ảo Android
+        run: sudo chmod 666 /dev/kvm
+      - name: Thử báo thức thật trên Android 15 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: bash scripts/test-native-alarms.sh
       - name: Tải lên APK
         uses: actions/upload-artifact@v4
         with:
@@ -79,6 +91,8 @@ jobs:
               ['/tmp/lich-nhac-test.log', 'Test'],
               ['/tmp/lich-nhac-build.log', 'Build'],
               ['/tmp/lich-nhac-native-test.log', 'Native alarm policy tests'],
+              ['/tmp/lich-nhac-instrumentation-build.log', 'Instrumentation build'],
+              ['/tmp/lich-nhac-alarm-integration.log', 'Android 15 emulator alarm tests'],
               ['/tmp/lich-nhac-weather-probe.log', 'Nguồn thời tiết trực tiếp (điểm Mỹ Tho)'],
             ];
             const text = files.map(([file, title]) =>

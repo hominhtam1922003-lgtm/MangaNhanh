@@ -35,14 +35,16 @@ class _AlarmSettingsScreenState extends State<AlarmSettingsScreen>
   Future<void> _refresh() async {
     try {
       final c = await _bridge.capabilities();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _cap = c;
           _error = null;
         });
+      }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() => _error = 'Không đọc được trạng thái báo thức Android.');
+      }
     }
   }
 
@@ -51,11 +53,12 @@ class _AlarmSettingsScreenState extends State<AlarmSettingsScreen>
       await action();
       await _refresh();
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => _error =
               'Không mở được mục này. Hãy kiểm tra trong cài đặt Android.',
         );
+      }
     }
   }
 

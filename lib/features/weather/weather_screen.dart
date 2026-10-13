@@ -21,7 +21,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
     try {
       await action();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -31,6 +31,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
             ),
           ),
         );
+      }
     }
   }
 

@@ -78,7 +78,7 @@ class SectionTitle extends StatelessWidget {
             ],
           ),
         ),
-        if (action != null) action!,
+        ?action,
       ],
     ),
   );

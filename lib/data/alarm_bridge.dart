@@ -42,6 +42,8 @@ class AlarmBridge {
       }) ??
       false;
   Future<void> clear() => channel.invokeMethod<void>('clear');
+  Future<void> openRingingAlarm() =>
+      channel.invokeMethod<void>('openRingingAlarm');
   Future<void> openExactSettings() =>
       channel.invokeMethod<void>('openExactSettings');
   Future<void> openFullScreenSettings() =>

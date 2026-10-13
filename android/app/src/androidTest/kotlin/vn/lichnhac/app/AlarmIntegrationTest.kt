@@ -5,6 +5,7 @@ import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.*
+import org.junit.Assert.*
 import org.junit.runner.RunWith
 
 /** Kiểm tra AlarmManager → Receiver → foreground service → MediaPlayer trên Android thật (emulator). */

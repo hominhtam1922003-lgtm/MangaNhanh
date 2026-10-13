@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../data/alarm_bridge.dart';
 import '../../data/notification_hub.dart';
 import '../../widgets/page_frame.dart';
@@ -52,11 +53,12 @@ class _AlarmSettingsScreenState extends State<AlarmSettingsScreen>
     try {
       await action();
       await _refresh();
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(
-          () => _error =
-              'Không mở được mục này. Hãy kiểm tra trong cài đặt Android.',
+          () => _error = e is PlatformException && e.code == 'NO_RINGING_ALARM'
+              ? 'Hiện không có báo thức đang đổ chuông.'
+              : 'Không mở được mục này. Hãy kiểm tra trong cài đặt Android.',
         );
       }
     }
@@ -91,6 +93,18 @@ class _AlarmSettingsScreenState extends State<AlarmSettingsScreen>
             ),
           ),
           const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: () => _open(_bridge.openRingingAlarm),
+            icon: const Icon(Icons.alarm_rounded),
+            label: const Text('Mở báo thức đang đổ chuông'),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'Nếu đã tắt thông báo hoặc quyền toàn màn hình, vẫn có thể mở nút Dừng/Hoãn tại đây.',
+            ),
+          ),
+
           _permission(
             'Báo thức chính xác',
             _cap?.exact,

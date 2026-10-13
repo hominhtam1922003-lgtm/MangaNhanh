@@ -10,9 +10,12 @@ class ReminderService {
   ReminderService({AlarmBridge? alarms}) : alarms = alarms ?? AlarmBridge();
   final AlarmBridge alarms;
   Future<void> cancelAll() async {
-    await NotificationHub.initialize();
-    await NotificationHub.plugin.cancelAll();
-    await alarms.clear();
+    try {
+      await alarms.clear();
+    } finally {
+      await NotificationHub.initialize();
+      await NotificationHub.plugin.cancelAll();
+    }
   }
 
   String _signature(Task task) =>

@@ -31,7 +31,7 @@ Thêm/sửa công việc → chọn giờ → **Bật nhắc việc** → **Báo
 3. Kiểm tra **âm lượng báo thức** (app không tự tăng âm lượng). Chuông mặc định Android hoặc âm beep gốc kèm app phát lặp, có rung, **Dừng / Hoãn 5 hoặc 10 phút**, tự dừng sau 5 phút.
 4. Dừng chuông không tự hoàn thành việc. Sửa thời điểm/xóa/hoàn thành/tắt nhắc hủy lịch và chuông; app giữ trạng thái hoãn khi mở lại. Khôi phục lịch tương lai sau boot/cập nhật/đổi múi giờ; giờ địa phương giữ nguyên, hoãn tính theo phút thực.
 
-Android yêu cầu thông báo foreground cho dịch vụ phát chuông; đây **không chỉ là âm thông báo một lần**. Khi thiếu quyền toàn màn hình, có thể phải chạm thông báo để mở nút điều khiển. Nếu Android chặn dịch vụ, cố gắng gửi thông báo thường. Máy tắt, force-stop, thu hồi quyền, âm lượng 0, chế độ Không làm phiền hoặc OEM chặn nền có thể làm chuông không hoạt động. Không dùng thay báo thức khẩn cấp.
+Android yêu cầu thông báo foreground cho dịch vụ phát chuông; đây **không chỉ là âm thông báo một lần**. Khi thiếu quyền toàn màn hình, có thể phải chạm thông báo để mở nút điều khiển. Nếu đã tắt thông báo/quyền toàn màn hình, mở **Tiện ích → Báo thức & quyền Android → Mở báo thức đang đổ chuông** để Dừng/Hoãn. Nếu Android chặn dịch vụ, cố gắng gửi thông báo thường. Máy tắt, force-stop, thu hồi quyền, âm lượng 0, chế độ Không làm phiền hoặc OEM chặn nền có thể làm chuông không hoạt động. Không dùng thay báo thức khẩn cấp.
 
 **Chữ ký bản thử:** keystore debug của runner cũ không được giữ. APK mới có thể không cài đè được APK 1.1 do khác chữ ký. Không gỡ app nếu chưa chấp nhận mất công việc/cài đặt/key; chưa có tính năng sao lưu tự động. Migration giữ dữ liệu khi cập nhật được với cùng chữ ký, không giữ dữ liệu sau uninstall.
 

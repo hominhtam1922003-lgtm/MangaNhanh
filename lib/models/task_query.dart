@@ -67,7 +67,7 @@ List<Task> queryTasks(
     if (date != null && !sameDay(task.dueDate, date)) {
       return false;
     }
-    if (!searchText(task.title).contains(needle)) {
+    if (needle.isNotEmpty && !searchText(task.title).contains(needle)) {
       return false;
     }
     return switch (filter) {

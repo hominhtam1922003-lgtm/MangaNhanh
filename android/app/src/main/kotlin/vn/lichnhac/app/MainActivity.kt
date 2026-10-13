@@ -31,6 +31,14 @@ class MainActivity : FlutterActivity() {
                                 AlarmRecord((it["id"] as Number).toInt(), it["title"] as String, (it["at"] as Number).toLong())
                             }))
                         }
+                        "openRingingAlarm" -> {
+                            if (AlarmService.instance?.current == null) {
+                                result.error("NO_RINGING_ALARM", "Hiện không có báo thức đang đổ chuông.", null)
+                            } else {
+                                startActivity(Intent(this, AlarmActivity::class.java))
+                                result.success(null)
+                            }
+                        }
                         "clear" -> { AlarmStore.clear(this); result.success(null) }
                         "openExactSettings" -> {
                             if (Build.VERSION.SDK_INT >= 31) startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))

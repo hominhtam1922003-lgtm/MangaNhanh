@@ -1,5 +1,9 @@
 # Lịch Nhắc 1.1
 
+**APK đã build và kiểm chứng CI:** [Tải artifact `lich-nhac-apk`](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38373854418/artifacts/11800299094) · [Xem lần chạy thành công](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38373854418).
+
+Artifact là ZIP, giải nén lấy `app-release.apk` (62,2 MB); cần đăng nhập GitHub. Artifact có thời hạn lưu 30 ngày.
+
 Ứng dụng Android Flutter bằng tiếng Việt: công việc, lịch tháng/âm lịch, ngày lễ Việt Nam, thời tiết theo tọa độ và trợ lý lập kế hoạch Gemini.
 
 - Tên: **Lịch Nhắc** · ID: **`vn.lichnhac.app`** · phiên bản **1.1.0+2**.
@@ -164,10 +168,25 @@ test/         # Quá hạn/lọc, SQLite, notification, thời tiết HTTP/rule,
 legacy-web/   # MangaNhanh web cũ, không tham gia build Flutter
 ```
 
-## Kiểm chứng
+## Kiểm chứng thực tế — 13/10/2026
 
-Môi trường Arena không có Flutter/Dart và không tải được SDK từ Google. Do đó đã chuyển **kiểm chứng thật sang GitHub Actions**, không thay Flutter bằng app giả lập. CI đầu tiên đã chạy analyze thành công và tìm thấy các lỗi test/Gradle; các lỗi đó đang được sửa và kiểm chứng lại cho bản mở rộng.
+Môi trường Arena thiếu Flutter/Dart và không tải được SDK từ Google, nên đã chuyển kiểm chứng thật sang **GitHub Actions**, không thay Flutter bằng app giả lập.
 
-Xem kết quả của commit mới nhất trong Actions và GitHub Checks `Flutter diagnostics`; chỉ coi APK đã kiểm chứng build khi **job build-apk xanh và có artifact APK**. Kết quả cuối cùng sẽ được cập nhật khi CI hoàn tất.
+Bản mã **`56783aa`**, [workflow #38373854418](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38373854418), đã hoàn tất thành công:
 
-Test mock/CI **không chứng minh** GPS, thời tiết trực tiếp, Gemini bằng key của người dùng, hiệu suất FPS hoặc thông báo nền đã được thử trên điện thoại. Cần kiểm tra thực tế các quyền cho phép/từ chối, mất mạng, thay vị trí, reboot, tiết kiệm pin và buộc dừng. Không có cam kết chính xác 100% hoặc cảnh báo đúng phút.
+| Hạng mục | Kết quả thực tế |
+|---|---|
+| Flutter / Dart | Stable 3.47.7 / Dart 3.13.5, Java 17 |
+| `flutter pub get` | Thành công, lockfile đã cố định |
+| `dart format lib test` | Thành công, không có thay đổi định dạng |
+| `flutter analyze` | No issues found |
+| `flutter test` | **58 test đạt**, gồm màn hình 320×640 và chữ phóng 1,5 lần |
+| `flutter build apk --release` | Thành công, `app-release.apk` **62,2 MB** |
+| Nguồn thời tiết thật | **HTTP 200**, tham số app được Open-Meteo chấp nhận tại điểm Mỹ Tho; có dữ liệu 7 ngày và cờ ban ngày |
+| Upload artifact | Thành công, **`lich-nhac-apk`** |
+
+Log đầy đủ được công bố qua GitHub Checks **Flutter diagnostics**. Build thử nghiệm trên nhánh làm việc, **chưa merge vào main**. Phần cập nhật tài liệu sau lần chạy này không thay đổi mã ứng dụng đã được kiểm chứng.
+
+Các lỗi test/Gradle ở những lần CI đầu đã được sửa. Dữ liệu thời tiết trong smoke test là điểm lưới tại tâm Mỹ Tho, không phải GPS của điện thoại người dùng và không chứng minh dự báo chính xác 100%.
+
+**Chưa kiểm chứng Gemini bằng key của bạn, GPS trên thiết bị thật, thông báo nền/reboot hoặc FPS thực tế.** Test mock/CI không thay thế thử trên điện thoại. Cần thử quyền cho phép/từ chối, mất mạng, thay vị trí, reboot, tiết kiệm pin và buộc dừng. Không cam kết thời tiết chính xác 100% hoặc cảnh báo đúng phút.

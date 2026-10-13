@@ -2,7 +2,7 @@ name: Build APK Lịch Nhắc
 
 on:
   push:
-    branches: [main]
+    branches: [main, arena/6f7cfa08-manganhanh]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -33,6 +33,15 @@ jobs:
         run: flutter pub get
       - name: Định dạng mã nguồn
         run: dart format lib test
+      - name: Lưu mã đã định dạng và dependency lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: lich-nhac-source-checkpoint
+          path: |
+            pubspec.lock
+            lib/
+            test/
+          retention-days: 7
       - name: Phân tích mã nguồn
         run: flutter analyze
       - name: Kiểm thử

@@ -37,18 +37,21 @@ void main() {
     }),
     200,
   );
-  http.Response answer() => http.Response(
-    jsonEncode({
-      'choices': [
-        {
-          'message': {'content': 'Xin chào! Tôi có thể giúp bạn.'},
-          'finish_reason': 'stop',
-        },
-      ],
-    }),
+  http.Response answer() => http.Response.bytes(
+    utf8.encode(
+      jsonEncode({
+        'choices': [
+          {
+            'message': {'content': 'Xin chào! Tôi có thể giúp bạn.'},
+            'finish_reason': 'stop',
+          },
+        ],
+      }),
+    ),
     200,
-    encoding: utf8,
+    headers: {'content-type': 'application/json; charset=utf-8'},
   );
+
   test(
     'Groq key tách Gemini, đọc lại xác nhận, key sai không ghi đè',
     () async {

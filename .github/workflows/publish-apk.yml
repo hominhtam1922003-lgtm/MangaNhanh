@@ -1,0 +1,92 @@
+name: Đăng APK tải trực tiếp
+
+on:
+  push:
+    branches: [arena/6f7cfa08-manganhanh]
+    paths: [.github/workflows/publish-apk.yml]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: ID lần build-apk thành công trên nhánh làm việc
+        required: true
+        default: '38373854418'
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-lich-nhac-apk
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/arena/6f7cfa08-manganhanh'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38373854418' }}
+    steps:
+      - name: Kiểm tra nguồn APK đã build thành công
+        id: verify
+        run: |
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID" > /tmp/verified-run.json
+          python3 - <<'PY'
+          import json, os
+          with open('/tmp/verified-run.json') as stream:
+              run = json.load(stream)
+          assert run['status'] == 'completed' and run['conclusion'] == 'success', 'Build chưa thành công'
+          assert run['head_branch'] == 'arena/6f7cfa08-manganhanh', 'Sai nhánh nguồn APK'
+          assert run['head_repository']['full_name'] == os.environ['GITHUB_REPOSITORY'], 'Sai repository'
+          assert run['path'] == '.github/workflows/build-apk.yml', 'Sai workflow build'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f"sha={run['head_sha']}\n")
+              output.write(f"tag=lich-nhac-v1.1.0-test-{run['head_sha'][:7]}\n")
+          PY
+      - name: Lấy APK đã kiểm chứng, không build hoặc đổi chữ ký
+        uses: actions/download-artifact@v4
+        with:
+          name: lich-nhac-apk
+          path: release-apk
+          run-id: ${{ env.BUILD_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Kiểm tra và đặt tên APK
+        run: |
+          test -s release-apk/app-release.apk
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('release-apk/app-release.apk') as apk:
+              names = set(apk.namelist())
+              assert 'AndroidManifest.xml' in names and 'classes.dex' in names, 'Không phải APK Android'
+              assert apk.testzip() is None, 'APK bị hỏng'
+          PY
+          mv release-apk/app-release.apk release-apk/LichNhac-1.1.0.apk
+          cd release-apk
+          sha256sum LichNhac-1.1.0.apk > LichNhac-1.1.0.apk.sha256
+      - name: Đăng bản thử nghiệm và file APK trực tiếp
+        env:
+          VERIFIED_SHA: ${{ steps.verify.outputs.sha }}
+          RELEASE_TAG: ${{ steps.verify.outputs.tag }}
+        run: |
+          cat > /tmp/release-notes.md <<EOF
+          APK thử nghiệm **Lịch Nhắc 1.1.0**, dành cho **Android 7.0+**.
+
+          Tải file **LichNhac-1.1.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP hoặc đăng nhập GitHub đối với repository công khai.
+
+          APK được lấy nguyên vẹn từ [lần build thành công](https://github.com/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID), không build lại hoặc thay chữ ký.
+          Commit nguồn: \`$VERIFIED_SHA\`.
+
+          **Dùng debug signing để thử nội bộ, không phải bản ký phát hành Google Play.** Dự báo thời tiết không bảo đảm chính xác 100%; Android có thể trì hoãn thông báo nền. Gemini API key chỉ nhập trong ứng dụng, không có key nhúng trong APK.
+          EOF
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-apk/LichNhac-1.1.0.apk release-apk/LichNhac-1.1.0.apk.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$RELEASE_TAG" release-apk/LichNhac-1.1.0.apk release-apk/LichNhac-1.1.0.apk.sha256 --target "$VERIFIED_SHA" --title "Lịch Nhắc 1.1.0 — APK thử nghiệm" --notes-file /tmp/release-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
+          fi
+          echo "APK tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/LichNhac-1.1.0.apk" >> "$GITHUB_STEP_SUMMARY"

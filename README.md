@@ -1,8 +1,10 @@
 # Lịch Nhắc 1.1
 
-**APK đã build và kiểm chứng CI:** [Tải artifact `lich-nhac-apk`](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38373854418/artifacts/11800299094) · [Xem lần chạy thành công](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38373854418).
+**[Tải thẳng LichNhac-1.1.0.apk — không cần giải nén](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/lich-nhac-v1.1.0-test-56783aa/LichNhac-1.1.0.apk)**
 
-Artifact là ZIP, giải nén lấy `app-release.apk` (62,2 MB); cần đăng nhập GitHub. Artifact có thời hạn lưu 30 ngày.
+[Trang Release thử nghiệm](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/tag/lich-nhac-v1.1.0-test-56783aa) · [Lần build đã kiểm chứng](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38373854418).
+
+File APK 62,2 MB được lấy nguyên vẹn từ build đã kiểm chứng. Release của repository công khai cho phép tải APK không cần đăng nhập GitHub; artifact ZIP của Actions vẫn được giữ để dự phòng.
 
 Ứng dụng Android Flutter bằng tiếng Việt: công việc, lịch tháng/âm lịch, ngày lễ Việt Nam, thời tiết theo tọa độ và trợ lý lập kế hoạch Gemini.
 
@@ -125,9 +127,13 @@ Workflow **`.github/workflows/build-apk.yml`** chạy trên Ubuntu latest, Java 
 
 Chạy khi push `main`, pull request vào `main`, chạy thủ công; có thêm trigger push nhánh làm việc Arena để kiểm chứng trước merge. Các lệnh ghi log qua `tee` dùng `shell: bash` có `pipefail`: test/analyze thất bại sẽ **không** tiếp tục build.
 
-Có smoke test HTTP nguồn thời tiết thật tại tâm Mỹ Tho (không chặn build nếu nhà cung cấp tạm lỗi, không phải test GPS thiết bị). Có artifact nhỏ `lich-nhac-source-checkpoint` chứa mã định dạng và lockfile, và GitHub Checks báo chẩn đoán (không dùng Gemini key). Không yêu cầu secret hay keystore riêng để build APK.
+Có smoke test HTTP nguồn thời tiết thật tại tâm Mỹ Tho (không chặn build nếu nhà cung cấp tạm lỗi, không phải test GPS thiết bị). Workflow `.github/workflows/publish-apk.yml` kiểm tra một lần build đã thành công, tải artifact trên runner rồi đăng chính file APK lên Release thử nghiệm; không build lại hay thay chữ ký. Có artifact nhỏ `lich-nhac-source-checkpoint` chứa mã định dạng và lockfile, và GitHub Checks báo chẩn đoán (không dùng Gemini key). Không yêu cầu secret hay keystore riêng để build APK.
 
 ### Tải và cài
+
+**Cách nhanh nhất:** bấm link **Tải thẳng LichNhac-1.1.0.apk** ở đầu README, chép file APK sang Android 7.0+ và mở để cài. Không cần tải ZIP, giải nén hoặc đăng nhập GitHub. Đây là bản thử nghiệm, không phải bản ký phát hành Google Play.
+
+**Cách dự phòng qua Actions (cần đăng nhập, tải ZIP):**
 
 1. Vào repository → **Actions → Build APK Lịch Nhắc**.
 2. Chọn **lần chạy xanh đúng nhánh/commit** → **Artifacts → lich-nhac-apk**.

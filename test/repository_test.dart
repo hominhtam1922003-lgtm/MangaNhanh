@@ -99,6 +99,33 @@ void main() {
     expect(await repository.load(), isEmpty);
   });
 
+  test(
+    'Lưu kế hoạch AI nhiều việc và từ chối toàn bộ nhóm không hợp lệ',
+    () async {
+      await repository.saveMany([
+        Task(title: 'A', dueDate: DateTime(2026)),
+        Task(title: 'B', dueDate: DateTime(2026)),
+      ]);
+      expect((await repository.load()).length, 2);
+      await expectLater(
+        repository.saveMany([
+          Task(title: 'C', dueDate: DateTime(2026)),
+          Task(title: ' ', dueDate: DateTime(2026)),
+        ]),
+        throwsArgumentError,
+      );
+      expect((await repository.load()).length, 2);
+    },
+  );
+
+  test('Cài đặt thời tiết tồn tại qua mở lại và mất khi xóa toàn bộ', () async {
+    await repository.setSetting('weather.settings', '{"enabled":true}');
+    await database.close();
+    expect(await repository.setting('weather.settings'), '{"enabled":true}');
+    await repository.clear();
+    expect(await repository.setting('weather.settings'), isNull);
+  });
+
   test('Đóng/mở database giữ công việc và giao diện', () async {
     await repository.save(
       Task(

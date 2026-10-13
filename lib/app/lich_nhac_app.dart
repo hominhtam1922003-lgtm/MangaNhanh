@@ -35,7 +35,7 @@ class _LichNhacAppState extends State<LichNhacApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       widget.controller.refresh();
-      widget.weather?.loadCache().catchError((Object _) {});
+      widget.weather?.resume();
       HolidayService(widget.controller.repository).schedule();
     }
   }

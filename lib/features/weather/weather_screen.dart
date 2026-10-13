@@ -176,7 +176,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
               Text('12 giờ tới', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 10),
               SizedBox(
-                height: 154,
+                height: MediaQuery.textScalerOf(context).scale(154),
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: hours.length,

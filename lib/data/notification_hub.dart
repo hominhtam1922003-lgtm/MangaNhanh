@@ -64,5 +64,16 @@ class NotificationHub {
         await plugin.cancel(id: notification.id);
       }
     }
+    final channel = {
+      'task:': 'task_reminders',
+      'holiday:': 'holiday_reminders',
+    }[prefix];
+    for (final notification in await plugin.getActiveNotifications()) {
+      if (notification.id != null &&
+          ((notification.payload?.startsWith(prefix) ?? false) ||
+              (channel != null && notification.channelId == channel))) {
+        await plugin.cancel(id: notification.id!);
+      }
+    }
   }
 }

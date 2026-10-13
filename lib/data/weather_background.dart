@@ -27,6 +27,16 @@ void weatherDispatcher() {
         return true;
       }
       final data = await WeatherApi().fetch(settings.place);
+      final latest = await repository.setting('weather.settings');
+      if (latest == null) {
+        return true;
+      }
+      final current = WeatherSettings.decode(latest);
+      if (!current.enabled ||
+          current.place.latitude != settings.place.latitude ||
+          current.place.longitude != settings.place.longitude) {
+        return true;
+      }
       await repository.setSetting('weather.cache', data.encode());
       await repository.setSetting(
         'weather.background',
@@ -47,8 +57,18 @@ Future<void> sendWeatherAlerts(
   WeatherSettings settings,
   WeatherData data,
 ) async {
+  final latest = await repository.setting('weather.settings');
+  if (latest == null) {
+    return;
+  }
+  final current = WeatherSettings.decode(latest);
+  if (!current.enabled ||
+      current.place.latitude != data.place.latitude ||
+      current.place.longitude != data.place.longitude) {
+    return;
+  }
   final now = DateTime.now().toUtc();
-  final alerts = evaluateWeather(data, settings, now);
+  final alerts = evaluateWeather(data, current, now);
   if (alerts.isEmpty) {
     return;
   }

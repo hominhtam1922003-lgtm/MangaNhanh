@@ -267,12 +267,14 @@ class _TaskEditorState extends State<TaskEditor> {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Nhắc bằng thông báo'),
                     subtitle: Text(
-                      _minutes == null
+                      widget.onDraftSaved != null
+                          ? 'Lưu kế hoạch trước, rồi bật nhắc trong Công việc.'
+                          : _minutes == null
                           ? 'Chọn giờ đến hạn để bật nhắc việc.'
                           : 'Nhắc tại giờ đến hạn. Android có thể gửi trễ để tiết kiệm pin.',
                     ),
                     value: _reminder && _minutes != null,
-                    onChanged: _minutes == null
+                    onChanged: _minutes == null || widget.onDraftSaved != null
                         ? null
                         : (value) => setState(() => _reminder = value),
                   ),

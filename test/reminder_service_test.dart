@@ -32,6 +32,14 @@ void main() {
         'initialize' => true,
         'requestNotificationsPermission' => granted,
         'areNotificationsEnabled' => enabled,
+        'getActiveNotifications' => [
+          {'id': 100, 'channelId': 'task_reminders', 'payload': 'task:100'},
+          {
+            'id': 1600000001,
+            'channelId': 'weather_alerts',
+            'payload': 'weather:rain',
+          },
+        ],
         'pendingNotificationRequests' => [
           {'id': 1, 'title': 'Nhắc việc', 'body': '', 'payload': 'task:1'},
           {'id': 1500000001, 'title': 'Lễ', 'body': '', 'payload': 'holiday:1'},
@@ -132,6 +140,20 @@ void main() {
     await service.reconcile([]);
     expect(calls.any((c) => c.method == 'cancel'), isTrue);
   });
+
+  test(
+    'Nhắc việc không hủy nhầm lễ hoặc thời tiết, hủy cả thông báo đã hiện',
+    () async {
+      await service.reconcile([]);
+      final ids = calls
+          .where((c) => c.method == 'cancel')
+          .map((c) => (c.arguments as Map)['id'])
+          .toList();
+      expect(ids, containsAll([1, 100]));
+      expect(ids, isNot(contains(1500000001)));
+      expect(ids, isNot(contains(1600000001)));
+    },
+  );
 
   test('Đổi múi giờ và múi giờ GMT cố định', () async {
     await service.reconcile([futureTask()]);

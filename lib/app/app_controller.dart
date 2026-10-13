@@ -100,9 +100,12 @@ class AppController extends ChangeNotifier {
 
   Future<void> clear() => _change(() async {
     await repository.clear();
-    await reminders.cancelAll();
-    await clearExtras?.call();
-    themeMode = ThemeMode.system;
+    try {
+      await reminders.cancelAll();
+    } finally {
+      await clearExtras?.call();
+      themeMode = ThemeMode.system;
+    }
   });
 
   void dismissNotice() {

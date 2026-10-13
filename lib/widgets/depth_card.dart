@@ -15,7 +15,7 @@ class DepthCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: hero
-              ? [c.primary, const Color(0xFF184973), const Color(0xFF19354E)]
+              ? const [Color(0xFF334A9A), Color(0xFF184973), Color(0xFF19354E)]
               : [c.surfaceContainerHigh, c.surfaceContainerLow],
         ),
         border: Border.all(

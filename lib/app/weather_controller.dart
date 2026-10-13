@@ -17,6 +17,7 @@ class WeatherController extends ChangeNotifier {
   String? error;
   String? backgroundAt;
   bool busy = false;
+  int _generation = 0;
 
   Future<void> initialize() async {
     try {
@@ -47,15 +48,32 @@ class WeatherController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> resume() async {
+    try {
+      await loadCache();
+      if (await repository.setting('weather.settings') != null &&
+          (data == null || data!.stale(DateTime.now()))) {
+        await refresh();
+      }
+    } catch (_) {
+      error = 'Chưa tải lại được thời tiết. Hãy bấm cập nhật.';
+      notifyListeners();
+    }
+  }
+
   Future<void> refresh() async {
     if (busy) {
       return;
     }
     busy = true;
+    final generation = _generation;
     error = null;
     notifyListeners();
     try {
       final result = await api.fetch(settings.place);
+      if (generation != _generation) {
+        return;
+      }
       // Tránh hiển thị forecast mới nếu cấu hình địa điểm đã đổi trong lúc tải.
       data = result;
       await repository.setSetting('weather.cache', result.encode());
@@ -96,6 +114,7 @@ class WeatherController extends ChangeNotifier {
   }
 
   Future<void> choosePlace(WeatherPlace place) async {
+    _generation++;
     await saveSettings(settings.copyWith(place: place));
     // Không gắn dữ liệu cache của địa điểm cũ vào địa điểm mới.
     data = null;
@@ -154,11 +173,12 @@ class WeatherController extends ChangeNotifier {
   }
 
   Future<void> reset() async {
-    await background.configure(false);
+    _generation++;
     settings = const WeatherSettings();
     data = null;
     error = null;
     backgroundAt = null;
     notifyListeners();
+    await background.configure(false);
   }
 }

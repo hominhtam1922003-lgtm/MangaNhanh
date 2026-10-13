@@ -22,8 +22,11 @@ void main() {
     repository,
     ReminderService(),
     clearExtras: () async {
-      await weather.reset();
-      await const FlutterSecureStorage().deleteAll();
+      try {
+        await weather.reset();
+      } finally {
+        await const FlutterSecureStorage().deleteAll();
+      }
     },
   );
   runApp(LichNhacApp(controller: controller, weather: weather));

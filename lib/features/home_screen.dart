@@ -4,6 +4,7 @@ import '../app/app_controller.dart';
 import '../app/weather_controller.dart';
 import '../models/task.dart';
 import '../widgets/task_list.dart';
+import '../widgets/page_frame.dart';
 import 'calendar_view.dart';
 import 'utility_view.dart';
 import 'weather/weather_screen.dart';
@@ -58,7 +59,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) => _scaffold(context, box.maxWidth >= 840),
+  );
+
+  Widget _scaffold(BuildContext context, bool wide) {
     final controller = widget.controller;
     return Scaffold(
       appBar: AppBar(
@@ -71,100 +76,154 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
         ],
       ),
-      body: SafeArea(
-        child: controller.loading
-            ? const Center(
-                child: CircularProgressIndicator(
-                  semanticsLabel: 'Đang tải dữ liệu',
+      body: Row(
+        children: [
+          if (wide)
+            NavigationRail(
+              selectedIndex: _index,
+              onDestinationSelected: (i) => setState(() => _index = i),
+              labelType: NavigationRailLabelType.all,
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              leading: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Icon(
+                  Icons.event_note_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 32,
                 ),
-              )
-            : controller.error != null
-            ? Center(
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      EmptyState(
-                        title: 'Chưa thể mở dữ liệu',
-                        message: controller.error!,
-                      ),
-                      FilledButton(
-                        onPressed: controller.initialize,
-                        child: const Text('Thử lại'),
-                      ),
-                    ],
-                  ),
+              ),
+              destinations: const [
+                NavigationRailDestination(
+                  icon: Icon(Icons.today_outlined),
+                  selectedIcon: Icon(Icons.today),
+                  label: Text('Hôm nay'),
                 ),
-              )
-            : Column(
-                children: [
-                  if (controller.notice != null)
-                    Material(
-                      color: Theme.of(context).colorScheme.secondaryContainer,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
-                        child: Row(
+                NavigationRailDestination(
+                  icon: Icon(Icons.calendar_month_outlined),
+                  selectedIcon: Icon(Icons.calendar_month),
+                  label: Text('Lịch'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.checklist_outlined),
+                  selectedIcon: Icon(Icons.checklist),
+                  label: Text('Việc'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.cloud_outlined),
+                  selectedIcon: Icon(Icons.cloud),
+                  label: Text('Thời tiết'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.widgets_outlined),
+                  selectedIcon: Icon(Icons.widgets),
+                  label: Text('Tiện ích'),
+                ),
+              ],
+            ),
+          Expanded(
+            child: SafeArea(
+              child: controller.loading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        semanticsLabel: 'Đang tải dữ liệu',
+                      ),
+                    )
+                  : controller.error != null
+                  ? Center(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Expanded(child: Text(controller.notice!)),
-                            IconButton(
-                              tooltip: 'Đóng thông báo',
-                              onPressed: controller.dismissNotice,
-                              icon: const Icon(Icons.close),
+                            EmptyState(
+                              title: 'Chưa thể mở dữ liệu',
+                              message: controller.error!,
+                            ),
+                            FilledButton(
+                              onPressed: controller.initialize,
+                              child: const Text('Thử lại'),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                  if (controller.busy) const LinearProgressIndicator(),
-                  Expanded(
-                    child: IndexedStack(
-                      index: _index,
+                    )
+                  : Column(
                       children: [
-                        TodayView(
-                          controller: controller,
-                          onEdit: _edit,
-                          onToggle: _toggle,
-                          onWeather: () => setState(() => _index = 3),
-                          onHolidays: () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => HolidaysScreen(
-                                repository: controller.repository,
+                        if (controller.notice != null)
+                          Material(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.secondaryContainer,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+                              child: Row(
+                                children: [
+                                  Expanded(child: Text(controller.notice!)),
+                                  IconButton(
+                                    tooltip: 'Đóng thông báo',
+                                    onPressed: controller.dismissNotice,
+                                    icon: const Icon(Icons.close),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                          onPlanner: () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) =>
-                                  PlannerScreen(controller: controller),
+                        if (controller.busy) const LinearProgressIndicator(),
+                        Expanded(
+                          child: PageFrame(
+                            child: IndexedStack(
+                              index: _index,
+                              children: [
+                                TodayView(
+                                  controller: controller,
+                                  onEdit: _edit,
+                                  onToggle: _toggle,
+                                  onWeather: () => setState(() => _index = 3),
+                                  onHolidays: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => HolidaysScreen(
+                                        repository: controller.repository,
+                                      ),
+                                    ),
+                                  ),
+                                  onPlanner: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute<void>(
+                                      builder: (_) =>
+                                          PlannerScreen(controller: controller),
+                                    ),
+                                  ),
+                                ),
+                                CalendarView(
+                                  controller: controller,
+                                  onEdit: _edit,
+                                  onToggle: _toggle,
+                                  onDateChanged: (day) => _selectedDate = day,
+                                  onAdd: (day) => _openEditor(date: day),
+                                ),
+                                TasksView(
+                                  controller: controller,
+                                  onEdit: _edit,
+                                  onToggle: _toggle,
+                                ),
+                                widget.weather == null
+                                    ? const EmptyState(
+                                        title: 'Thời tiết',
+                                        message: 'Chọn vị trí để xem dự báo.',
+                                      )
+                                    : WeatherScreen(
+                                        controller: widget.weather!,
+                                      ),
+                                UtilityView(controller: controller),
+                              ],
                             ),
                           ),
                         ),
-                        CalendarView(
-                          controller: controller,
-                          onEdit: _edit,
-                          onToggle: _toggle,
-                          onDateChanged: (day) => _selectedDate = day,
-                          onAdd: (day) => _openEditor(date: day),
-                        ),
-                        TasksView(
-                          controller: controller,
-                          onEdit: _edit,
-                          onToggle: _toggle,
-                        ),
-                        widget.weather == null
-                            ? const EmptyState(
-                                title: 'Thời tiết',
-                                message: 'Chọn vị trí để xem dự báo.',
-                              )
-                            : WeatherScreen(controller: widget.weather!),
-                        UtilityView(controller: controller),
                       ],
                     ),
-                  ),
-                ],
-              ),
+            ),
+          ),
+        ],
       ),
       floatingActionButton:
           _index >= 3 || controller.loading || controller.error != null
@@ -180,37 +239,39 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
               child: const Icon(Icons.add),
             ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (index) => setState(() => _index = index),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.today_outlined),
-            selectedIcon: Icon(Icons.today),
-            label: 'Hôm nay',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month),
-            label: 'Lịch',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.checklist_outlined),
-            selectedIcon: Icon(Icons.checklist),
-            label: 'Việc',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.cloud_outlined),
-            selectedIcon: Icon(Icons.cloud),
-            label: 'Thời tiết',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.widgets_outlined),
-            selectedIcon: Icon(Icons.widgets),
-            label: 'Tiện ích',
-          ),
-        ],
-      ),
+      bottomNavigationBar: wide
+          ? null
+          : NavigationBar(
+              selectedIndex: _index,
+              onDestinationSelected: (index) => setState(() => _index = index),
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.today_outlined),
+                  selectedIcon: Icon(Icons.today),
+                  label: 'Hôm nay',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.calendar_month_outlined),
+                  selectedIcon: Icon(Icons.calendar_month),
+                  label: 'Lịch',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.checklist_outlined),
+                  selectedIcon: Icon(Icons.checklist),
+                  label: 'Việc',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.cloud_outlined),
+                  selectedIcon: Icon(Icons.cloud),
+                  label: 'Thời tiết',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.widgets_outlined),
+                  selectedIcon: Icon(Icons.widgets),
+                  label: 'Tiện ích',
+                ),
+              ],
+            ),
     );
   }
 }

@@ -18,6 +18,24 @@ enum TaskSort {
   final String label;
 }
 
+String searchText(String text) {
+  var value = text.toLowerCase();
+  const groups = [
+    'àáạảãâầấậẩẫăằắặẳẵ',
+    'èéẹẻẽêềếệểễ',
+    'ìíịỉĩ',
+    'òóọỏõôồốộổỗơờớợởỡ',
+    'ùúụủũưừứựửữ',
+    'ỳýỵỷỹ',
+    'đ',
+  ];
+  const plain = ['a', 'e', 'i', 'o', 'u', 'y', 'd'];
+  for (var i = 0; i < groups.length; i++) {
+    value = value.replaceAll(RegExp('[${groups[i]}]'), plain[i]);
+  }
+  return value.replaceAll(RegExp(r'[\u0300-\u036f]'), '');
+}
+
 // Không có giờ: xếp cuối ngày, nhưng chỉ quá hạn từ ngày tiếp theo.
 int compareDeadline(Task a, Task b) {
   final day = a.dueDate.compareTo(b.dueDate);
@@ -41,7 +59,7 @@ List<Task> queryTasks(
   DateTime? date,
   TaskSort sort = TaskSort.deadline,
 }) {
-  final needle = search.trim().toLowerCase();
+  final needle = searchText(search.trim());
   final result = tasks.where((task) {
     if (category != null && task.category != category) {
       return false;
@@ -49,7 +67,7 @@ List<Task> queryTasks(
     if (date != null && !sameDay(task.dueDate, date)) {
       return false;
     }
-    if (!task.title.toLowerCase().contains(needle)) {
+    if (!searchText(task.title).contains(needle)) {
       return false;
     }
     return switch (filter) {

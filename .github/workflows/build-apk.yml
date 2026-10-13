@@ -58,6 +58,8 @@ jobs:
         run: python3 scripts/check-weather-api.py 2>&1 | tee /tmp/lich-nhac-weather-probe.log
       - name: Build APK release để cài thử
         run: flutter build apk --release 2>&1 | tee /tmp/lich-nhac-build.log
+      - name: Kiểm thử chính sách báo thức Android
+        run: (cd android && ./gradlew testReleaseUnitTest) 2>&1 | tee /tmp/lich-nhac-native-test.log
       - name: Tải lên APK
         uses: actions/upload-artifact@v4
         with:
@@ -76,6 +78,7 @@ jobs:
               ['/tmp/lich-nhac-analyze.log', 'Analyze'],
               ['/tmp/lich-nhac-test.log', 'Test'],
               ['/tmp/lich-nhac-build.log', 'Build'],
+              ['/tmp/lich-nhac-native-test.log', 'Native alarm policy tests'],
               ['/tmp/lich-nhac-weather-probe.log', 'Nguồn thời tiết trực tiếp (điểm Mỹ Tho)'],
             ];
             const text = files.map(([file, title]) =>

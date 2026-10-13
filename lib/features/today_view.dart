@@ -49,7 +49,7 @@ class TodayView extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Một ngày có kế hoạch',
+                  'Chào ngày mới!',
                   style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 12),
@@ -129,12 +129,19 @@ class TodayView extends StatelessWidget {
           color: Theme.of(context).colorScheme.surfaceContainer,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        constraints: const BoxConstraints(minWidth: 140),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 20),
-            const SizedBox(width: 8),
-            Text('$count $label'),
+            Icon(icon, size: 22, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(height: 8),
+            Text(
+              '$count',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            Text(label, style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       );

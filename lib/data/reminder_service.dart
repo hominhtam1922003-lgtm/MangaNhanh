@@ -4,15 +4,19 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../models/task.dart';
 import 'notification_hub.dart';
+import 'alarm_bridge.dart';
 
 class ReminderService {
+  ReminderService({AlarmBridge? alarms}) : alarms = alarms ?? AlarmBridge();
+  final AlarmBridge alarms;
   Future<void> cancelAll() async {
     await NotificationHub.initialize();
     await NotificationHub.plugin.cancelAll();
+    await alarms.clear();
   }
 
   String _signature(Task task) =>
-      'task:${task.id}:${base64Url.encode(utf8.encode(jsonEncode({'title': task.title, 'date': localDateKey(task.dueDate), 'time': task.dueMinutes, 'category': task.category.name, 'timezone': tz.local.name})))}';
+      'task:${task.id}:${base64Url.encode(utf8.encode(jsonEncode({'title': task.title, 'date': localDateKey(task.dueDate), 'time': task.dueMinutes, 'category': task.category.name, 'timezone': tz.local.name, 'alarm': task.alarm})))}';
 
   Future<String?> reconcile(
     List<Task> tasks, {
@@ -24,10 +28,20 @@ class ReminderService {
           .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin
           >();
+      final alarmReady = await alarms.sync(tasks);
       if (requestPermission && !await NotificationHub.requestPermission()) {
         await NotificationHub.cancelNamespace('task:');
         return 'Đã lưu công việc. Quyền thông báo chưa được cấp; bạn có thể bật trong cài đặt Android.';
       }
+      final alarmFallback =
+          tasks.any(
+            (t) =>
+                t.alarm &&
+                t.reminder &&
+                !t.completed &&
+                t.dueAt?.isAfter(DateTime.now()) == true,
+          ) &&
+          !alarmReady;
       final now = tz.TZDateTime.now(tz.local);
       final enabled = await android?.areNotificationsEnabled() ?? true;
       final dates = <int, tz.TZDateTime>{};
@@ -36,7 +50,10 @@ class ReminderService {
           if (task.id != null) task.id!: task,
       };
       for (final task in tasks) {
-        if (!task.reminder || task.completed || task.dueMinutes == null) {
+        if (!task.reminder ||
+            task.completed ||
+            task.dueMinutes == null ||
+            (task.alarm && alarmReady)) {
           continue;
         }
         final date = tz.TZDateTime(
@@ -82,6 +99,7 @@ class ReminderService {
         if (task == null ||
             task.completed ||
             !task.reminder ||
+            (task.alarm && alarmReady) ||
             notification.payload != _signature(task)) {
           if (notification.id != null) {
             await NotificationHub.plugin.cancel(id: notification.id!);
@@ -113,7 +131,9 @@ class ReminderService {
           payload: _signature(task),
         );
       }
-      return null;
+      return alarmFallback
+          ? 'Công việc đã lưu. Chưa có quyền báo thức chính xác; đang dùng thông báo thường. Mở Tiện ích → Báo thức để cấp quyền.'
+          : null;
     } catch (_) {
       return 'Dữ liệu đã lưu, nhưng chưa thể cập nhật nhắc việc. Hãy mở lại ứng dụng và kiểm tra quyền thông báo.';
     }

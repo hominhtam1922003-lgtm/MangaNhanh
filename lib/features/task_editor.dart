@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../app/app_controller.dart';
 import '../models/task.dart';
 import '../widgets/task_list.dart';
+import '../widgets/page_frame.dart';
+import '../widgets/vietnamese_input.dart';
+import 'alarms/alarm_settings_screen.dart';
 
 class TaskEditor extends StatefulWidget {
   const TaskEditor({
@@ -32,6 +35,7 @@ class _TaskEditorState extends State<TaskEditor> {
   late TaskPriority _priority;
   late bool _completed;
   late bool _reminder;
+  late bool _alarm;
   bool _saving = false;
 
   @override
@@ -46,6 +50,7 @@ class _TaskEditorState extends State<TaskEditor> {
     _priority = task?.priority ?? TaskPriority.medium;
     _completed = task?.completed ?? false;
     _reminder = task?.reminder ?? false;
+    _alarm = task?.alarm ?? true;
   }
 
   @override
@@ -102,6 +107,11 @@ class _TaskEditorState extends State<TaskEditor> {
         category: _category,
         priority: _priority,
         completed: _completed,
+        alarm:
+            widget.onDraftSaved == null &&
+            _alarm &&
+            _reminder &&
+            _minutes != null,
         reminder: widget.onDraftSaved == null && _reminder && _minutes != null,
       );
       if (widget.onDraftSaved != null) {
@@ -166,153 +176,191 @@ class _TaskEditorState extends State<TaskEditor> {
             ),
         ],
       ),
-      body: SafeArea(
-        child: AbsorbPointer(
-          absorbing: _saving,
-          child: Form(
-            key: _form,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextFormField(
-                    controller: _title,
-                    focusNode: _titleFocus,
-                    maxLength: 100,
-                    validator: validateTitle,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                      labelText: 'Tiêu đề *',
-                      hintText: 'Bạn cần làm gì?',
+      body: PageFrame(
+        maxWidth: 720,
+        child: SafeArea(
+          child: AbsorbPointer(
+            absorbing: _saving,
+            child: Form(
+              key: _form,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    VietnameseInput(
+                      controller: _title,
+                      focusNode: _titleFocus,
+                      maxLength: 100,
+                      validator: validateTitle,
+                      label: 'Tiêu đề *',
+                      hint: 'Bạn cần làm gì?',
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _notes,
-                    minLines: 3,
-                    maxLines: 6,
-                    decoration: const InputDecoration(
-                      labelText: 'Ghi chú (không bắt buộc)',
+                    const SizedBox(height: 12),
+                    VietnameseInput(
+                      controller: _notes,
+                      minLines: 3,
+                      maxLines: 6,
+                      label: 'Ghi chú (không bắt buộc)',
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.calendar_today_outlined),
-                    title: const Text('Ngày đến hạn *'),
-                    subtitle: Text(displayDate(_date)),
-                    trailing: const Icon(Icons.edit_outlined),
-                    onTap: _pickDate,
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.schedule),
-                    title: const Text('Giờ đến hạn'),
-                    subtitle: Text(
-                      _minutes == null
-                          ? 'Không có giờ • cả ngày'
-                          : displayTime(_minutes!),
+                    const SizedBox(height: 16),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.calendar_today_outlined),
+                      title: const Text('Ngày đến hạn *'),
+                      subtitle: Text(displayDate(_date)),
+                      trailing: const Icon(Icons.edit_outlined),
+                      onTap: _pickDate,
                     ),
-                    onTap: _pickTime,
-                    trailing: _minutes == null
-                        ? const Icon(Icons.add)
-                        : IconButton(
-                            tooltip: 'Bỏ giờ đến hạn',
-                            icon: const Icon(Icons.close),
-                            onPressed: () => setState(() {
-                              _minutes = null;
-                              _reminder = false;
-                            }),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.schedule),
+                      title: const Text('Giờ đến hạn'),
+                      subtitle: Text(
+                        _minutes == null
+                            ? 'Không có giờ • cả ngày'
+                            : displayTime(_minutes!),
+                      ),
+                      onTap: _pickTime,
+                      trailing: _minutes == null
+                          ? const Icon(Icons.add)
+                          : IconButton(
+                              tooltip: 'Bỏ giờ đến hạn',
+                              icon: const Icon(Icons.close),
+                              onPressed: () => setState(() {
+                                _minutes = null;
+                                _reminder = false;
+                              }),
+                            ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<TaskCategory>(
+                      initialValue: _category,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Danh mục'),
+                      items: TaskCategory.values
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value.label),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) => setState(() => _category = value!),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<TaskPriority>(
+                      initialValue: _priority,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Mức ưu tiên',
+                      ),
+                      items: TaskPriority.values
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value.label),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) => setState(() => _priority = value!),
+                    ),
+                    const SizedBox(height: 12),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Đã hoàn thành'),
+                      value: _completed,
+                      onChanged: (value) => setState(() => _completed = value),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Bật nhắc việc'),
+                      subtitle: Text(
+                        widget.onDraftSaved != null
+                            ? 'Lưu kế hoạch trước, rồi bật nhắc trong Công việc.'
+                            : _minutes == null
+                            ? 'Chọn giờ đến hạn để bật nhắc việc.'
+                            : 'Chọn đổ chuông hoặc thông báo bên dưới.',
+                      ),
+                      value: _reminder && _minutes != null,
+                      onChanged: _minutes == null || widget.onDraftSaved != null
+                          ? null
+                          : (value) => setState(() => _reminder = value),
+                    ),
+                    if (_reminder && _minutes != null) ...[
+                      SegmentedButton<bool>(
+                        segments: const [
+                          ButtonSegment(
+                            value: true,
+                            icon: Icon(Icons.alarm),
+                            label: Text('Báo thức'),
                           ),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<TaskCategory>(
-                    initialValue: _category,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Danh mục'),
-                    items: TaskCategory.values
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(value.label),
+                          ButtonSegment(
+                            value: false,
+                            icon: Icon(Icons.notifications_outlined),
+                            label: Text('Thông báo'),
                           ),
-                        )
-                        .toList(),
-                    onChanged: (value) => setState(() => _category = value!),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<TaskPriority>(
-                    initialValue: _priority,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Mức ưu tiên'),
-                    items: TaskPriority.values
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(value.label),
+                        ],
+                        selected: {_alarm},
+                        onSelectionChanged: (v) =>
+                            setState(() => _alarm = v.first),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _alarm
+                            ? 'Phát chuông, rung và hoãn 5/10 phút. Cần quyền báo thức chính xác; không tự tăng âm lượng.'
+                            : 'Thông báo một lần; Android có thể gửi trễ để tiết kiệm pin.',
+                      ),
+                      if (_alarm)
+                        TextButton.icon(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => const AlarmSettingsScreen(),
+                            ),
                           ),
-                        )
-                        .toList(),
-                    onChanged: (value) => setState(() => _priority = value!),
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Đã hoàn thành'),
-                    value: _completed,
-                    onChanged: (value) => setState(() => _completed = value),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Nhắc bằng thông báo'),
-                    subtitle: Text(
-                      widget.onDraftSaved != null
-                          ? 'Lưu kế hoạch trước, rồi bật nhắc trong Công việc.'
-                          : _minutes == null
-                          ? 'Chọn giờ đến hạn để bật nhắc việc.'
-                          : 'Nhắc tại giờ đến hạn. Android có thể gửi trễ để tiết kiệm pin.',
-                    ),
-                    value: _reminder && _minutes != null,
-                    onChanged: _minutes == null || widget.onDraftSaved != null
-                        ? null
-                        : (value) => setState(() => _reminder = value),
-                  ),
-                  if (_reminder &&
-                      _minutes != null &&
-                      !DateTime(
-                        _date.year,
-                        _date.month,
-                        _date.day,
-                        _minutes! ~/ 60,
-                        _minutes! % 60,
-                      ).isAfter(DateTime.now()))
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        'Thời điểm này đã qua. Công việc vẫn được lưu nhưng không có thông báo mới.',
+                          icon: const Icon(Icons.admin_panel_settings_outlined),
+                          label: const Text(
+                            'Kiểm tra quyền và âm lượng báo thức',
+                          ),
+                        ),
+                    ],
+                    if (_reminder &&
+                        _minutes != null &&
+                        !DateTime(
+                          _date.year,
+                          _date.month,
+                          _date.day,
+                          _minutes! ~/ 60,
+                          _minutes! % 60,
+                        ).isAfter(DateTime.now()))
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          'Thời điểm này đã qua. Công việc vẫn được lưu nhưng không có thông báo mới.',
+                        ),
+                      ),
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      onPressed: _saving ? null : _save,
+                      icon: _saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check),
+                      label: Text(
+                        _saving
+                            ? 'Đang lưu…'
+                            : widget.onDraftSaved == null
+                            ? 'Lưu công việc'
+                            : 'Lưu bản nháp',
                       ),
                     ),
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: _saving ? null : _save,
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.check),
-                    label: Text(
-                      _saving
-                          ? 'Đang lưu…'
-                          : widget.onDraftSaved == null
-                          ? 'Lưu công việc'
-                          : 'Lưu bản nháp',
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
           ),

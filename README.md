@@ -1,6 +1,6 @@
-# Lịch Nhắc 1.1
+# Lịch Nhắc 1.2
 
-**[Tải thẳng LichNhac-1.1.0.apk — không cần giải nén](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/lich-nhac-v1.1.0-test-56783aa/LichNhac-1.1.0.apk)**
+**Bản APK cũ 1.1 (không chứa sửa lỗi 1.2 bên dưới):** [Tải thẳng LichNhac-1.1.0.apk — không cần giải nén](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/lich-nhac-v1.1.0-test-56783aa/LichNhac-1.1.0.apk)
 
 [Trang Release thử nghiệm](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/tag/lich-nhac-v1.1.0-test-56783aa) · [Lần build đã kiểm chứng](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38373854418).
 
@@ -8,10 +8,39 @@ File APK 62,2 MB được lấy nguyên vẹn từ build đã kiểm chứng. Re
 
 Ứng dụng Android Flutter bằng tiếng Việt: công việc, lịch tháng/âm lịch, ngày lễ Việt Nam, thời tiết theo tọa độ và trợ lý lập kế hoạch Gemini.
 
-- Tên: **Lịch Nhắc** · ID: **`vn.lichnhac.app`** · phiên bản **1.1.0+2**.
+- Tên: **Lịch Nhắc** · ID: **`vn.lichnhac.app`** · phiên bản **1.2.0+3**.
 - **Android 7.0 / API 24 trở lên**, theo lựa chọn nâng cấp của người dùng. Bản này không còn hỗ trợ API 23, để dùng Flutter stable và thư viện hiện đại.
 - Công việc, cài đặt và lịch lễ lưu trên máy. **Thời tiết và Gemini cần internet**.
 - Không có backend riêng hoặc đăng nhập ứng dụng. Thời tiết không cần API key. Gemini tùy chọn, dùng key của riêng người dùng và quota của Google.
+
+## Thay đổi 1.2
+
+- UI Material 3 đồng bộ sáng/tối, nền dịu, thẻ gradient, form giới hạn chiều rộng; điều hướng rail khi ngang/rộng, thanh dưới trên điện thoại.
+- Lịch 42 ô **chiều cao cố định**, âm lịch trong từng ô (UTC+7, 1900–2100), dấu công việc/ngày lễ; lịch và agenda đặt cạnh nhau trên màn rộng.
+- Ô nhập tiếng Việt giữ controller/caret/composing ổn định; không lọc giữa lúc ghép dấu, giới hạn ký tự sau khi kết thúc composing. Tìm không dấu chỉ chuẩn hóa bản sao so sánh, không sửa text gốc. Lỗi bàn phím/UniKey ở host emulator cần kiểm tra riêng trên Gboard tiếng Việt ở máy thật.
+- Lưu Gemini key **đọc lại để xác nhận**, thông báo ngay và trạng thái thường trực. Ô key trống sau khi lưu là bảo mật, không phải mất key. Lưu offline khác với xác thực Google: bấm **Kiểm tra key và tải mô hình** để kiểm tra quota/quyền/mạng.
+- Thời tiết thêm mưa mm, gió giật/hướng gió, mây/áp suất, UV, mọc/lặn mặt trời, đồ thị nhiệt độ 24 giờ, thẻ giờ và ngày mở rộng. Cache cũ vẫn đọc được; trường chưa có hiển thị —, không tự điền dữ liệu giả. Không thể cam kết tăng độ chính xác vật lý của nguồn dự báo.
+- SQLite **schema 3** thêm `alarm`, giữ dữ liệu cũ và chế độ thông báo cũ.
+
+### Báo thức đổ chuông
+
+Thêm/sửa công việc → chọn giờ → **Bật nhắc việc** → **Báo thức**. Mở **Tiện ích → Báo thức & quyền Android**:
+
+1. Android 12+: cấp **Báo thức chính xác** (`SCHEDULE_EXACT_ALARM`); quay lại ứng dụng để đồng bộ. Không cấp sẽ dùng thông báo thường và báo rõ.
+2. Android 13+: cấp thông báo để có điều khiển Dừng/Hoãn; Android 14+: quyền toàn màn hình là tùy chọn riêng.
+3. Kiểm tra **âm lượng báo thức** (app không tự tăng âm lượng). Chuông mặc định Android hoặc âm beep gốc kèm app phát lặp, có rung, **Dừng / Hoãn 5 hoặc 10 phút**, tự dừng sau 5 phút.
+4. Dừng chuông không tự hoàn thành việc. Sửa thời điểm/xóa/hoàn thành/tắt nhắc hủy lịch và chuông; app giữ trạng thái hoãn khi mở lại. Khôi phục lịch tương lai sau boot/cập nhật/đổi múi giờ; giờ địa phương giữ nguyên, hoãn tính theo phút thực.
+
+Android yêu cầu thông báo foreground cho dịch vụ phát chuông; đây **không chỉ là âm thông báo một lần**. Khi thiếu quyền toàn màn hình, có thể phải chạm thông báo để mở nút điều khiển. Nếu Android chặn dịch vụ, cố gắng gửi thông báo thường. Máy tắt, force-stop, thu hồi quyền, âm lượng 0, chế độ Không làm phiền hoặc OEM chặn nền có thể làm chuông không hoạt động. Không dùng thay báo thức khẩn cấp.
+
+**Chữ ký bản thử:** keystore debug của runner cũ không được giữ. APK mới có thể không cài đè được APK 1.1 do khác chữ ký. Không gỡ app nếu chưa chấp nhận mất công việc/cài đặt/key; chưa có tính năng sao lưu tự động. Migration giữ dữ liệu khi cập nhật được với cùng chữ ký, không giữ dữ liệu sau uninstall.
+
+### Kiểm tra trên máy thật trước khi tin cậy
+
+- Dán key → Lưu → thấy xác nhận; thoát/mở lại → key vẫn đã lưu; thử kiểm tra mô hình (cần key Google hợp lệ). Không chia sẻ key trong chat/log.
+- Gõ “Đặt lịch ôn tiếng Việt” bằng Gboard tiếng Việt, sửa giữa câu, xoay ngang, kiểm tra dấu/caret.
+- Đặt việc 2 phút tới, bật Báo thức/quyền, khóa màn hình và đợi; thử Dừng, Hoãn, hai việc cùng giờ, sửa/xóa/hoàn thành, reboot trước giờ và từ chối quyền.
+- Dự báo so với nguồn khí tượng địa phương, kiểm tra GPS, cache cũ/mất mạng. HTTP 200 chỉ chứng minh API nhận tham số, không chứng minh thời tiết đúng ngoài thực tế.
 
 ## Chức năng
 
@@ -30,7 +59,7 @@ Mở tab **Thời tiết** → **Dùng GPS**, hoặc **Chọn địa điểm** /
 
 - GPS chỉ được xin quyền khi bấm nút; hiển thị tọa độ và độ chính xác ước tính. Nếu GPS tắt hoặc từ chối quyền, vẫn chọn thủ công được.
 - Mỹ Tho là địa điểm chọn sẵn có nhãn rõ, **không được giả là vị trí GPS hiện tại**.
-- Dữ liệu thật từ **Open-Meteo**: nhiệt độ, cảm giác, độ ẩm, gió, dự báo 12 giờ và 7 ngày.
+- Dữ liệu thật từ **Open-Meteo**: nhiệt độ, cảm giác, độ ẩm, gió, biểu đồ/dự báo 24 giờ và 7 ngày.
 - Hiển thị nguồn, múi giờ, thời điểm số liệu và thời điểm tải; cache cũ được đánh dấu, không sinh dự báo mẫu khi không kết nối được.
 - Lưu cache trong SQLite. Khi mở lại app, tải lại cache; tự cập nhật khi đã có cấu hình và cache quá một giờ. Có cập nhật thủ công/kéo làm mới.
 

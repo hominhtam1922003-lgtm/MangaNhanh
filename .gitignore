@@ -30,3 +30,6 @@ android/key.properties
 *.aab
 __pycache__/
 *.pyc
+
+# Công cụ định dạng tạm, không đưa dependency JS vào app Flutter
+.cache/

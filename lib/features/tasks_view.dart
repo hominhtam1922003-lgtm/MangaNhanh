@@ -5,6 +5,7 @@ import '../app/app_controller.dart';
 import '../models/task.dart';
 import '../models/task_query.dart';
 import '../widgets/task_list.dart';
+import '../widgets/vietnamese_input.dart';
 
 class TasksView extends StatefulWidget {
   const TasksView({
@@ -23,9 +24,13 @@ class TasksView extends StatefulWidget {
 
 class _TasksViewState extends State<TasksView> {
   Timer? _debounce;
+  final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
   @override
   void dispose() {
     _debounce?.cancel();
+    _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -52,12 +57,12 @@ class _TasksViewState extends State<TasksView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: 'Tìm theo tiêu đề',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                  onChanged: (value) {
+                VietnameseInput(
+                  controller: _searchController,
+                  focusNode: _searchFocus,
+                  label: 'Tìm theo tiêu đề',
+                  prefix: const Icon(Icons.search),
+                  onCommitted: (value) {
                     _debounce?.cancel();
                     _debounce = Timer(const Duration(milliseconds: 180), () {
                       if (mounted) {
@@ -81,42 +86,55 @@ class _TasksViewState extends State<TasksView> {
                       .toList(),
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _category?.name ?? 'all',
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Danh mục'),
-                  items: [
-                    const DropdownMenuItem(
-                      value: 'all',
-                      child: Text('Tất cả danh mục'),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    SizedBox(
+                      width: 300,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _category?.name ?? 'all',
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Danh mục',
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'all',
+                            child: Text('Tất cả danh mục'),
+                          ),
+                          ...TaskCategory.values.map(
+                            (value) => DropdownMenuItem(
+                              value: value.name,
+                              child: Text(value.label),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) => setState(
+                          () => _category = value == 'all'
+                              ? null
+                              : TaskCategory.values.byName(value!),
+                        ),
+                      ),
                     ),
-                    ...TaskCategory.values.map(
-                      (value) => DropdownMenuItem(
-                        value: value.name,
-                        child: Text(value.label),
+                    SizedBox(
+                      width: 300,
+                      child: DropdownButtonFormField<TaskSort>(
+                        initialValue: _sort,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'Sắp xếp'),
+                        items: TaskSort.values
+                            .map(
+                              (value) => DropdownMenuItem(
+                                value: value,
+                                child: Text(value.label),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) => setState(() => _sort = value!),
                       ),
                     ),
                   ],
-                  onChanged: (value) => setState(
-                    () => _category = value == 'all'
-                        ? null
-                        : TaskCategory.values.byName(value!),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<TaskSort>(
-                  initialValue: _sort,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Sắp xếp'),
-                  items: TaskSort.values
-                      .map(
-                        (value) => DropdownMenuItem(
-                          value: value,
-                          child: Text(value.label),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) => setState(() => _sort = value!),
                 ),
                 const SizedBox(height: 16),
                 Text(

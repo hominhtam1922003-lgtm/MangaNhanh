@@ -59,6 +59,38 @@ void main() {
     WeatherPlace.myTho,
     now,
   );
+  test('Chi tiết mới đọc dữ liệu thật, cache cũ trả null', () {
+    final raw = fixture(now);
+    (raw['current'] as Map).addAll({
+      'wind_gusts_10m': 31,
+      'wind_direction_10m': 170,
+      'precipitation': .4,
+      'cloud_cover': 60,
+      'surface_pressure': 1005,
+      'is_day': 0,
+    });
+    (raw['daily'] as Map).addAll({
+      'precipitation_sum': [3.2],
+      'wind_speed_10m_max': [25],
+      'wind_gusts_10m_max': [42],
+      'uv_index_max': [8.3],
+      'sunrise': [now.millisecondsSinceEpoch ~/ 1000],
+      'sunset': [now.millisecondsSinceEpoch ~/ 1000 + 43200],
+    });
+    final value = WeatherData.fromApi(raw, WeatherPlace.myTho, now);
+    expect(value.gust, 31);
+    expect(value.direction, 170);
+    expect(value.pressure, 1005);
+    expect(value.isDay, isFalse);
+    expect(value.days.single.precipitation, 3.2);
+    expect(value.days.single.uv, 8.3);
+    expect(value.days.single.sunrise, now);
+    final restored = WeatherData.decode(value.encode());
+    expect(restored.days.single.gust, 42);
+    expect(data().gust, isNull);
+    expect(data().days.single.sunrise, isNull);
+  });
+
   test('Dự báo mưa, nóng, gió xét trong 3 giờ tới', () {
     expect(
       evaluateWeather(

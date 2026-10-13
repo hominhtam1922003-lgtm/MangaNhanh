@@ -132,8 +132,16 @@ class WeatherDay {
     required this.max,
     required this.rain,
     required this.code,
+    this.precipitation,
+    this.wind,
+    this.gust,
+    this.uv,
+    this.sunrise,
+    this.sunset,
   });
   final DateTime at;
+  final DateTime? sunrise, sunset;
+  final double? precipitation, wind, gust, uv;
   final double? min, max, rain;
   final int? code;
 }
@@ -150,6 +158,12 @@ class WeatherData {
   double? get feelsLike => number(current['apparent_temperature']);
   double? get humidity => number(current['relative_humidity_2m']);
   double? get wind => number(current['wind_speed_10m']);
+  double? get precipitation => number(current['precipitation']);
+  double? get gust => number(current['wind_gusts_10m']);
+  double? get direction => number(current['wind_direction_10m']);
+  double? get cloud => number(current['cloud_cover']);
+  double? get pressure => number(current['surface_pressure']);
+  bool? get isDay => current['is_day'] == null ? null : current['is_day'] == 1;
   int? get code => (current['weather_code'] as num?)?.toInt();
   DateTime get observedAt => epoch(current['time']);
   bool stale(DateTime now) =>
@@ -229,6 +243,12 @@ class WeatherData {
         max: at('temperature_2m_max', i),
         rain: at('precipitation_probability_max', i),
         code: at('weather_code', i)?.toInt(),
+        precipitation: at('precipitation_sum', i),
+        wind: at('wind_speed_10m_max', i),
+        gust: at('wind_gusts_10m_max', i),
+        uv: at('uv_index_max', i),
+        sunrise: at('sunrise', i) == null ? null : epoch(at('sunrise', i)),
+        sunset: at('sunset', i) == null ? null : epoch(at('sunset', i)),
       ),
     );
   }

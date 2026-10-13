@@ -117,6 +117,27 @@ void main() {
     }
   });
 
+  testWidgets(
+    'Ngang rộng dùng rail, lịch có âm từng ô và không kéo giãn vuông',
+    (tester) async {
+      tester.view.physicalSize = const Size(1440, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(host(HomeScreen(controller: controller)));
+      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+      await tester.tap(find.text('Lịch').last);
+      await tester.pumpAndSettle();
+      final grid = tester.widget<GridView>(find.byType(GridView));
+      final delegate =
+          grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+      expect(delegate.mainAxisExtent, lessThan(100));
+      expect(find.text('Số nhỏ: âm lịch'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('Form thêm kiểm tra tiêu đề và không bật nhắc khi chưa có giờ', (
     tester,
   ) async {
@@ -127,7 +148,7 @@ void main() {
     );
     expect(find.text('13/10/2026'), findsOneWidget);
     final reminder = tester.widget<SwitchListTile>(
-      find.widgetWithText(SwitchListTile, 'Nhắc bằng thông báo'),
+      find.widgetWithText(SwitchListTile, 'Bật nhắc việc'),
     );
     expect(reminder.onChanged, isNull);
     await tester.ensureVisible(find.text('Lưu công việc'));

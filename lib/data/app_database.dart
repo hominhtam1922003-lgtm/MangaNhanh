@@ -5,7 +5,7 @@ class AppDatabase {
   AppDatabase({DatabaseFactory? factory, this.path})
     : _factory = factory ?? databaseFactory;
 
-  static const schemaVersion = 2;
+  static const schemaVersion = 3;
   final DatabaseFactory _factory;
   final String? path;
   Database? _database;
@@ -49,6 +49,10 @@ class AppDatabase {
           await db.execute('''
             CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)
           ''');
+        case 3:
+          await db.execute(
+            'ALTER TABLE tasks ADD COLUMN alarm INTEGER NOT NULL DEFAULT 0 CHECK(alarm IN (0, 1))',
+          );
         default:
           // Từ chối schema chưa định nghĩa, rollback thay vì làm mất dữ liệu.
           throw StateError('Không có migration cho schema phiên bản $version.');

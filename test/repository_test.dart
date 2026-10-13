@@ -58,14 +58,18 @@ void main() {
         dueDate: DateTime(2026, 10, 13),
         dueMinutes: 900,
         reminder: true,
-      ).toMap(),
+      ).toMap()..remove('alarm'),
     );
     await oldDb.close();
     final restored = (await repository.load()).single;
     expect(restored.title, 'Dữ liệu v1');
     expect(restored.dueMinutes, 900);
     expect(restored.reminder, isTrue);
-    expect(await (await database.open()).getVersion(), 2);
+    expect(restored.alarm, isFalse);
+    expect(
+      await (await database.open()).getVersion(),
+      AppDatabase.schemaVersion,
+    );
     expect(await repository.loadTheme(), 'system');
     await repository.saveTheme('dark');
     expect(await repository.loadTheme(), 'dark');
@@ -145,6 +149,27 @@ void main() {
     expect(task.dueMinutes, 1200);
     expect(task.reminder, isTrue);
     expect(await repository.loadTheme(), 'dark');
+  });
+
+  test('Chế độ báo thức giữ khi hoàn thành và qua mở lại SQLite', () async {
+    await repository.save(
+      Task(
+        title: 'Chuông',
+        dueDate: DateTime(2026),
+        dueMinutes: 400,
+        reminder: true,
+        alarm: true,
+      ),
+    );
+    await database.close();
+    var task = (await repository.load()).single;
+    expect(task.alarm, isTrue);
+    await repository.save(task.withCompleted(true));
+    expect((await repository.load()).single.alarm, isTrue);
+    await repository.save(
+      Task(id: task.id, title: task.title, dueDate: task.dueDate, alarm: true),
+    );
+    expect((await repository.load()).single.alarm, isFalse);
   });
 
   test('Từ chối tiêu đề không hợp lệ, giữ dữ liệu cũ', () async {

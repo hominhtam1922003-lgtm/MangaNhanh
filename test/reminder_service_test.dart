@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lich_nhac/data/reminder_service.dart';
+import 'package:lich_nhac/data/alarm_bridge.dart';
 import 'package:lich_nhac/models/task.dart';
 
 void main() {
@@ -26,6 +27,7 @@ void main() {
     enabled = true;
     zone = 'Asia/Ho_Chi_Minh';
     service = ReminderService();
+    messenger.setMockMethodCallHandler(AlarmBridge.channel, (_) async => true);
     pending = [
       {'id': 1, 'title': 'Nhắc việc', 'body': '', 'payload': 'task:1'},
       {'id': 1500000001, 'title': 'Lễ', 'body': '', 'payload': 'holiday:1'},
@@ -66,6 +68,7 @@ void main() {
   tearDown(() {
     messenger.setMockMethodCallHandler(channel, null);
     messenger.setMockMethodCallHandler(timezone, null);
+    messenger.setMockMethodCallHandler(AlarmBridge.channel, null);
     debugDefaultTargetPlatformOverride = null;
   });
 
@@ -73,6 +76,7 @@ void main() {
     bool reminder = true,
     bool completed = false,
     int? minutes = 540,
+    bool alarm = false,
   }) => Task(
     id: 1,
     title: 'Nhắc việc',
@@ -80,6 +84,7 @@ void main() {
     dueMinutes: minutes,
     reminder: reminder,
     completed: completed,
+    alarm: alarm,
   );
 
   test('Lên lịch giờ địa phương bằng inexactAllowWhileIdle', () async {
@@ -192,6 +197,60 @@ void main() {
     final args =
         calls.singleWhere((c) => c.method == 'zonedSchedule').arguments as Map;
     expect(args['timeZoneName'], 'GMT+07:00');
+  });
+
+  test('Báo thức dùng native, không tạo thêm thông báo trùng', () async {
+    MethodCall? native;
+    messenger.setMockMethodCallHandler(AlarmBridge.channel, (c) async {
+      native = c;
+      return true;
+    });
+    expect(await service.reconcile([futureTask(alarm: true)]), isNull);
+    expect(native!.method, 'sync');
+    expect((native!.arguments as Map)['tasks'], hasLength(1));
+    expect(calls.where((c) => c.method == 'zonedSchedule'), isEmpty);
+  });
+  test('Thiếu quyền exact chuyển thông báo, nêu rõ không đổ chuông', () async {
+    messenger.setMockMethodCallHandler(AlarmBridge.channel, (_) async => false);
+    expect(
+      await service.reconcile([futureTask(alarm: true)]),
+      contains('thông báo thường'),
+    );
+    expect(calls.where((c) => c.method == 'zonedSchedule'), hasLength(1));
+  });
+  test('Xóa/hoàn thành/tắt báo thức đồng bộ native rỗng', () async {
+    for (final tasks in [
+      <Task>[],
+      [futureTask(alarm: true, completed: true)],
+      [futureTask(alarm: true, reminder: false)],
+    ]) {
+      MethodCall? native;
+      messenger.setMockMethodCallHandler(AlarmBridge.channel, (c) async {
+        native = c;
+        return true;
+      });
+      await service.reconcile(tasks);
+      expect((native!.arguments as Map)['tasks'], isEmpty);
+    }
+  });
+  test('Giữ hạn gốc đã qua để native không mất báo thức đang hoãn', () async {
+    MethodCall? native;
+    messenger.setMockMethodCallHandler(AlarmBridge.channel, (c) async {
+      native = c;
+      return true;
+    });
+    await service.reconcile([
+      Task(
+        id: 9,
+        title: 'Đã hoãn',
+        dueDate: DateTime(2000),
+        dueMinutes: 10,
+        reminder: true,
+        alarm: true,
+      ),
+    ]);
+    expect((native!.arguments as Map)['tasks'], hasLength(1));
+    expect(calls.where((c) => c.method == 'zonedSchedule'), isEmpty);
   });
 
   test('Lỗi plugin trả cảnh báo, không crash', () async {

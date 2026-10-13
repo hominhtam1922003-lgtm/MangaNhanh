@@ -130,7 +130,15 @@ class TaskCard extends StatelessWidget {
                     Text('Quá hạn', style: TextStyle(color: colors.error)),
                   if (task.completed) const Text('Đã xong'),
                   if (task.reminder && !task.completed)
-                    const Icon(Icons.notifications_active_outlined, size: 16),
+                    Tooltip(
+                      message: task.alarm ? 'Báo thức đổ chuông' : 'Thông báo',
+                      child: Icon(
+                        task.alarm
+                            ? Icons.alarm
+                            : Icons.notifications_active_outlined,
+                        size: 16,
+                      ),
+                    ),
                 ],
               ),
             ],

@@ -41,6 +41,7 @@ class Task {
     this.priority = TaskPriority.medium,
     this.completed = false,
     this.reminder = false,
+    this.alarm = false,
   }) : dueDate = dateOnly(dueDate);
 
   final int? id;
@@ -52,6 +53,7 @@ class Task {
   final TaskPriority priority;
   final bool completed;
   final bool reminder;
+  final bool alarm;
 
   DateTime? get dueAt => dueMinutes == null
       ? null
@@ -80,6 +82,7 @@ class Task {
     priority: priority,
     completed: value,
     reminder: reminder,
+    alarm: alarm,
   );
 
   Map<String, Object?> toMap() => {
@@ -92,6 +95,7 @@ class Task {
     'priority': priority.name,
     'completed': completed ? 1 : 0,
     'reminder': reminder && dueMinutes != null ? 1 : 0,
+    'alarm': alarm && reminder && dueMinutes != null ? 1 : 0,
   };
 
   factory Task.fromMap(Map<String, Object?> map) => Task(
@@ -104,6 +108,7 @@ class Task {
     priority: TaskPriority.values.byName(map['priority'] as String),
     completed: map['completed'] == 1,
     reminder: map['reminder'] == 1,
+    alarm: map['alarm'] == 1,
   );
 }
 

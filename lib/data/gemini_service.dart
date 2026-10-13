@@ -13,10 +13,26 @@ class GeminiService {
   Future<bool> hasKey() async =>
       (await storage.read(key: 'gemini.key'))?.isNotEmpty ?? false;
   Future<void> saveKey(String key) async {
-    if (key.trim().length < 20) {
-      throw const UserMessage('API key chưa hợp lệ. Vui lòng kiểm tra lại.');
+    final value = key.trim();
+    if (value.length < 20 || RegExp(r'\s').hasMatch(value)) {
+      throw const UserMessage(
+        'API key quá ngắn hoặc chứa khoảng trắng. Dán lại key đầy đủ.',
+      );
     }
-    await storage.write(key: 'gemini.key', value: key.trim());
+    try {
+      await storage.write(key: 'gemini.key', value: value);
+      if (await storage.read(key: 'gemini.key') != value) {
+        throw const UserMessage(
+          'Chưa xác nhận được key đã lưu. Vui lòng thử lại.',
+        );
+      }
+    } on UserMessage {
+      rethrow;
+    } catch (_) {
+      throw const UserMessage(
+        'Android không lưu được key bảo mật. Kiểm tra khóa màn hình và thử lại. Key chưa được xác nhận lưu.',
+      );
+    }
   }
 
   Future<void> deleteKey() => storage.delete(key: 'gemini.key');

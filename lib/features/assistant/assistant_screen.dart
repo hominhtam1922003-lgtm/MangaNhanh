@@ -521,10 +521,11 @@ class _AISettingsState extends State<_AISettings> {
     } finally {
       if (mounted) {
         setState(() => _busy = false);
-        if (_status != null)
+        if (_status != null) {
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text(_status!)));
+        }
       }
     }
   }

@@ -70,6 +70,8 @@ jobs:
           mv release-apk/app-release.apk release-apk/LichNhac-1.2.0.apk
           cd release-apk
           sha256sum LichNhac-1.2.0.apk > LichNhac-1.2.0.apk.sha256
+      # Nếu token runner không tạo được tag ở commit đã đổi workflow, có thể
+      # tạo draft Release bằng gh, rồi workflow chỉ tải asset vào draft đó.
       - name: Đăng bản thử nghiệm và file APK trực tiếp
         env:
           VERIFIED_SHA: ${{ steps.verify.outputs.sha }}

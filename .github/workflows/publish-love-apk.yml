@@ -9,7 +9,7 @@ on:
       run_id:
         description: ID lần chạy "APK Hai Trái Tim" đã thành công
         required: true
-        default: '38400739817'
+        default: '38404844843'
         type: string
 
 permissions:
@@ -31,7 +31,7 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38400739817' }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38404844843' }}
     steps:
       - name: Kiểm tra nguồn APK đã build thành công
         id: verify

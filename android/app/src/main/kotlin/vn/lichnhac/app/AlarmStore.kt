@@ -56,7 +56,6 @@ object AlarmStore {
             if (record.fired && old?.original == row.original) {
                 next.add(record)
             } else if (record.at > System.currentTimeMillis() && can) {
-                schedule(c, record) // Khôi phục cả sau khi người dùng buộc dừng rồi mở lại.
                 next.add(record)
             } else {
                 cancel(c, row.id)
@@ -64,6 +63,15 @@ object AlarmStore {
         }
         write(c, next)
         prefs(c).edit().putString("zone", java.util.TimeZone.getDefault().id).apply()
+        // Lưu trước khi đặt lịch để receiver luôn đọc được dữ liệu. Nếu có lỗi,
+        // hủy toàn bộ lịch tương lai để Dart fallback không tạo nhắc trùng.
+        try {
+            next.filter { !it.fired }.forEach { schedule(c, it) }
+        } catch (_: Exception) {
+            next.filter { !it.fired }.forEach { cancel(c, it.id) }
+            write(c, next.filter { it.fired })
+            return false
+        }
         return can
     }
     @Synchronized fun fired(c: Context, id: Int): AlarmRecord? {

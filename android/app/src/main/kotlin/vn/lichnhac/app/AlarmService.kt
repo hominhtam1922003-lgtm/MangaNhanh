@@ -76,8 +76,9 @@ class AlarmService : Service() {
         wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
     }
     fun dismiss(id: Int) {
-        if (current?.id != id) { queue.removeIf { it.id == id }; AlarmStore.remove(this, id); return }
-        AlarmStore.remove(this, id); quiet(); current = null; next()
+        if (current?.id != id) { queue.removeIf { it.id == id }; AlarmStore.cancel(this, id); return }
+        // Giữ marker đã phát để mở app/đổi đồng hồ không phát lại cùng hạn.
+        AlarmStore.cancel(this, id); quiet(); current = null; next()
     }
     fun snooze(id: Int, minutes: Int): Boolean {
         val row = current ?: return false

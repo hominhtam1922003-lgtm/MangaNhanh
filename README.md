@@ -269,6 +269,22 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
+**https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.2.0-test-ec8950e/HaiTraiTim-1.2.0.apk**
+
+- `HaiTraiTim-1.2.0.apk` · **55.506.972 byte** · SHA256 `38c4ebd3eb787bae85d2cb11ae974c8e4a61572bf249f26026e02cd5ab56113b` · kèm file `.sha256` trong Assets.
+- Bản 1.2.0: **ghép nối hai chiều** — Bước 1 quét mã của người thương để nhận dữ liệu của họ; Bước 2 đưa **mã phản hồi** (đã gồm cả hai bên) cho người thương quét, nhờ đó máy thứ hai cũng có đủ dữ liệu của bạn. Gộp theo mốc thời gian nên quét lại nhiều lần **không nhân đôi** kỷ niệm/lời nhắc, bản chỉnh sửa mới hơn thắng, tên và ngày kỷ niệm của bạn không bị máy kia ghi đè. Giao diện 3D hơn: quầng sáng, vòng sáng quay, 3 trái tim nhỏ bay quanh, hạt sáng nhấp nháy, chạm giữ thấy nhịp đập, vuốt xoay có quán tính, thẻ gradient, icon và màn hình chờ riêng.
+- Lấy nguyên vẹn từ [lần build thành công 38410199821](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38410199821) (commit `ec8950e`), tải lên Release bằng [workflow đăng APK 38412995663](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38412995663), không build lại và không đổi chữ ký.
+- CI đã chạy: **25 kiểm thử Node** (logic lịch; reducer chế độ trên máy; ghép nối hai chiều + không nhân đôi khi quét lại + xử lý xung đột theo thời gian; PostgreSQL thật bằng PGlite cho RLS, ghép đôi, hạn mã, thu hồi chia sẻ xóa lời nhắc), `tsc` sạch, Prettier sạch, `expo export` Android + iOS, Gradle `assembleRelease` cho `arm64-v8a` và `armeabi-v7a`.
+- **Chưa kiểm chứng:** hai điện thoại thật, quét QR bằng camera thật, quyền thông báo trên máy thật, Face ID thật, FPS thực tế, FCM/APNs. Dự báo chu kỳ chỉ là phép tính lịch, **không dùng để tránh thai**.
+- **Icon:** bộ icon trong `couple-love/assets/` tạo bằng `python3 couple-love/scripts/make-icons.py` (chạy kèm đường dẫn ảnh của bạn để đổi icon sang ảnh đó rồi build lại).
+- APK dùng **chữ ký debug của mẫu Expo** — chỉ để thử, không phát hành cửa hàng; cấu hình 4 secret keystore trong Actions để ký bằng khóa riêng. **Gỡ ứng dụng hoặc xóa dữ liệu ứng dụng sẽ mất dữ liệu trên máy**, hãy xuất tệp dự phòng trước.
+
+## Ứng dụng Hai Trái Tim (thư mục `couple-love/`)
+
+Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm trong thư mục `couple-love`: React Native/Expo SDK 54, NativeWind, trái tim 3D bằng Three.js/R3F, Supabase (đồng bộ realtime, RLS, Storage, Edge Function + cron thông báo kép). Hướng dẫn cấu hình backend, push FCM/APNs, secrets ký APK và kiểm thử ở `couple-love/README.md`.
+
+### Tải APK thử nghiệm (Android 7.0+, API 24)
+
 **https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.1.0-test-49375da/HaiTraiTim-1.1.0.apk**
 
 - `HaiTraiTim-1.1.0.apk` · **55.186.153 byte** · SHA256 `0df84b96399475dcb43d22f3414a9066d30f73d4a55d6b8f338e6b95170494de` · kèm file `.sha256` trong Assets.

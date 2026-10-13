@@ -30,6 +30,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.47.7'
           cache: true
       - name: Thông tin môi trường
         run: flutter --version 2>&1 | tee /tmp/lich-nhac-environment.log
@@ -52,6 +53,9 @@ jobs:
         run: flutter analyze 2>&1 | tee /tmp/lich-nhac-analyze.log
       - name: Kiểm thử
         run: flutter test --reporter expanded 2>&1 | tee /tmp/lich-nhac-test.log
+      - name: Thử kết nối nguồn thời tiết (không chặn build nếu nguồn tạm lỗi)
+        continue-on-error: true
+        run: python3 scripts/check-weather-api.py 2>&1 | tee /tmp/lich-nhac-weather-probe.log
       - name: Build APK release để cài thử
         run: flutter build apk --release 2>&1 | tee /tmp/lich-nhac-build.log
       - name: Tải lên APK
@@ -72,6 +76,7 @@ jobs:
               ['/tmp/lich-nhac-analyze.log', 'Analyze'],
               ['/tmp/lich-nhac-test.log', 'Test'],
               ['/tmp/lich-nhac-build.log', 'Build'],
+              ['/tmp/lich-nhac-weather-probe.log', 'Nguồn thời tiết trực tiếp (điểm Mỹ Tho)'],
             ];
             const text = files.map(([file, title]) =>
               `## ${title}\n\n\`\`\`text\n${fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : 'Chưa chạy'}\n\`\`\``

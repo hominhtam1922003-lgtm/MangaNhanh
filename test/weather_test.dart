@@ -27,6 +27,7 @@ Map<String, dynamic> fixture(
       'wind_gusts_10m': [gust],
       'wind_speed_10m': [20],
       'uv_index': [4],
+      'is_day': [1],
     },
     'daily': {
       'time': [epoch],
@@ -124,6 +125,27 @@ void main() {
       'sun',
     );
   });
+  test('Không báo có nắng ban đêm khi mã WMO là trời quang', () {
+    final raw = fixture(
+      now,
+      probability: 10,
+      rain: 0,
+      temperature: 20,
+      gust: 10,
+      code: 0,
+    );
+    (raw['hourly'] as Map)['is_day'] = [0];
+    final night = WeatherData.fromApi(raw, WeatherPlace.myTho, now);
+    expect(
+      evaluateWeather(
+        night,
+        const WeatherSettings(enabled: true, sun: true),
+        now,
+      ),
+      isEmpty,
+    );
+  });
+
   test('Lưu cache giữ nguyên nguồn, địa điểm, epoch và dữ liệu', () {
     final original = data();
     final restored = WeatherData.decode(original.encode());

@@ -19,9 +19,9 @@ class WeatherApi {
         'latitude': '${place.latitude}',
         'longitude': '${place.longitude}',
         'current':
-            'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m',
+            'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day',
         'hourly':
-            'temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_gusts_10m,uv_index',
+            'temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_gusts_10m,uv_index,is_day',
         'daily':
             'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
         'timezone': 'auto',

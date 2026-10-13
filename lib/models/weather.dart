@@ -117,10 +117,12 @@ class WeatherHour {
     required this.gust,
     required this.code,
     required this.uv,
+    this.isDay,
   });
   final DateTime at;
   final double? temperature, rainProbability, precipitation, wind, gust, uv;
   final int? code;
+  final bool? isDay;
 }
 
 class WeatherDay {
@@ -203,6 +205,7 @@ class WeatherData {
         wind: number(at('wind_speed_10m', i)),
         gust: number(at('wind_gusts_10m', i)),
         uv: number(at('uv_index', i)),
+        isDay: at('is_day', i) == null ? null : at('is_day', i) == 1,
         code: (at('weather_code', i) as num?)?.toInt(),
       ),
     );
@@ -291,7 +294,7 @@ List<WeatherAlert> evaluateWeather(
             (h.uv ?? -1) >= 8)) {
       add(
         'heat',
-        'Dự báo nắng nóng / UV cao',
+        'Dự báo nhiệt cao / UV cao',
         'Nhiệt độ ${h.temperature?.round() ?? '—'}°C, UV ${h.uv ?? '—'}. Uống nước và chống nắng.',
         h,
       );
@@ -305,6 +308,7 @@ List<WeatherAlert> evaluateWeather(
       );
     }
     if (settings.sun &&
+        h.isDay == true &&
         (h.code == 0 || h.code == 1) &&
         (h.rainProbability ?? 100) < 20) {
       add(

@@ -28,3 +28,5 @@ android/key.properties
 *.iml
 .idea/
 *.aab
+__pycache__/
+*.pyc

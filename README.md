@@ -39,7 +39,7 @@ Bật **Kiểm tra thời tiết định kỳ** trong tab Thời tiết, cấp q
   - Mưa: mặc định xác suất ≥ 60% và lượng mưa dự báo ≥ 0,2 mm.
   - Nắng nóng: mặc định ≥ 35°C hoặc UV ≥ 8.
   - Gió mạnh: mặc định gió giật ≥ 40 km/h.
-  - Trời quang: tùy chọn riêng, mặc định tắt để giảm phiền.
+  - Trời quang: tùy chọn riêng, mặc định tắt để giảm phiền; chỉ báo có nắng khi nguồn xác định là ban ngày.
 - Có lựa chọn ngưỡng trong giao diện; mỗi loại tối đa một thông báo trong **4 giờ** để tránh spam.
 - Không gửi cảnh báo từ cache tải quá một giờ hoặc số liệu hiện tại cũ hơn 90 phút.
 - Tắt cảnh báo/xóa dữ liệu sẽ hủy tác vụ nền và thông báo liên quan.
@@ -85,7 +85,7 @@ SQLite `lich_nhac.db`, schema **v2**: v1 tạo bảng công việc; v2 thêm cà
 
 ## Chạy trên máy tính
 
-Cài Flutter **stable**, Android Studio/SDK và Java **17**. Mã đã được CI resolve với Flutter **3.47.7 / Dart 3.13.5**; yêu cầu tối thiểu của pubspec là Flutter 3.38.1 / Dart 3.10. Thư viện thực tế được cố định trong `pubspec.lock`.
+Cài Flutter **stable**, Android Studio/SDK và Java **17**. Workflow cố định bản stable **3.47.7 / Dart 3.13.5** đã được kiểm chứng để tránh nâng SDK ngoài ý muốn; yêu cầu tối thiểu của pubspec là Flutter 3.38.1 / Dart 3.10. Thư viện thực tế được cố định trong `pubspec.lock`.
 
 ```bash
 flutter doctor
@@ -121,7 +121,7 @@ Workflow **`.github/workflows/build-apk.yml`** chạy trên Ubuntu latest, Java 
 
 Chạy khi push `main`, pull request vào `main`, chạy thủ công; có thêm trigger push nhánh làm việc Arena để kiểm chứng trước merge. Các lệnh ghi log qua `tee` dùng `shell: bash` có `pipefail`: test/analyze thất bại sẽ **không** tiếp tục build.
 
-Có artifact nhỏ `lich-nhac-source-checkpoint` chứa mã định dạng và lockfile, và GitHub Checks báo chẩn đoán (không dùng Gemini key). Không yêu cầu secret hay keystore riêng để build APK.
+Có smoke test HTTP nguồn thời tiết thật tại tâm Mỹ Tho (không chặn build nếu nhà cung cấp tạm lỗi, không phải test GPS thiết bị). Có artifact nhỏ `lich-nhac-source-checkpoint` chứa mã định dạng và lockfile, và GitHub Checks báo chẩn đoán (không dùng Gemini key). Không yêu cầu secret hay keystore riêng để build APK.
 
 ### Tải và cài
 

@@ -3,7 +3,7 @@ import '../app/app_controller.dart';
 import '../widgets/depth_card.dart';
 import '../widgets/page_frame.dart';
 import 'holidays/holidays_screen.dart';
-import 'planner/planner_screen.dart';
+import 'assistant/assistant_screen.dart';
 import 'settings_view.dart';
 import 'alarms/alarm_settings_screen.dart';
 
@@ -62,15 +62,15 @@ class UtilityView extends StatelessWidget {
       Card(
         child: ListTile(
           leading: const Icon(Icons.auto_awesome),
-          title: const Text('Trợ lý Gemini'),
+          title: const Text('Trợ lý AI · GroqCloud'),
           subtitle: const Text(
-            'Tạo bản nháp kế hoạch, bạn xác nhận trước khi lưu',
+            'Hỏi đáp và trò chuyện nhiều lượt, tham khảo lịch khi bạn cho phép',
           ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute<void>(
-              builder: (_) => PlannerScreen(controller: controller),
+              builder: (_) => AssistantScreen(controller: controller),
             ),
           ),
         ),
@@ -97,7 +97,7 @@ class UtilityView extends StatelessWidget {
       ),
       const SizedBox(height: 20),
       const Text(
-        'Công việc và lịch lễ hoạt động khi mất mạng. Thời tiết và Gemini cần internet. '
+        'Công việc và lịch lễ hoạt động khi mất mạng. Thời tiết và trợ lý AI cần internet. '
         'Dữ liệu thời tiết luôn ghi nguồn và thời điểm; AI không tự lưu hoặc sửa lịch của bạn.',
       ),
     ],

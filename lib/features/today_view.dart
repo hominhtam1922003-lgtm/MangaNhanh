@@ -79,7 +79,7 @@ class TodayView extends StatelessWidget {
               ),
               ActionChip(
                 avatar: const Icon(Icons.auto_awesome, size: 18),
-                label: const Text('Gemini'),
+                label: const Text('Trợ lý AI'),
                 onPressed: onPlanner,
               ),
             ],

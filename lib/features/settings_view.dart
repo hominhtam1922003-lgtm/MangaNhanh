@@ -34,7 +34,7 @@ class _SettingsViewState extends State<SettingsView> {
       context,
       title: 'Xóa toàn bộ dữ liệu?',
       message:
-          'Tất cả công việc, cache thời tiết, vị trí, cài đặt và Gemini API key trên thiết bị sẽ bị xóa. '
+          'Tất cả công việc, cache thời tiết, vị trí, cài đặt và GroqCloud API key trên thiết bị sẽ bị xóa. '
           'Các thông báo nhắc sẽ được hủy. Không thể hoàn tác.',
       confirmLabel: 'Xóa toàn bộ',
     );
@@ -95,7 +95,7 @@ class _SettingsViewState extends State<SettingsView> {
               Text(
                 'Công việc hoạt động ngoại tuyến, không cần tài khoản. '
                 'Công việc và cài đặt không tự đồng bộ sang máy khác. '
-                'Thời tiết dùng internet và gửi tọa độ đã chọn tới Open-Meteo. Gemini chỉ gửi nội dung khi bạn yêu cầu. '
+                'Thời tiết dùng internet và gửi tọa độ đã chọn tới Open-Meteo. GroqCloud chỉ gửi nội dung khi bạn yêu cầu. '
                 'Gỡ ứng dụng hoặc xóa dữ liệu ứng dụng sẽ làm mất dữ liệu.',
               ),
             ],

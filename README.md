@@ -1,4 +1,4 @@
-# Lịch Nhắc 1.2
+# Lịch Nhắc 1.3
 
 **[Tải thẳng LichNhac-1.2.0.apk — không cần giải nén](https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/lich-nhac-v1.2.0-test-d783451/LichNhac-1.2.0.apk)**
 
@@ -12,6 +12,17 @@ APK được lấy nguyên vẹn từ build thành công của commit `d783451`,
 - **Android 7.0 / API 24 trở lên**, theo lựa chọn nâng cấp của người dùng. Bản này không còn hỗ trợ API 23, để dùng Flutter stable và thư viện hiện đại.
 - Công việc, cài đặt và lịch lễ lưu trên máy. **Thời tiết và Gemini cần internet**.
 - Không có backend riêng hoặc đăng nhập ứng dụng. Thời tiết không cần API key. Gemini tùy chọn, dùng key của riêng người dùng và quota của Google.
+
+## Trợ lý AI GroqCloud — 1.3
+
+- Tab trợ lý chuyển từ form Gemini sang chat hỏi–đáp nhiều lượt qua **GroqCloud** (không phải Grok/xAI).
+- Tạo key tại `https://console.groq.com/keys` → Cài đặt AI → nhập key `gsk_…` → Lưu → Kiểm tra kết nối. Key Gemini không dùng với GroqCloud, không bị gửi/xóa khi đổi provider.
+- API trực tiếp: `https://api.groq.com/openai/v1/models` và `/openai/v1/chat/completions`; dùng Bearer header. Không nhúng key, không backend riêng.
+- Tự khám phá mô hình mỗi lần gửi; model bị ngừng/404 sẽ tải lại danh sách và thử mô hình khác, tối đa 3 lần. Không tự retry 429/quota hoặc bật thanh toán.
+- Khi bấm Gửi: tối đa 20 tin gần nhất (giới hạn ngữ cảnh 16.000 ký tự) và câu hỏi ≤4.000 ký tự gửi cho GroqCloud. Có thể chọn cho AI tham khảo 30 việc chưa xong, chỉ tiêu đề/ngày/giờ, không ghi chú/GPS/thời tiết.
+- Lịch sử tối đa 100 tin lưu SQLite trên máy; không mã hóa riêng, không sync tự động. Xóa cuộc trò chuyện có xác nhận, không xóa dữ liệu nhà cung cấp đã nhận.
+- Sao chép tin nhắn hoặc chuyển sang form tạo việc; phải nhập tiêu đề và bấm Lưu. AI không tự ghi công việc, đặt chuông hay truy cập web/GPS.
+- API có hạn mức/điều khoản riêng. AI có thể sai. Bản mới cần build/test lại; liên kết APK 1.2 ở trên là bản cũ, chưa có GroqCloud.
 
 ## Thay đổi 1.2
 

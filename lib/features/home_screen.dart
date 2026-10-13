@@ -9,7 +9,7 @@ import 'calendar_view.dart';
 import 'utility_view.dart';
 import 'weather/weather_screen.dart';
 import 'holidays/holidays_screen.dart';
-import 'planner/planner_screen.dart';
+import 'assistant/assistant_screen.dart';
 import 'task_editor.dart';
 import 'tasks_view.dart';
 import 'today_view.dart';
@@ -189,8 +189,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   onPlanner: () => Navigator.push(
                                     context,
                                     MaterialPageRoute<void>(
-                                      builder: (_) =>
-                                          PlannerScreen(controller: controller),
+                                      builder: (_) => AssistantScreen(
+                                        controller: controller,
+                                      ),
                                     ),
                                   ),
                                 ),

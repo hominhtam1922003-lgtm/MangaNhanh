@@ -14,10 +14,12 @@ class TaskEditor extends StatefulWidget {
     this.task,
     this.initialDate,
     this.onDraftSaved,
+    this.initialNotes,
   });
   final AppController controller;
   final Task? task;
   final DateTime? initialDate;
+  final String? initialNotes;
   final ValueChanged<Task>? onDraftSaved;
 
   @override
@@ -43,7 +45,9 @@ class _TaskEditorState extends State<TaskEditor> {
     super.initState();
     final task = widget.task;
     _title = TextEditingController(text: task?.title ?? '');
-    _notes = TextEditingController(text: task?.notes ?? '');
+    _notes = TextEditingController(
+      text: task?.notes ?? widget.initialNotes ?? '',
+    );
     _date = task?.dueDate ?? dateOnly(widget.initialDate ?? DateTime.now());
     _minutes = task?.dueMinutes;
     _category = task?.category ?? TaskCategory.personal;

@@ -1,7 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { Alert, Platform, Pressable, Switch, Text, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { Button, Card, Input, Note, Title, confirm } from "../../components/UI";
+import {
+  Button,
+  Card,
+  GradientCard,
+  Input,
+  Note,
+  Title,
+  confirm,
+} from "../../components/UI";
 import { cycleForecast, dateOnly } from "../../logic/time.mjs";
 import type { State } from "../../services/localdb";
 const pretty = (day: string) => day.split("-").reverse().join("/");
@@ -215,7 +223,7 @@ export default function CycleLocal({
         )}
       </Card>
       {forecast && (
-        <Card>
+        <GradientCard colors={["#fff0f5", "#f4e8ff"]}>
           {forecast.stale ? (
             <>
               <Title small>Cần cập nhật kỳ gần nhất</Title>
@@ -242,7 +250,7 @@ export default function CycleLocal({
               />
             </>
           )}
-        </Card>
+        </GradientCard>
       )}
       <Card>
         <Title small>Chăm sóc và an toàn</Title>

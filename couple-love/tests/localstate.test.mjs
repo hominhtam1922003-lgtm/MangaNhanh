@@ -308,3 +308,146 @@ test("Chế độ trên máy: nhắc trước 3 ngày, đầu kỳ, rụng trứ
   });
   assert.deepEqual(dueAlerts(stale, "2026-01-26"), []);
 });
+
+test("Ghép nối hai chiều: cả hai máy đều nhận đủ dữ liệu sau hai lần quét", () => {
+  let a = emptyState("2026-01-01T00:00:00.000Z");
+  a = reduce(a, {
+    type: "profile.set",
+    nickname: "Minh",
+    mood: "happy",
+    moodNote: "",
+  });
+  a = reduce(a, { type: "diary.add", title: "Phở Mỹ Tho", body: "của Minh" });
+  a = reduce(a, {
+    type: "cycle.save",
+    lastPeriod: "2026-01-01",
+    cycleLength: 28,
+    periodLength: 5,
+  });
+  let b = emptyState("2026-01-01T00:00:00.000Z");
+  b = reduce(b, {
+    type: "profile.set",
+    nickname: "Ngọc Ánh",
+    mood: "love",
+    moodNote: "nhớ anh",
+  });
+  b = reduce(b, { type: "diary.add", title: "Cà phê sáng", body: "của Ánh" });
+
+  // Ngọc Ánh quét mã của Minh (bước 1)
+  const bAfterScan = reduce(b, {
+    type: "partner.merge",
+    state: decodeLink(encodeLink(a, "full")),
+  });
+  assert.equal(bAfterScan.partner.nickname, "Minh");
+  assert.equal(
+    bAfterScan.cycle.cycleLength,
+    28,
+    "Ngọc Ánh nhận được dữ liệu chu kỳ của Minh",
+  );
+  assert.equal(bAfterScan.diary.length, 2);
+  assert.equal(bAfterScan.links.length, 1);
+
+  // Minh quét mã phản hồi của Ngọc Ánh (bước 2)
+  const aAfterReply = reduce(a, {
+    type: "partner.merge",
+    state: decodeLink(encodeLink(bAfterScan, "full")),
+  });
+  assert.equal(
+    aAfterReply.partner.nickname,
+    "Ngọc Ánh",
+    "Minh phải nhận được dữ liệu của người thương",
+  );
+  assert.equal(
+    aAfterReply.diary.length,
+    2,
+    "không nhân đôi kỷ niệm khi trao đổi lại",
+  );
+  assert.equal(
+    aAfterReply.diary.filter((entry) => entry.authorId === "partner")[0].title,
+    "Cà phê sáng",
+  );
+  assert.equal(aAfterReply.links.length, 1);
+
+  // Cả hai bên đều có đủ hai kỷ niệm, đúng phía tác giả
+  const bFinal = reduce(bAfterScan, {
+    type: "partner.merge",
+    state: decodeLink(encodeLink(aAfterReply, "full")),
+  });
+  assert.equal(
+    bFinal.diary.filter((entry) => entry.authorId === "me").length,
+    1,
+  );
+  assert.equal(
+    bFinal.diary.filter((entry) => entry.authorId === "partner").length,
+    1,
+  );
+  assert.equal(
+    bFinal.diary.filter((entry) => entry.authorId === "me")[0].title,
+    "Cà phê sáng",
+  );
+
+  // Quét lại nhiều lần vẫn không tạo trùng và không mất dữ liệu
+  let again = aAfterReply;
+  for (let index = 0; index < 3; index++) {
+    again = reduce(again, {
+      type: "partner.merge",
+      state: decodeLink(encodeLink(bFinal, "full")),
+    });
+  }
+  assert.equal(again.diary.length, 2);
+  assert.equal(again.links.length, 1);
+  assert.equal(again.partner.nickname, "Ngọc Ánh");
+});
+
+test("Ghép nối hai chiều: cập nhật mới thắng nhưng không mất dữ liệu cũ", () => {
+  let a = emptyState("2026-01-01T00:00:00.000Z");
+  a = reduce(a, {
+    type: "profile.set",
+    nickname: "Minh",
+    mood: "happy",
+    moodNote: "",
+  });
+  a = reduce(a, {
+    type: "diary.add",
+    id: "shared",
+    title: "Kỷ niệm",
+    body: "bản cũ",
+  });
+  a = reduce(a, { type: "anniversary.set", iso: "2025-06-01T00:00:00.000Z" });
+  let b = emptyState("2026-01-01T00:00:00.000Z");
+  b = reduce(b, {
+    type: "profile.set",
+    nickname: "Ánh",
+    mood: "calm",
+    moodNote: "",
+  });
+  b = reduce(b, {
+    type: "diary.add",
+    id: "shared",
+    title: "Kỷ niệm",
+    body: "bản mới",
+  });
+  b = reduce(b, { type: "anniversary.set", iso: "2025-05-20T00:00:00.000Z" });
+  const merged = reduce(a, {
+    type: "partner.merge",
+    state: decodeLink(encodeLink(b, "full")),
+  });
+  const entry = merged.diary.find((item) => item.id === "shared");
+  assert.equal(entry.body, "bản mới", "bản có updatedAt mới hơn phải thắng");
+  assert.equal(entry.authorId, "me", "giữ góc nhìn tác giả trên máy này");
+  assert.equal(
+    merged.diary.length,
+    1,
+    "không tạo bản sao cho cùng một kỷ niệm",
+  );
+  assert.equal(
+    merged.anniversary,
+    "2025-05-20T00:00:00.000Z",
+    "ngày kỷ niệm theo bản mới hơn",
+  );
+  assert.equal(
+    merged.me.nickname,
+    "Minh",
+    "máy này không bị đổi tên của chính mình",
+  );
+});

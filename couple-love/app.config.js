@@ -3,14 +3,19 @@ module.exports = {
   expo: {
     name: "Hai Trái Tim",
     slug: "hai-trai-tim",
-    version: "1.0.0",
+    version: "1.2.0",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
     newArchEnabled: true,
+    icon: "./assets/icon.png",
     android: {
       package: "vn.haitraitim.app",
-      versionCode: 2,
+      versionCode: 3,
+      adaptiveIcon: {
+        foregroundImage: "./assets/adaptive-icon.png",
+        backgroundColor: "#fff1f2",
+      },
       ...(fs.existsSync("google-services.json")
         ? { googleServicesFile: "./google-services.json" }
         : {}),
@@ -18,6 +23,7 @@ module.exports = {
     ios: {
       bundleIdentifier: "vn.haitraitim.app",
       supportsTablet: true,
+      icon: "./assets/icon.png",
       infoPlist: {
         NSFaceIDUsageDescription:
           "Xác thực để mở nhật ký và dữ liệu riêng tư của bạn.",
@@ -27,7 +33,19 @@ module.exports = {
       "expo-asset",
       "expo-secure-store",
       "expo-local-authentication",
-      ["expo-notifications", { color: "#e64980" }],
+      [
+        "expo-splash-screen",
+        {
+          backgroundColor: "#fff1f2",
+          image: "./assets/splash-icon.png",
+          imageWidth: 220,
+          resizeMode: "contain",
+        },
+      ],
+      [
+        "expo-notifications",
+        { icon: "./assets/notification-icon.png", color: "#e64980" },
+      ],
       [
         "expo-image-picker",
         {

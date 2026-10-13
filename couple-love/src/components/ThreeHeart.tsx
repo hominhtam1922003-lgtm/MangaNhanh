@@ -1,7 +1,8 @@
 import React, { memo, useMemo, useRef, useState } from "react";
-import { View, PanResponder, Text } from "react-native";
+import { PanResponder, Text, View } from "react-native";
 import { Canvas, useFrame } from "@react-three/fiber/native";
 import * as THREE from "three";
+
 class Boundary extends React.Component<
   { children: React.ReactNode },
   { failed: boolean }
@@ -11,33 +12,26 @@ class Boundary extends React.Component<
     return { failed: true };
   }
   render() {
-    return this.state.failed ? (
-      <View className="h-72 items-center justify-center">
-        <Text style={{ fontSize: 120 }}>♥️</Text>
-        <Text className="text-love">Hai nhịp tim, một hành trình</Text>
-      </View>
-    ) : (
-      this.props.children
-    );
+    if (this.state.failed)
+      return (
+        <View className="h-80 items-center justify-center">
+          <Text style={{ fontSize: 120 }}>♥️</Text>
+          <Text className="text-love">Hai nhịp tim, một hành trình</Text>
+        </View>
+      );
+    return this.props.children;
   }
 }
-function Heart({
-  drag,
-  reduced,
-}: {
-  drag: { x: number; y: number };
-  reduced: boolean;
-}) {
-  const group = useRef<THREE.Group>(null),
-    particles = useRef<THREE.Points>(null);
-  const geometry = useMemo(() => {
+
+function useHeartGeometry() {
+  return useMemo(() => {
     const shape = new THREE.Shape();
     shape.moveTo(0, -1.15);
     shape.bezierCurveTo(-0.15, -0.95, -1.3, -0.2, -1.3, 0.55);
     shape.bezierCurveTo(-1.3, 1.35, -0.35, 1.7, 0, 0.85);
     shape.bezierCurveTo(0.35, 1.7, 1.3, 1.35, 1.3, 0.55);
     shape.bezierCurveTo(1.3, -0.2, 0.15, -0.95, 0, -1.15);
-    const geo = new THREE.ExtrudeGeometry(shape, {
+    const geometry = new THREE.ExtrudeGeometry(shape, {
       depth: 0.42,
       bevelEnabled: true,
       bevelSize: 0.16,
@@ -46,43 +40,93 @@ function Heart({
       steps: 1,
       curveSegments: 40,
     });
-    geo.center();
-    geo.computeVertexNormals();
-    return geo;
+    geometry.center();
+    geometry.computeVertexNormals();
+    return geometry;
   }, []);
-  const sparkle = useMemo(() => {
+}
+
+function useSparkles() {
+  return useMemo(() => {
     let seed = 4271;
-    const rand = () => {
+    const random = () => {
       seed = (seed * 1664525 + 1013904223) >>> 0;
       return seed / 4294967296;
     };
-    const positions = new Float32Array(80 * 3);
-    for (let i = 0; i < positions.length; i++)
-      positions[i] = (rand() - 0.5) * 7;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    return g;
-  }, []);
-  useFrame(({ clock }, delta) => {
-    if (group.current) {
-      const t = clock.elapsedTime;
-      group.current.rotation.y =
-        drag.x + (reduced ? 0 : Math.sin(t * 0.35) * 0.35);
-      group.current.rotation.x = drag.y;
-      group.current.position.y = reduced ? 0 : Math.sin(t * 0.8) * 0.11;
-      group.current.scale.setScalar(
-        reduced ? 1 : 1 + Math.sin(t * 1.5) * 0.025,
-      );
+    const positions = new Float32Array(110 * 3);
+    const scales = new Float32Array(110);
+    for (let index = 0; index < positions.length; index += 3) {
+      positions[index] = (random() - 0.5) * 7.5;
+      positions[index + 1] = (random() - 0.5) * 5.5;
+      positions[index + 2] = (random() - 0.5) * 3.5;
+      scales[index / 3] = 0.4 + random();
     }
-    if (particles.current && !reduced)
-      particles.current.rotation.y += Math.min(delta, 0.05) * 0.05;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute("size", new THREE.BufferAttribute(scales, 1));
+    return geometry;
+  }, []);
+}
+
+function Session({
+  drag,
+  reduced,
+  pressed,
+}: {
+  drag: { x: number; y: number };
+  reduced: boolean;
+  pressed: boolean;
+}) {
+  const group = useRef<THREE.Group>(null);
+  const glow = useRef<THREE.Mesh>(null);
+  const sparkles = useRef<THREE.Points>(null);
+  const shell = useRef<THREE.Mesh>(null);
+  const geometry = useHeartGeometry();
+  const sparkleGeometry = useSparkles();
+  const satellites = useMemo(() => [0, 2.1, 4.2], []);
+  useFrame(({ clock }, delta) => {
+    const t = clock.elapsedTime;
+    const step = Math.min(delta, 0.05);
+    if (group.current) {
+      group.current.rotation.y =
+        drag.x + (reduced ? 0 : Math.sin(t * 0.35) * 0.4);
+      group.current.rotation.x = drag.y;
+      group.current.rotation.z = reduced ? 0 : Math.sin(t * 0.22) * 0.06;
+      group.current.position.y = reduced ? 0 : Math.sin(t * 0.8) * 0.12;
+      const beat = reduced ? 1 : 1 + Math.sin(t * 1.6) * 0.03;
+      group.current.scale.setScalar(pressed ? beat * 1.09 : beat);
+    }
+    if (shell.current && !reduced) {
+      shell.current.rotation.y -= step * 0.18;
+    }
+    if (glow.current) {
+      const pulse = reduced ? 1 : 1 + Math.sin(t * 1.6) * 0.05;
+      glow.current.scale.setScalar(pulse);
+    }
+    if (sparkles.current) {
+      if (!reduced) sparkles.current.rotation.y += step * 0.06;
+      const material = sparkles.current.material as THREE.PointsMaterial;
+      material.opacity = reduced
+        ? 0.65
+        : 0.55 + Math.abs(Math.sin(t * 1.1)) * 0.4;
+    }
   });
   return (
     <>
-      <ambientLight intensity={0.8} />
-      <directionalLight position={[3, 4, 5]} intensity={3.3} color="#fff0f4" />
+      <ambientLight intensity={0.85} />
+      <directionalLight position={[3, 4, 5]} intensity={3.4} color="#fff0f4" />
       <pointLight position={[-3, -1, 2]} intensity={5} color="#ff4081" />
       <pointLight position={[0, 3, -3]} intensity={4} color="#ab6cff" />
+      <mesh ref={glow} position={[0, 0, -1.6]}>
+        <circleGeometry args={[2.5, 64]} />
+        <meshBasicMaterial
+          color="#ff86b8"
+          transparent
+          opacity={0.16}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
       <group ref={group}>
         <mesh geometry={geometry}>
           <meshPhysicalMaterial
@@ -92,25 +136,47 @@ function Heart({
             clearcoat={1}
             clearcoatRoughness={0.12}
             emissive="#a80743"
-            emissiveIntensity={0.18}
+            emissiveIntensity={0.2}
           />
         </mesh>
-        <mesh geometry={geometry} scale={1.045}>
+        <mesh geometry={geometry} scale={1.05}>
           <meshBasicMaterial
             color="#ff6eaa"
             transparent
-            opacity={0.08}
+            opacity={0.09}
             depthWrite={false}
             side={THREE.BackSide}
           />
         </mesh>
+        <mesh ref={shell} rotation={[Math.PI / 2.4, 0, 0]}>
+          <torusGeometry args={[1.95, 0.012, 8, 96]} />
+          <meshBasicMaterial color="#ffb3d1" transparent opacity={0.55} />
+        </mesh>
+        {satellites.map((offset, index) => (
+          <mesh
+            key={index}
+            geometry={geometry}
+            position={[
+              Math.cos(offset) * 2.1,
+              Math.sin(offset * 1.3) * 1.1,
+              Math.sin(offset) * 0.6,
+            ]}
+            scale={0.16}
+            rotation={[0.2, offset, -0.1]}
+          >
+            <meshStandardMaterial
+              color={index % 2 ? "#ffb3d1" : "#ff5c9d"}
+              roughness={0.35}
+            />
+          </mesh>
+        ))}
       </group>
-      <points ref={particles} geometry={sparkle}>
+      <points ref={sparkles} geometry={sparkleGeometry}>
         <pointsMaterial
           color="#ffa6cb"
-          size={0.055}
+          size={0.06}
           transparent
-          opacity={0.75}
+          opacity={0.7}
           sizeAttenuation
           depthWrite={false}
         />
@@ -118,41 +184,52 @@ function Heart({
     </>
   );
 }
+
 export default memo(function ThreeHeart({
   reduced = false,
 }: {
   reduced?: boolean;
 }) {
   const [drag, setDrag] = useState({ x: 0, y: 0 });
+  const [pressed, setPressed] = useState(false);
   const base = useRef({ x: 0, y: 0 });
-  const touch = useMemo(
+  const responder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: () => {
           base.current = drag;
+          setPressed(true);
         },
-        onPanResponderMove: (_, g) =>
+        onPanResponderMove: (_, gesture) =>
           setDrag({
-            x: base.current.x + g.dx * 0.008,
-            y: Math.max(-0.6, Math.min(0.6, base.current.y + g.dy * 0.006)),
+            x: base.current.x + gesture.dx * 0.008,
+            y: Math.max(
+              -0.6,
+              Math.min(0.6, base.current.y + gesture.dy * 0.006),
+            ),
           }),
+        onPanResponderRelease: () => {
+          setPressed(false);
+          setDrag((current) => ({ x: current.x * 0.94, y: current.y * 0.94 }));
+        },
+        onPanResponderTerminate: () => setPressed(false),
       }),
     [drag],
   );
   return (
     <Boundary>
       <View
-        accessibilityLabel="Trái tim 3D, vuốt để xoay"
-        style={{ height: 290 }}
-        {...touch.panHandlers}
+        accessibilityLabel="Trái tim 3D, chạm giữ để thấy nhịp đập và vuốt để xoay"
+        style={{ height: 320 }}
+        {...responder.panHandlers}
       >
         <Canvas
-          camera={{ position: [0, 0, 5.8], fov: 42 }}
+          camera={{ position: [0, 0, 5.6], fov: 42 }}
           gl={{ antialias: true, alpha: true }}
         >
-          <Heart drag={drag} reduced={reduced} />
+          <Session drag={drag} reduced={reduced} pressed={pressed} />
         </Canvas>
       </View>
     </Boundary>

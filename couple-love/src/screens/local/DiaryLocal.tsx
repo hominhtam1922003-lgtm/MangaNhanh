@@ -2,7 +2,15 @@ import React, { useState } from "react";
 import { Alert, Image, Text } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Manipulator from "expo-image-manipulator";
-import { Button, Card, Input, Note, Title, confirm } from "../../components/UI";
+import {
+  Button,
+  Card,
+  GradientCard,
+  Input,
+  Note,
+  Title,
+  confirm,
+} from "../../components/UI";
 import { deleteImage, imageUri, saveImage } from "../../services/localdb";
 import type { State } from "../../services/localdb";
 import { makeId } from "../../logic/localState.mjs";
@@ -74,7 +82,7 @@ export default function DiaryLocal({
   }
   return (
     <>
-      <Card>
+      <GradientCard>
         <Title>Giữ một khoảnh khắc</Title>
         <Input label="Tên kỷ niệm" value={title} onChangeText={setTitle} />
         <Input
@@ -112,7 +120,7 @@ export default function DiaryLocal({
           Ảnh được thu nhỏ, lưu trong thư mục riêng của ứng dụng trên máy này.
           Không có tải lên máy chủ nào.
         </Note>
-      </Card>
+      </GradientCard>
       {state.diary.length === 0 ? (
         <Card>
           <Note>

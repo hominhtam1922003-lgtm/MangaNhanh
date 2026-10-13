@@ -9,6 +9,7 @@ import {
   Note,
   Title,
   confirm,
+  GradientCard,
 } from "../../components/UI";
 import { loveCounter } from "../../logic/time.mjs";
 import { MOODS } from "../../logic/localState.mjs";
@@ -146,7 +147,7 @@ export default function HomeLocal({
         )}
       </Card>
       {state.partner ? (
-        <Card>
+        <GradientCard colors={["#fff0f5", "#ffe1ec"]}>
           <Title small>{state.partner.nickname}</Title>
           <Text className="text-love mb-2">
             {partnerMood?.emoji} {partnerMood?.name}
@@ -156,7 +157,7 @@ export default function HomeLocal({
             Cập nhật lần cuối khi bạn quét mã của người thương. Không có cập
             nhật tự động vì ứng dụng không dùng máy chủ.
           </Note>
-        </Card>
+        </GradientCard>
       ) : (
         <Card>
           <Title small>Nối với người thương</Title>

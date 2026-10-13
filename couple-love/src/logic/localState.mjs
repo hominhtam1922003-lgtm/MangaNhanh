@@ -20,19 +20,28 @@ const date = (value) =>
   /^\d{4}-\d{2}-\d{2}$/.test(value || "") ? value : null;
 const uid = () =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-const profile = (raw, id, name) => ({
+const profile = (raw, id, name, fallback = "") => ({
   id,
   nickname: text(raw?.nickname, 40).trim() || name,
   mood: moodIds.includes(raw?.mood) ? raw.mood : "calm",
   moodNote: text(raw?.moodNote, 300),
   avatar: typeof raw?.avatar === "string" ? raw.avatar : null,
+  updatedAt: iso(raw?.updatedAt, fallback),
 });
 export function emptyState(now = new Date().toISOString()) {
   return {
     version: STATE_VERSION,
-    me: { id: "me", nickname: "Bạn", mood: "calm", moodNote: "", avatar: null },
+    me: {
+      id: "me",
+      nickname: "Bạn",
+      mood: "calm",
+      moodNote: "",
+      avatar: null,
+      updatedAt: now,
+    },
     partner: null,
     anniversary: now,
+    anniversaryAt: now,
     timezone: "Asia/Ho_Chi_Minh",
     cycle: null,
     diary: [],
@@ -44,11 +53,12 @@ export function emptyState(now = new Date().toISOString()) {
 export function migrate(raw, now = new Date().toISOString()) {
   const state = emptyState(now);
   if (!raw || typeof raw !== "object") return state;
-  state.me = profile(raw.me, "me", "Bạn");
+  state.me = profile(raw.me, "me", "Bạn", now);
   state.partner = raw.partner
-    ? profile(raw.partner, "partner", "Người thương")
+    ? profile(raw.partner, "partner", "Người thương", now)
     : null;
   state.anniversary = iso(raw.anniversary, now);
+  state.anniversaryAt = iso(raw.anniversaryAt, state.anniversary);
   state.timezone = text(raw.timezone, 40) || state.timezone;
   const cycle = raw.cycle;
   if (cycle && date(cycle.lastPeriod)) {
@@ -118,9 +128,14 @@ export function reduce(state, action) {
       nickname,
       mood: action.mood,
       moodNote: text(action.moodNote, 300),
+      updatedAt: new Date().toISOString(),
     };
   } else if (type === "profile.avatar") {
-    next.me = { ...next.me, avatar: action.file || null };
+    next.me = {
+      ...next.me,
+      avatar: action.file || null,
+      updatedAt: new Date().toISOString(),
+    };
   } else if (type === "anniversary.set") {
     const at = Date.parse(action.iso);
     if (
@@ -130,6 +145,7 @@ export function reduce(state, action) {
     )
       throw new Error("Ngày kỷ niệm không hợp lệ.");
     next.anniversary = new Date(at).toISOString();
+    next.anniversaryAt = new Date().toISOString();
   } else if (type === "cycle.save") {
     const lastPeriod = date(action.lastPeriod);
     if (!lastPeriod) throw new Error("Ngày đầu kỳ không hợp lệ.");
@@ -225,21 +241,26 @@ export function reduce(state, action) {
     const incoming = migrate({ ...raw, me: raw.from || raw.me });
     const incomingId =
       text(raw.from?.id || raw.me?.id, 80) || incoming.me.nickname;
-    const previous = new Set(next.diary.map((e) => e.id));
-    const theirs = incoming.diary
-      .filter((e) => !previous.has(e.id))
-      .map((e) => ({ ...e, authorId: e.authorId === "me" ? "partner" : "me" }));
-    next.diary = [...next.diary, ...theirs]
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-      .slice(0, 500);
-    next.partner = { ...incoming.me, id: "partner" };
+    next.diary = mergeDiary(next.diary, incoming.diary);
+    if (incoming.me?.nickname) next.partner = { ...incoming.me, id: "partner" };
+    next.alerts = mergeAlerts(next.alerts, incoming.alerts);
     if (
       incoming.cycle &&
-      (!next.cycle || incoming.cycle.updatedAt > next.cycle.updatedAt)
-    )
+      (!next.cycle ||
+        Date.parse(incoming.cycle.updatedAt) >=
+          Date.parse(next.cycle.updatedAt))
+    ) {
       next.cycle = incoming.cycle;
+    }
+    if (
+      incoming.anniversary &&
+      Date.parse(incoming.anniversaryAt) >= Date.parse(next.anniversaryAt)
+    ) {
+      next.anniversary = incoming.anniversary;
+      next.anniversaryAt = incoming.anniversaryAt;
+    }
     next.links = [
-      ...next.links.filter((l) => l.id !== incomingId),
+      ...next.links.filter((link) => link.id !== incomingId),
       {
         id: incomingId,
         name: incoming.me.nickname,
@@ -369,8 +390,10 @@ export function encodeLink(state, kind = "link", images = {}) {
       nickname: state.me.nickname,
       mood: state.me.mood,
       moodNote: state.me.moodNote,
+      updatedAt: state.me.updatedAt,
     },
     anniversary: state.anniversary,
+    anniversaryAt: state.anniversaryAt,
     cycle: state.cycle,
     diary: kind === "full" ? state.diary : [],
     avatar: state.me.avatar,
@@ -491,4 +514,49 @@ function cycleForecastSafe(lastPeriod, cycleLength, periodLength, today) {
     (Math.floor(age / cycleLength) + 1) * cycleLength,
   );
   return { nextPeriod };
+}
+
+function mergeDiary(local, remote) {
+  const mine = new Map(local.map((entry) => [entry.id, entry]));
+  const merged = [...local];
+  for (const entry of remote) {
+    const incoming = {
+      ...entry,
+      authorId: entry.authorId === "me" ? "partner" : "me",
+    };
+    const current = mine.get(incoming.id);
+    if (!current) {
+      merged.push(incoming);
+      continue;
+    }
+    if (Date.parse(incoming.updatedAt) >= Date.parse(current.updatedAt)) {
+      const index = merged.findIndex((item) => item.id === current.id);
+      merged[index] = { ...incoming, authorId: current.authorId };
+    }
+  }
+  return merged
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .slice(0, 500);
+}
+function mergeAlerts(local, remote) {
+  const merged = [...local];
+  const seen = new Set(local.map((alert) => alert.key || alert.id));
+  for (const alert of remote) {
+    const mark = alert.key || alert.id;
+    if (seen.has(mark)) {
+      const index = merged.findIndex((item) => (item.key || item.id) === mark);
+      if (index >= 0 && alert.readAt && !merged[index].readAt) {
+        merged[index] = { ...merged[index], readAt: alert.readAt };
+      }
+      continue;
+    }
+    seen.add(mark);
+    merged.push(alert);
+  }
+  return merged
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .slice(0, 200);
+}
+export function mergeState(local, remote) {
+  return reduce(local, { type: "partner.merge", state: remote });
 }

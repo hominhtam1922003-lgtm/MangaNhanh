@@ -7,6 +7,7 @@ import {
   Note,
   Title,
   Input,
+  GradientCard,
 } from "../../components/UI";
 import { MOODS } from "../../logic/localState.mjs";
 import type { State } from "../../services/localdb";
@@ -68,7 +69,7 @@ export default function MoodLocal({
         <Button label="Lưu cảm xúc" onPress={save} />
       </Card>
       {state.partner ? (
-        <Card>
+        <GradientCard>
           <View className="flex-row items-center mb-4">
             <LocalAvatar
               name={state.partner.nickname}
@@ -86,7 +87,7 @@ export default function MoodLocal({
             {state.partner.moodNote ||
               "Một lời hỏi han nhẹ nhàng có thể mở đầu câu chuyện."}
           </Note>
-        </Card>
+        </GradientCard>
       ) : (
         <Card>
           <Note>

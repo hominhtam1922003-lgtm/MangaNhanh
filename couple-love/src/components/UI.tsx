@@ -9,6 +9,7 @@ import {
   Alert,
 } from "react-native";
 import { SupabaseClient } from "@supabase/supabase-js";
+import { LinearGradient } from "expo-linear-gradient";
 import { imageUri } from "../services/localdb";
 export function LocalAvatar({
   name,
@@ -39,9 +40,41 @@ export function LocalAvatar({
 }
 export function Card({ children }: { children: React.ReactNode }) {
   return (
-    <View className="bg-white rounded-3xl border border-pink-100 p-5 mb-4">
+    <View
+      className="bg-white rounded-3xl border border-pink-100 p-5 mb-4"
+      style={{
+        shadowColor: "#c2185b",
+        shadowOpacity: 0.1,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 3,
+      }}
+    >
       {children}
     </View>
+  );
+}
+export function GradientCard({
+  children,
+  colors = ["#fff0f5", "#ffe1ec"],
+}: {
+  children: React.ReactNode;
+  colors?: [string, string, ...string[]];
+}) {
+  return (
+    <LinearGradient
+      colors={colors}
+      className="rounded-3xl border border-pink-100 p-5 mb-4"
+      style={{
+        shadowColor: "#c2185b",
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: 4,
+      }}
+    >
+      {children}
+    </LinearGradient>
   );
 }
 export function Title({

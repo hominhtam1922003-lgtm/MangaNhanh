@@ -10,6 +10,7 @@ import {
   Note,
   Title,
   confirm,
+  GradientCard,
 } from "../../components/UI";
 import { deleteImage, saveImage } from "../../services/localdb";
 import type { State } from "../../services/localdb";
@@ -81,7 +82,7 @@ export default function SettingsLocal({
   }
   return (
     <>
-      <Card>
+      <GradientCard>
         <Title>Góc của bạn</Title>
         <View className="items-center mb-4">
           <LocalAvatar
@@ -115,7 +116,7 @@ export default function SettingsLocal({
           busy={busy}
           onPress={() => void pickAvatar()}
         />
-      </Card>
+      </GradientCard>
       <Card>
         <Title small>Riêng tư trên máy này</Title>
         <View className="flex-row justify-between items-center my-3">

@@ -48,6 +48,7 @@ import Cycle from "./src/screens/Cycle";
 import Diary from "./src/screens/Diary";
 import Mood from "./src/screens/Mood";
 import Settings from "./src/screens/Settings";
+import { LinearGradient } from "expo-linear-gradient";
 import { Button, Card, Note, Title, confirm } from "./src/components/UI";
 const localTabs = [
   { id: "home", label: "Yêu nhau", icon: "♡" },
@@ -549,152 +550,157 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   const unread = state.alerts.filter((alert) => !alert.readAt).length;
   const props = { state, update };
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-pink-50"
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <LinearGradient
+      colors={["#fff5f8", "#ffe8f0", "#fff5f8"]}
+      className="flex-1"
     >
-      <View className="flex-row px-5 py-4 items-center justify-between">
-        <View>
-          <Text className="text-xl font-bold text-ink">
-            Hai Trái Tim <Text className="text-love">♡</Text>
-          </Text>
-          <Text className="text-xs text-stone-500 mt-1">
-            Chạy trên máy · không cần máy chủ
-          </Text>
-        </View>
-        {tab === "pair" && (
-          <Pressable
-            accessibilityLabel="Về trang trước"
-            onPress={() => setTab("home")}
-            className="px-3 py-2 mr-2 rounded-full bg-white border border-pink-100"
-          >
-            <Text className="text-love">‹ Về</Text>
-          </Pressable>
-        )}
-        <Pressable
-          accessibilityLabel="Lời nhắc"
-          onPress={() => setAlertPage(!alertPage)}
-          className="px-3 py-2 rounded-full bg-white border border-pink-100"
-        >
-          <Text className="text-love">
-            {alertPage ? "Đóng" : "Lời nhắc"}
-            {unread ? " · " + unread : ""}
-          </Text>
-        </Pressable>
-      </View>
-      {error !== "" && (
-        <View className="mx-4 mb-2 p-3 rounded-xl bg-amber-50">
-          <Text className="text-xs text-amber-900">{error}</Text>
-          <Pressable onPress={() => setError("")}>
-            <Text className="text-sm text-love mt-1">Đã hiểu</Text>
-          </Pressable>
-        </View>
-      )}
-      <ScrollView
-        key={alertPage ? "alerts" : tab}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ padding: 18, paddingBottom: 32 }}
+      <KeyboardAvoidingView
+        className="flex-1 bg-pink-50"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {alertPage ? (
-          <>
-            <Title>Lời nhắc yêu thương</Title>
-            {state.alerts.length === 0 && (
-              <Card>
-                <Note>
-                  Chưa có lời nhắc. Lời nhắc xuất hiện khi tới mốc kỷ niệm hoặc
-                  mốc chu kỳ ước tính.
-                </Note>
-              </Card>
-            )}
-            {state.alerts.map((alert) => (
-              <Card key={alert.id}>
-                <Title small>{alert.title}</Title>
-                <Note>{alert.body}</Note>
-                <Text className="text-xs text-stone-400 mt-2">
-                  {new Date(alert.createdAt).toLocaleString("vi-VN")}
-                </Text>
-                {!alert.readAt && (
-                  <Button
-                    label="Đã đọc"
-                    secondary
-                    onPress={() =>
-                      update({ type: "alerts.read", id: alert.id })
-                    }
-                  />
-                )}
-              </Card>
-            ))}
-            {state.alerts.length > 0 && (
-              <Button
-                label="Xóa hết lời nhắc"
-                secondary
-                onPress={() =>
-                  void (async () => {
-                    if (
-                      !(await confirm(
-                        "Xóa hết lời nhắc?",
-                        "Danh sách lời nhắc trên máy sẽ bị xóa. Lịch nhắc vẫn được giữ.",
-                      ))
-                    )
-                      return;
-                    update({ type: "alerts.clear" });
-                  })()
-                }
-              />
-            )}
-          </>
-        ) : tab === "home" ? (
-          <HomeLocal {...props} openPair={() => setTab("pair")} />
-        ) : tab === "pair" ? (
-          <PairLocal
-            {...props}
-            initialCode={state.links.length > 0 ? "1" : ""}
-          />
-        ) : tab === "cycle" ? (
-          <CycleLocal {...props} />
-        ) : tab === "diary" ? (
-          <DiaryLocal {...props} />
-        ) : tab === "mood" ? (
-          <MoodLocal {...props} />
-        ) : (
-          <SettingsLocal
-            {...props}
-            replaceState={replaceState}
-            clearAll={clearAll}
-            locked={lockEnabled}
-            onToggleLock={toggleLock}
-            onSwitchMode={onSwitchMode}
-            onOpenPair={() => setTab("pair")}
-          />
-        )}
-      </ScrollView>
-      <View className="flex-row bg-white border-t border-pink-100 pt-2 pb-3">
-        {localTabs.map((item) => (
-          <Pressable
-            key={item.id}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: tab === item.id && !alertPage }}
-            accessibilityLabel={item.label}
-            onPress={() => {
-              setTab(item.id);
-              setAlertPage(false);
-            }}
-            className="flex-1 items-center py-2"
-          >
-            <Text
-              className={`text-2xl ${tab === item.id ? "text-love" : "text-stone-400"}`}
-            >
-              {item.icon}
+        <View className="flex-row px-5 py-4 items-center justify-between">
+          <View>
+            <Text className="text-xl font-bold text-ink">
+              Hai Trái Tim <Text className="text-love">♡</Text>
             </Text>
-            <Text
-              className={`text-xs mt-1 ${tab === item.id ? "text-love font-bold" : "text-stone-500"}`}
+            <Text className="text-xs text-stone-500 mt-1">
+              Chạy trên máy · không cần máy chủ
+            </Text>
+          </View>
+          {tab === "pair" && (
+            <Pressable
+              accessibilityLabel="Về trang trước"
+              onPress={() => setTab("home")}
+              className="px-3 py-2 mr-2 rounded-full bg-white border border-pink-100"
             >
-              {item.label}
+              <Text className="text-love">‹ Về</Text>
+            </Pressable>
+          )}
+          <Pressable
+            accessibilityLabel="Lời nhắc"
+            onPress={() => setAlertPage(!alertPage)}
+            className="px-3 py-2 rounded-full bg-white border border-pink-100"
+          >
+            <Text className="text-love">
+              {alertPage ? "Đóng" : "Lời nhắc"}
+              {unread ? " · " + unread : ""}
             </Text>
           </Pressable>
-        ))}
-      </View>
-    </KeyboardAvoidingView>
+        </View>
+        {error !== "" && (
+          <View className="mx-4 mb-2 p-3 rounded-xl bg-amber-50">
+            <Text className="text-xs text-amber-900">{error}</Text>
+            <Pressable onPress={() => setError("")}>
+              <Text className="text-sm text-love mt-1">Đã hiểu</Text>
+            </Pressable>
+          </View>
+        )}
+        <ScrollView
+          key={alertPage ? "alerts" : tab}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ padding: 18, paddingBottom: 32 }}
+        >
+          {alertPage ? (
+            <>
+              <Title>Lời nhắc yêu thương</Title>
+              {state.alerts.length === 0 && (
+                <Card>
+                  <Note>
+                    Chưa có lời nhắc. Lời nhắc xuất hiện khi tới mốc kỷ niệm
+                    hoặc mốc chu kỳ ước tính.
+                  </Note>
+                </Card>
+              )}
+              {state.alerts.map((alert) => (
+                <Card key={alert.id}>
+                  <Title small>{alert.title}</Title>
+                  <Note>{alert.body}</Note>
+                  <Text className="text-xs text-stone-400 mt-2">
+                    {new Date(alert.createdAt).toLocaleString("vi-VN")}
+                  </Text>
+                  {!alert.readAt && (
+                    <Button
+                      label="Đã đọc"
+                      secondary
+                      onPress={() =>
+                        update({ type: "alerts.read", id: alert.id })
+                      }
+                    />
+                  )}
+                </Card>
+              ))}
+              {state.alerts.length > 0 && (
+                <Button
+                  label="Xóa hết lời nhắc"
+                  secondary
+                  onPress={() =>
+                    void (async () => {
+                      if (
+                        !(await confirm(
+                          "Xóa hết lời nhắc?",
+                          "Danh sách lời nhắc trên máy sẽ bị xóa. Lịch nhắc vẫn được giữ.",
+                        ))
+                      )
+                        return;
+                      update({ type: "alerts.clear" });
+                    })()
+                  }
+                />
+              )}
+            </>
+          ) : tab === "home" ? (
+            <HomeLocal {...props} openPair={() => setTab("pair")} />
+          ) : tab === "pair" ? (
+            <PairLocal
+              {...props}
+              initialCode={state.links.length > 0 ? "1" : ""}
+            />
+          ) : tab === "cycle" ? (
+            <CycleLocal {...props} />
+          ) : tab === "diary" ? (
+            <DiaryLocal {...props} />
+          ) : tab === "mood" ? (
+            <MoodLocal {...props} />
+          ) : (
+            <SettingsLocal
+              {...props}
+              replaceState={replaceState}
+              clearAll={clearAll}
+              locked={lockEnabled}
+              onToggleLock={toggleLock}
+              onSwitchMode={onSwitchMode}
+              onOpenPair={() => setTab("pair")}
+            />
+          )}
+        </ScrollView>
+        <View className="flex-row bg-white border-t border-pink-100 pt-2 pb-3">
+          {localTabs.map((item) => (
+            <Pressable
+              key={item.id}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === item.id && !alertPage }}
+              accessibilityLabel={item.label}
+              onPress={() => {
+                setTab(item.id);
+                setAlertPage(false);
+              }}
+              className="flex-1 items-center py-2"
+            >
+              <Text
+                className={`text-2xl ${tab === item.id ? "text-love" : "text-stone-400"}`}
+              >
+                {item.icon}
+              </Text>
+              <Text
+                className={`text-xs mt-1 ${tab === item.id ? "text-love font-bold" : "text-stone-500"}`}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 function ModeChooser({

@@ -279,6 +279,9 @@ export class RelayClient {
     this.brokers = options.brokers ?? BROKERS;
     this.clientId =
       options.clientId ?? "htt" + Math.random().toString(36).slice(2, 10);
+    // Mã máy: broker công cộng dội lại bản tin cho chính máy vừa gửi, nên phải
+    // bỏ qua bản tin của mình — nếu không máy sẽ tự nhận mình là "người thương".
+    this.deviceId = options.deviceId ?? this.clientId;
     this.socket = null;
     this.brokerIndex = 0;
     this.buffer = new Uint8Array(0);
@@ -417,6 +420,7 @@ export class RelayClient {
         if (packet.topic !== topicFor(this.room)) continue;
         try {
           const message = open(this.room, packet.text);
+          if (message?.device && message.device === this.deviceId) continue;
           if (
             message?.kind === "ping" ||
             message?.kind === "hello" ||
@@ -452,7 +456,7 @@ export class RelayClient {
   }
   publish(message, options = {}) {
     if (!this.connected || !this.socket) return false;
-    const body = options.skipPartnerCheck ? message : message;
+    const body = { ...message, device: message.device ?? this.deviceId };
     try {
       this.socket.send(
         encodePublish(topicFor(this.room), seal(this.room, body)),

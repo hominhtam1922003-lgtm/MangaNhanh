@@ -230,3 +230,160 @@ test("Kết nối tức thời: trạng thái có tên người thương và ch�
   );
   assert.ok(BROKERS.every((broker) => broker.startsWith("wss://")));
 });
+
+/* ---- Hai máy thật sự nói chuyện với nhau qua một broker giả có dội bản tin ---- */
+class FakeSocket {
+  constructor(broker) {
+    this.broker = broker;
+    this.sent = [];
+    setTimeout(() => this.onopen && this.onopen(), 1);
+  }
+  send(bytes) {
+    const data = Uint8Array.from(bytes);
+    this.sent.push(data);
+    if (data[0] === 0x10) {
+      this.receive(Uint8Array.from([0x20, 0x02, 0x00, 0x00]));
+      return;
+    }
+    if ((data[0] & 0xf0) === 0x30) {
+      // Broker thật gửi bản tin cho mọi máy đăng ký topic, kể cả máy vừa gửi.
+      for (const socket of this.broker.sockets) socket.receive(data);
+    }
+  }
+  receive(bytes) {
+    const buffer = bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength,
+    );
+    setTimeout(() => this.onmessage && this.onmessage({ data: buffer }), 1);
+  }
+  close() {}
+}
+class FakeBroker {
+  constructor() {
+    this.sockets = [];
+  }
+  connect() {
+    const socket = new FakeSocket(this);
+    this.sockets.push(socket);
+    return socket;
+  }
+}
+const wait = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+test("Kết nối tức thời: hai máy nhập cùng mã 6 số thì CẢ HAI cùng nhận dữ liệu", async () => {
+  const realWebSocket = globalThis.WebSocket;
+  const broker = new FakeBroker();
+  function FakeWebSocket() {
+    return broker.connect();
+  }
+  globalThis.WebSocket = FakeWebSocket;
+  try {
+    const created = roomFromCode("482913");
+    const joined = roomFromCode("482913");
+    const gotA = [];
+    const gotB = [];
+    const statusA = [];
+    const statusB = [];
+    const mayA = new RelayClient({
+      room: created,
+      deviceId: "mayA",
+      onPayload: (payload) => gotA.push(payload),
+      onStatus: (status) => statusA.push(status),
+    });
+    const mayB = new RelayClient({
+      room: joined,
+      deviceId: "mayB",
+      onPayload: (payload) => gotB.push(payload),
+      onStatus: (status) => statusB.push(status),
+    });
+    mayA.start();
+    mayB.start();
+    await wait(80);
+    assert.equal(
+      mayA.connected && mayB.connected,
+      true,
+      "hai máy nối được trạm",
+    );
+    assert.equal(gotA.length, 0, "máy A không tự nhận bản tin của chính mình");
+    assert.equal(gotB.length, 0);
+    assert.equal(mayA.status.partnerOnline, true, "A thấy B vừa vào phòng");
+    assert.equal(mayB.status.partnerOnline, true, "B thấy A trong phòng");
+    // Đúng cách App làm: mỗi máy gửi dữ liệu của mình khi thấy người thương trực tuyến.
+    const stateA = stateWith("Minh", [
+      { type: "diary.add", title: "Hẹn hò đầu tiên", body: "a" },
+    ]);
+    const stateB = stateWith("Ngọc Ánh", [
+      { type: "diary.add", title: "Tấm ảnh ở Đà Lạt", body: "b" },
+    ]);
+    assert.equal(
+      mayA.publishState(buildRelayPayload(stateA, 60000, "mayA"), "Minh"),
+      true,
+    );
+    assert.equal(
+      mayB.publishState(buildRelayPayload(stateB, 60000, "mayB"), "Ngọc Ánh"),
+      true,
+    );
+    await wait(80);
+    assert.equal(gotA.length, 1, "A nhận đúng một gói của B");
+    assert.equal(gotB.length, 1, "B nhận đúng một gói của A");
+    let trenA = stateA;
+    let trenB = stateB;
+    for (const payload of gotA)
+      trenA = reduce(trenA, { type: "partner.merge", state: payload });
+    for (const payload of gotB)
+      trenB = reduce(trenB, { type: "partner.merge", state: payload });
+    assert.equal(
+      trenA.partner.nickname,
+      "Ngọc Ánh",
+      "máy A nhận ghép nối với B",
+    );
+    assert.equal(trenB.partner.nickname, "Minh", "máy B nhận ghép nối với A");
+    assert.deepEqual(
+      trenA.diary
+        .filter((entry) => entry.authorId === "partner")
+        .map((entry) => entry.title),
+      ["Tấm ảnh ở Đà Lạt"],
+      "kỷ niệm của B nằm trên máy A",
+    );
+    assert.deepEqual(
+      trenB.diary
+        .filter((entry) => entry.authorId === "partner")
+        .map((entry) => entry.title),
+      ["Hẹn hò đầu tiên"],
+      "kỷ niệm của A nằm trên máy B",
+    );
+    assert.deepEqual(
+      trenA.diary.map((entry) => entry.title).sort(),
+      trenB.diary.map((entry) => entry.title).sort(),
+      "hai máy giữ cùng danh sách kỷ niệm",
+    );
+    assert.equal(mayA.status.state, "online");
+    assert.equal(mayB.status.state, "online");
+    assert.equal(
+      mayA.status.partnerName,
+      "Ngọc Ánh",
+      "A biết tên người thương",
+    );
+    assert.equal(mayB.status.partnerName, "Minh");
+    // Máy ở một mình trong phòng thì không được coi bản tin dội lại là người thương.
+    const solo = new RelayClient({
+      room: createRoom(),
+      deviceId: "mayMot",
+      onPayload: () => {},
+    });
+    solo.start();
+    await wait(80);
+    assert.equal(solo.connected, true);
+    assert.equal(
+      solo.status.partnerOnline,
+      false,
+      "ở một mình thì chưa có ai trực tuyến",
+    );
+    solo.stop();
+    mayA.stop();
+    mayB.stop();
+  } finally {
+    globalThis.WebSocket = realWebSocket;
+  }
+});

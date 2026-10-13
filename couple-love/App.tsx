@@ -545,6 +545,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     }
     const client = new RelayClient({
       room: relayRoom,
+      deviceId: deviceIdRef.current,
       onPayload: (payload: Record<string, unknown>) => {
         try {
           update({ type: "partner.merge", state: payload });

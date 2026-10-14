@@ -269,6 +269,22 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
+## Hai Trái Tim 1.9.0 (bản mới nhất)
+
+**APK Android (cài trực tiếp, không cần ZIP):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.9.0-test-51bc943/HaiTraiTim-1.9.0.apk · dựng từ `51bc943` (lần build 38541252032).
+
+**iPhone (file .ipa chưa ký, phải tự ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.9.0-test-51bc943/HaiTraiTim-1.9.0-unsigned.ipa · dựng từ `51bc943` (lần build 38541251941). iPhone **không cài file trực tiếp như APK**: dùng Sideloadly/AltStore trên Windows với Apple ID miễn phí, app hết hạn sau 7 ngày và ký lại; muốn 1 năm không cần cắm cáp thì phải có Apple Developer 99 USD/năm.
+
+Bản 1.9.0 sửa đúng 5 việc bạn nêu:
+
+1. **Chữ không còn mờ/mất khi đổi giao diện** — mọi màn hình trên máy lấy màu chữ từ chủ đề (mục “Riêng tư trên máy này”, “Lời yêu thương mỗi ngày (09:00 và 21:00)”, các ngày trên lịch); bỏ lớp mờ 0.5 đè lên chữ.
+2. **Thông báo nổi như Messenger** — hỏi quyền thông báo ngay khi mở app, kênh **Tin nhắn của người thương** mức cao nhất có âm thanh + rung, cảnh báo kèm nút mở Cài đặt khi quyền bị tắt.
+3. **Tin nhắn và tin thoại tới được máy kia** — tin chưa gửi được thì nằm chờ và tự gửi lại (không đánh dấu đã gửi sớm), nhật ký kết nối ghi rõ số tin đã gửi/đã nhận, tin thoại hạn mức 420 KB, máy kia thiếu tệp thì tự xin gửi lại sau 45 giây, có trạng thái **đã tới máy kia**.
+4. **Bảng tin cố định như Messenger/Zalo** — danh sách tin cuộn riêng, tin mới hiện ở dưới và trôi lên, kéo lên xem lại, ô nhập chỉ giãn tới 4 dòng, có nút cuộn xuống tin mới nhất.
+5. **Chủ đề có hoạ tiết thật** — hoạ tiết nền theo từng chủ đề (hoa, mèo, sóng, sao…), thêm chủ đề **Mèo con** và **Vườn hoa**, ô xem trước trong Cài đặt hiện hoạ tiết.
+
+Kèm theo: tự chọn ảnh trong máy làm nền app và **hai máy gửi ảnh nền cho nhau**, lịch chọn ngày tự viết (lùi/tiến tháng, lùi/tiến năm, gõ thẳng ngày/tháng/năm, không còn nhảy về hôm nay). Lần dựng này chạy 57 bài kiểm thử (TypeScript, độ tương phản chủ đề, lịch, ghép nối qua broker MQTT thật) và đều xanh.
+
 **https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.8.0-test-cf8c282/HaiTraiTim-1.8.0.apk**
 
 - `HaiTraiTim-1.8.0.apk` · **57.921.934 byte** · SHA256 `070a194f9c784af24f2d39c31f68f2acbcfaa8800d441486d9c9b7d156f8a94f` · kèm file `.sha256` trong Assets. Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.8.0, bản dựng 9** — cách chắc chắn nhất để biết máy đã cài đúng bản mới.

@@ -1,0 +1,140 @@
+# Nguồn IPA 1.9.0: run_id 38541251941 (commit 51bc943, artifact HaiTraiTim-iOS-unsigned-IPA).
+# Lưu ý: runner không tạo được Release (403) — luôn tạo Release nháp cục bộ trước rồi push file này để runner tải IPA lên.
+name: Đăng IPA Hai Trái Tim (iOS) tải trực tiếp
+
+on:
+  push:
+    branches: [arena/6f7cfa08-manganhanh]
+    paths: [.github/workflows/publish-love-ipa.yml]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: ID lần chạy "IPA Hai Trái Tim (iOS, chưa ký)" đã thành công
+        required: true
+        default: '38541251941'
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+  checks: write
+
+concurrency:
+  group: publish-love-ipa
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/arena/6f7cfa08-manganhanh'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38541251941' }}
+      ARTIFACT_NAME: HaiTraiTim-iOS-unsigned-IPA
+      IPA_FILE: HaiTraiTim-1.9.0-unsigned.ipa
+    steps:
+      - name: Kiểm tra nguồn IPA đã build thành công
+        id: verify
+        run: |
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID" > /tmp/ipa-run.json
+          python3 - <<'PY'
+          import json, os
+          with open('/tmp/ipa-run.json') as stream:
+              run = json.load(stream)
+          assert run['status'] == 'completed' and run['conclusion'] == 'success', 'Build iOS chưa thành công'
+          assert run['head_branch'] == 'arena/6f7cfa08-manganhanh', 'Sai nhánh nguồn IPA'
+          assert run['path'] == '.github/workflows/build-couple-ipa.yml', 'Sai workflow build iOS'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f"sha={run['head_sha']}\n")
+              output.write(f"tag=hai-trai-tim-ios-v1.9.0-test-{run['head_sha'][:7]}\n")
+          PY
+      - name: Lấy IPA đã kiểm chứng qua REST API (không build lại)
+        run: |
+          exec > >(tee /tmp/ipa-download.log) 2>&1
+          echo "BUILD_RUN_ID=$BUILD_RUN_ID · ARTIFACT_NAME=$ARTIFACT_NAME · FILE=$IPA_FILE"
+          mkdir -p release-ipa
+          for attempt in 1 2 3 4 5; do
+            artifact_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID/artifacts" \
+              --jq ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | select(.expired == false) | .id" | head -1)
+            echo "Lần $attempt: artifact=$artifact_id"
+            if [ -n "$artifact_id" ]; then
+              code=$(curl -sSL --retry 3 --retry-all-errors --retry-delay 5 -w '%{http_code}' \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" \
+                -o /tmp/verified-ipa.zip)
+              echo "HTTP $code · $(stat -c%s /tmp/verified-ipa.zip 2>/dev/null || echo 0) byte"
+              if [ "$code" = "200" ] && python3 -c "import zipfile; zipfile.ZipFile('/tmp/verified-ipa.zip').extractall('release-ipa')"; then
+                echo "Đã tải và giải nén artifact $artifact_id của run $BUILD_RUN_ID"
+                ls -l release-ipa
+                exit 0
+              fi
+            fi
+            sleep 20
+          done
+          echo "Không tải được artifact đã kiểm chứng." >&2
+          exit 1
+      - name: Kiểm tra gói IPA (có Payload/*.app) và băm SHA256
+        run: |
+          test -s "release-ipa/$IPA_FILE"
+          python3 - <<'PY'
+          import os, zipfile
+          path = os.path.join('release-ipa', os.environ['IPA_FILE'])
+          with zipfile.ZipFile(path) as ipa:
+              names = ipa.namelist()
+              apps = [name for name in names if name.startswith('Payload/') and name.endswith('.app/')]
+              assert apps, 'IPA không có Payload/*.app'
+              assert ipa.testzip() is None, 'IPA bị hỏng'
+              assert any(name.startswith(apps[0] + 'Info.plist') for name in names), 'Thiếu Info.plist'
+              print('App trong IPA:', apps[0], '· tổng', len(names), 'mục')
+          PY
+          cd release-ipa
+          sha256sum "$IPA_FILE" > "$IPA_FILE.sha256"
+          cat "$IPA_FILE.sha256" | tee /tmp/ipa-hash.log
+          stat -c 'Dung lượng: %s byte' "$IPA_FILE" | tee -a /tmp/ipa-hash.log
+      - name: Đăng IPA vào Release để tải trực tiếp
+        env:
+          VERIFIED_SHA: ${{ steps.verify.outputs.sha }}
+          RELEASE_TAG: ${{ steps.verify.outputs.tag }}
+        run: |
+          exec > >(tee /tmp/ipa-publish.log) 2>&1
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            cat > /tmp/ipa-notes.md <<EOF
+          Bản iOS **Hai Trái Tim 1.9.0** (file .ipa **chưa ký**) lấy nguyên vẹn từ [lần build thành công trên macOS](https://github.com/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID).
+
+          **Cách cài — cần biết trước:** iPhone **không cài file trực tiếp như APK**. Bản này chưa ký, nên phải tự ký lại bằng tài khoản Apple **miễn phí** của bạn:
+
+          1. Trên máy Windows: cài **Sideloadly** (hoặc AltStore) và iTunes bản mới.
+          2. Cắm iPhone bằng cáp, mở Sideloadly, kéo file \`$IPA_FILE\` vào.
+          3. Nhập **Apple ID thường** (miễn phí). Nếu bật xác thực 2 lớp, tạo **mật khẩu ứng dụng** tại appleid.apple.com rồi dùng mật khẩu đó.
+          4. Bấm Start, rồi trên iPhone vào **Cài đặt → Cài đặt chung → VPN & Quản lý thiết bị** để tin tưởng hồ sơ của bạn.
+          5. Trong app, mở **Cài đặt → Riêng tư trên máy này → Tin cậy ứng dụng** (chỉ hiện trên iOS) rồi khởi động lại app — việc này tránh lỗi tự thoát ở lần mở đầu.
+
+          **Hạn dùng 7 ngày:** app cài bằng Apple ID miễn phí sẽ hết hạn sau 7 ngày, cứ cắm cáp chạy lại Sideloadly là dùng tiếp. Muốn 1 năm, không cần cắm cáp thì phải có **Apple Developer 99 USD/năm** (TestFlight hoặc ký riêng).
+
+          Commit nguồn: \`$VERIFIED_SHA\`. iOS tối thiểu 15.1. Gói \`vn.haitraitim.app\`.
+          EOF
+            gh release create "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.9.0 — IPA iOS (chưa ký)" --notes-file /tmp/ipa-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
+          fi
+          gh release view "$RELEASE_TAG" --json tagName,isDraft,assets --repo "$GITHUB_REPOSITORY" | tee /tmp/ipa-release.json
+          echo "IPA tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$IPA_FILE" >> "$GITHUB_STEP_SUMMARY"
+      - name: Công bố chẩn đoán đăng IPA
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const paths = ['/tmp/ipa-download.log', '/tmp/ipa-hash.log', '/tmp/ipa-publish.log'].filter((file) => fs.existsSync(file));
+            await github.rest.checks.create({
+              ...context.repo, head_sha: context.sha,
+              name: 'Love IPA publication diagnostics', status: 'completed', conclusion: 'neutral',
+              output: { title: 'Nhật ký đăng IPA Hai Trái Tim', summary: 'IPA không build lại.',
+                text: paths.length ? paths.map((file) => fs.readFileSync(file, 'utf8')).join('\n').slice(-50000) : 'Chưa chạy bước tải hoặc đăng Release.' }
+            });

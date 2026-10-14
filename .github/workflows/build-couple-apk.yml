@@ -73,9 +73,21 @@ jobs:
       - name: Kiểm tra logic, RLS PostgreSQL và TypeScript
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          npm test
-          npm run check
-          npm run format:check
+          set +e
+          : > /tmp/check.log
+          npm test >> /tmp/check.log 2>&1; code=$?
+          if [ "$code" -eq 0 ]; then npm run check >> /tmp/check.log 2>&1; code=$?; fi
+          if [ "$code" -eq 0 ]; then npm run format:check >> /tmp/check.log 2>&1; code=$?; fi
+          tail -c 40000 /tmp/check.log
+          if [ "$code" -ne 0 ]; then
+            {
+              echo '### Kiểm tra thất bại (log đầy đủ bên dưới)'
+              echo '```'
+              tail -c 20000 /tmp/check.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$code"
       - name: Cấu hình FCM nếu đã có secret
         working-directory: ${{ env.PROJECT_DIR }}
         env:

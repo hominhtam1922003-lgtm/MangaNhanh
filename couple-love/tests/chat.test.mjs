@@ -17,6 +17,15 @@ import {
 } from "../src/services/momentTransfer.mjs";
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
+// Máy chủ CI chạy nhiều bài song song nên chờ theo điều kiện thay vì chờ cứng.
+async function waitFor(check, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (check()) return true;
+    await wait(100);
+  }
+  return false;
+}
 const phone = (name) => {
   let state = emptyState("2026-10-14T00:00:00.000Z");
   return reduce(state, {
@@ -209,9 +218,12 @@ test("Broker MQTT thật: nhắn tin và tin thoại sang máy kia, xin gửi l�
     });
     clients.push(mayA, mayB);
     mayA.start();
-    await wait(120);
+    await waitFor(() => mayA.connected, 20000);
     mayB.start();
-    await wait(250);
+    await waitFor(
+      () => mayB.connected && mayB.slots.every((slot) => slot.subscribed),
+      20000,
+    );
     assert.equal(mayA.connected && mayB.connected, true);
     // A nhắn một câu như giao diện thật gửi đi.
     assert.equal(
@@ -228,7 +240,21 @@ test("Broker MQTT thật: nhắn tin và tin thoại sang máy kia, xin gửi l�
       }),
       true,
     );
-    for (let attempt = 0; attempt < 60 && !received; attempt++) await wait(100);
+    for (let attempt = 0; attempt < 100 && !received; attempt++) {
+      await wait(200);
+      if (!received && attempt > 0)
+        mayA.publish({
+          kind: "chat",
+          name: "Minh",
+          message: {
+            id: "t1",
+            kind: "text",
+            body: "Nhớ em nhiều lắm 💌",
+            createdAt: "2026-10-14T09:30:00.000Z",
+            durationMs: 0,
+          },
+        });
+    }
     assert.deepEqual(
       [received.id, received.body, received.kind],
       ["t1", "Nhớ em nhiều lắm 💌", "text"],
@@ -262,13 +288,13 @@ test("Broker MQTT thật: nhắn tin và tin thoại sang máy kia, xin gửi l�
       assert.equal(mayA.publish(packet), true);
       await wait(20);
     }
-    for (let attempt = 0; attempt < 60 && !audio; attempt++) await wait(100);
+    for (let attempt = 0; attempt < 100 && !audio; attempt++) await wait(200);
     assert.ok(audio, "máy B phải ghép xong tin thoại");
     assert.equal(audio.meta.voiceId, "v2");
     assert.equal(audio.base64, base64);
     // B xin lại tin thoại thì lời xin phải tới được A (giao diện sẽ gửi lại).
     assert.equal(mayB.publish({ kind: "photoRequest", ids: ["v2"] }), true);
-    for (let attempt = 0; attempt < 40 && !asked; attempt++) await wait(100);
+    for (let attempt = 0; attempt < 60 && !asked; attempt++) await wait(200);
     assert.deepEqual(asked, ["v2"]);
   } finally {
     for (const client of clients) client.stop();

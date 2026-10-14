@@ -109,11 +109,11 @@ jobs:
             gh release upload "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --clobber --repo "$GITHUB_REPOSITORY"
           else
             cat > /tmp/ipa-notes.md <<EOF
-Bản iOS **Hai Trái Tim 1.15.0** (file .ipa **chưa ký**), lấy nguyên vẹn từ lần build trên macOS của GitHub Actions.
+          Bản iOS **Hai Trái Tim 1.15.0** (file .ipa **chưa ký**), lấy nguyên vẹn từ lần build trên macOS của GitHub Actions.
 
-Tải file **HaiTraiTim-1.15.0-unsigned.ipa** trong Assets. Gói \`vn.haitraitim.app\`.
+          Tải file **HaiTraiTim-1.15.0-unsigned.ipa** trong Assets. Gói \`vn.haitraitim.app\`.
 
-Bản 1.15.0: cuộc gọi ba lớp (PeerJS có TURN miễn phí → WebRTC qua kênh ghép nối → kênh ghép nối) nên qua được cả mạng chặn kiểu NAT đối xứng, vẫn ưu tiên nối trực tiếp P2P trước; thêm TURN dự phòng miễn phí (Open Relay của Metered: cổng 80/443 và TCP 443). Ở chế độ nền, app khai báo chạy nền cho âm thanh (UIBackgroundModes: audio, voip) nên cuộc gọi tiếp tục khi bạn chuyển sang app khác hoặc khoá máy.
+          Bản 1.15.0: cuộc gọi ba lớp (PeerJS có TURN miễn phí → WebRTC qua kênh ghép nối → kênh ghép nối) nên qua được cả mạng chặn kiểu NAT đối xứng, vẫn ưu tiên nối trực tiếp P2P trước; thêm TURN dự phòng miễn phí (Open Relay của Metered: cổng 80/443 và TCP 443). Ở chế độ nền, app khai báo chạy nền cho âm thanh (UIBackgroundModes: audio, voip) nên cuộc gọi tiếp tục khi bạn chuyển sang app khác hoặc khoá máy.
 
           iPhone **không cài file trực tiếp như APK**: ký lại bằng Sideloadly/AltStore với Apple ID miễn phí (hết hạn sau 7 ngày) hoặc Apple Developer 99 USD/năm để dùng TestFlight.
           EOF

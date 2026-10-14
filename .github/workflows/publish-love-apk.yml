@@ -112,11 +112,11 @@ jobs:
             fi
           else
             cat > /tmp/love-notes.md <<EOF
-APK thử nghiệm **Hai Trái Tim 1.15.0** cho **Android 7.0+ (API 24)**.
+          APK thử nghiệm **Hai Trái Tim 1.15.0** cho **Android 7.0+ (API 24)**.
 
-Tải **HaiTraiTim-1.15.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP. Mạng yếu thì tải **HaiTraiTim-1.15.0-arm64.apk** (bản nhẹ, chỉ arm64-v8a — dùng được cho máy thật đời mới và LDPlayer 64-bit).
+          Tải **HaiTraiTim-1.15.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP. Mạng yếu thì tải **HaiTraiTim-1.15.0-arm64.apk** (bản nhẹ, chỉ arm64-v8a — dùng được cho máy thật đời mới và LDPlayer 64-bit).
 
-Bản 1.15.0: cuộc gọi vẫn ba lớp (PeerJS có TURN miễn phí → WebRTC qua kênh ghép nối → kênh ghép nối), nay **qua được cả mạng chặn kiểu NAT đối xứng / Wi-Fi công ty** nhờ thêm TURN dự phòng (Open Relay của Metered: cổng 80/443 và TCP 443) và vẫn **ưu tiên nối trực tiếp P2P** trước. Cuộc gọi **không mất tiếng khi tắt màn hình**: Android có dịch vụ chạy nổi kèm thông báo "Cuộc gọi đang diễn ra…" và nút **Cúp máy**; iOS khai báo chế độ chạy nền cho âm thanh. Muốn dùng TURN riêng thì đặt EXPO_PUBLIC_TURN_URLS/USER/CREDENTIAL rồi dựng lại APK.
+          Bản 1.15.0: cuộc gọi vẫn ba lớp (PeerJS có TURN miễn phí → WebRTC qua kênh ghép nối → kênh ghép nối), nay **qua được cả mạng chặn kiểu NAT đối xứng / Wi-Fi công ty** nhờ thêm TURN dự phòng (Open Relay của Metered: cổng 80/443 và TCP 443) và vẫn **ưu tiên nối trực tiếp P2P** trước. Cuộc gọi **không mất tiếng khi tắt màn hình**: Android có dịch vụ chạy nổi kèm thông báo "Cuộc gọi đang diễn ra…" và nút **Cúp máy**; iOS khai báo chế độ chạy nền cho âm thanh. Muốn dùng TURN riêng thì đặt EXPO_PUBLIC_TURN_URLS/USER/CREDENTIAL rồi dựng lại APK.
           EOF
             gh release create "$RELEASE_TAG" "release-apk/$APK_FILE" "release-apk/$APK_FILE.sha256" --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.15.0 — APK thử nghiệm" --notes-file /tmp/love-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
           fi

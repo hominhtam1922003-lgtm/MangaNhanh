@@ -84,16 +84,22 @@ jobs:
           exec > >(tee ../ipa-package.log) 2>&1
           VERSION=$(node -p "require('./app.config.js').expo.version")
           echo "Phiên bản: $VERSION"
-          APP=$(find ios/build -maxdepth 6 -type d -name "*.app" | head -1)
+          echo "=== Cây xcarchive ==="
+          ls -la ios/build/HaiTraiTim.xcarchive 2>/dev/null || true
+          ls -la ios/build/HaiTraiTim.xcarchive/Products 2>/dev/null || true
+          ls -la ios/build/HaiTraiTim.xcarchive/Products/Applications 2>/dev/null || true
+          echo "=== Sản phẩm build ==="
+          ls -la ios/build/Build/Products 2>/dev/null || true
+          for dir in ios/build/Build/Products/*; do ls -la "$dir" 2>/dev/null | head -20; done
+          echo "=== Tìm .app trong toàn dự án ==="
+          find . -maxdepth 8 -type d -name "*.app" 2>/dev/null | head -20 || true
+          APP=$(find . -maxdepth 8 -type d -name "*.app" 2>/dev/null | head -1)
           if [ -z "$APP" ]; then
-            APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -maxdepth 6 -type d -name "*.app" 2>/dev/null | head -1)
+            APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -maxdepth 8 -type d -name "*.app" 2>/dev/null | head -1)
           fi
           if [ -z "$APP" ]; then
-            echo "Không tìm thấy .app. Cây thư mục sản phẩm:"
-            ls -la ios/build 2>/dev/null || true
-            ls -la ios/build/Build/Products 2>/dev/null || true
-            echo "40 dòng cuối nhật ký build:"
-            tail -40 ../ios-build.log 2>/dev/null || true
+            echo "Không tìm thấy .app. 60 dòng cuối nhật ký build:"
+            tail -60 ../ios-build.log 2>/dev/null || true
             exit 1
           fi
           echo "Ứng dụng: $APP"

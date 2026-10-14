@@ -1,4 +1,6 @@
 # Nguồn APK 1.9.0: run_id 38541252032 (commit 51bc943, artifact HaiTraiTim-1.9.0-APK).
+# Ghi chú vòng 10: Release nháp hai-trai-tim-v1.9.0-test-51bc943 đã tạo sẵn ở máy,
+# runner chỉ tải artifact của run 38541252032 lên rồi xoá nháp sau khi kiểm tra.
 # Lưu ý: runner không tạo được Release (403) — luôn tạo Release nháp cục bộ trước rồi push file này để runner tải APK lên.
 name: Đăng APK Hai Trái Tim tải trực tiếp
 

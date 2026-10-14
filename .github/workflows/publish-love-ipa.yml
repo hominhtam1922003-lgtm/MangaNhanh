@@ -1,4 +1,6 @@
 # Nguồn IPA 1.9.0: run_id 38541251941 (commit 51bc943, artifact HaiTraiTim-iOS-unsigned-IPA).
+# Ghi chú vòng 10: Release nháp hai-trai-tim-ios-v1.9.0-test-51bc943 đã tạo sẵn ở máy,
+# runner chỉ tải artifact của run 38541251941 lên rồi xoá nháp sau khi kiểm tra.
 # Lưu ý: runner không tạo được Release (403) — luôn tạo Release nháp cục bộ trước rồi push file này để runner tải IPA lên.
 name: Đăng IPA Hai Trái Tim (iOS) tải trực tiếp
 

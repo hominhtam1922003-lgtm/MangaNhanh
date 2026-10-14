@@ -1,0 +1,135 @@
+# Dựng bản iOS (.ipa) cho Hai Trái Tim trên máy macOS của GitHub Actions.
+# Bản này KHÔNG ký sẵn: để cài vào iPhone, bạn ký lại bằng Apple ID của mình
+# (AltStore / Sideloadly trên Windows, hoặc Xcode trên Mac). Ký bằng Apple ID
+# miễn phí thì app hết hạn sau 7 ngày và phải ký lại; tài khoản Apple Developer
+# có phí (99 USD/năm) thì dùng TestFlight và không phải ký lại.
+name: IPA Hai Trái Tim (iOS, chưa ký)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, arena/6f7cfa08-manganhanh]
+    paths: ["couple-love/**", ".github/workflows/build-couple-ipa.yml"]
+permissions:
+  contents: read
+  checks: write
+concurrency:
+  group: love-ipa-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 75
+    env:
+      CI: "1"
+      EXPO_NO_TELEMETRY: "1"
+      PROJECT_DIR: "."
+    steps:
+      - name: Lấy mã nguồn
+        uses: actions/checkout@v5
+      - name: Xác định thư mục dự án
+        run: |
+          if [ -f couple-love/package.json ]; then echo 'PROJECT_DIR=couple-love' >> "$GITHUB_ENV"; fi
+      - name: Cài Node 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: "**/package-lock.json"
+      - name: Chọn Xcode mới nhất có sẵn
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+      - name: Cài phụ thuộc từ lockfile
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npm ci --no-audit --no-fund
+      - name: Sinh dự án iOS (Expo prebuild)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npx expo prebuild --platform ios --no-install --clean
+      - name: Cài CocoaPods
+        working-directory: ${{ env.PROJECT_DIR }}/ios
+        run: |
+          if [ -f Gemfile ]; then
+            bundle install
+            bundle exec pod install
+          else
+            pod install
+          fi
+      - name: Build iOS bản Release, không ký
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -o pipefail
+          WORKSPACE=$(ls -d ios/*.xcworkspace | head -1)
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" -json | python3 -c "import json,sys; data=json.load(sys.stdin); print(data['workspace']['schemes'][0])")
+          echo "Workspace: $WORKSPACE · Scheme: $SCHEME"
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath ios/build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_ENTITLEMENTS="" \
+            EXPANDED_CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee ../ios-build.log | tail -40
+      - name: Đóng gói .ipa chưa ký
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          exec > >(tee ../ipa-package.log) 2>&1
+          VERSION=$(node -p "require('./app.config.js').expo.version")
+          APP=$(ls -d ios/build/Build/Products/Release-iphoneos/*.app | head -1)
+          echo "Ứng dụng: $APP · Phiên bản: $VERSION"
+          test -d "$APP"
+          rm -rf ios/Payload
+          mkdir -p ios/Payload
+          cp -R "$APP" ios/Payload/
+          cd ios
+          zip -qry "../HaiTraiTim-$VERSION-unsigned.ipa" Payload
+          cd ..
+          ls -l "HaiTraiTim-$VERSION-unsigned.ipa"
+          unzip -l "HaiTraiTim-$VERSION-unsigned.ipa" | head -12
+          sha256sum "HaiTraiTim-$VERSION-unsigned.ipa" > "HaiTraiTim-$VERSION-unsigned.ipa.sha256"
+          cat "HaiTraiTim-$VERSION-unsigned.ipa.sha256"
+      - name: Tải .ipa lên Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: HaiTraiTim-iOS-unsigned-IPA
+          path: |
+            ${{ env.PROJECT_DIR }}/HaiTraiTim-*-unsigned.ipa
+            ${{ env.PROJECT_DIR }}/HaiTraiTim-*-unsigned.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - name: Đính kèm lỗi build iOS vào GitHub Checks
+        if: failure() && github.event_name != 'pull_request'
+        working-directory: ${{ env.PROJECT_DIR }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node -e '
+          const fs = require("fs");
+          const parts = [];
+          for (const file of ["/tmp/check.log", "ios-build.log", "ipa-package.log"]) {
+            if (!fs.existsSync(file)) continue;
+            let text = fs.readFileSync(file, "utf8").replace(/\x1b\[[0-9;]*m/g, "");
+            for (const [key, value] of Object.entries(process.env))
+              if (/TOKEN|PASSWORD|SECRET|KEYSTORE|SUPABASE/.test(key) && typeof value === "string" && value.length > 5)
+                text = text.split(value).join("[ĐÃ CHE]");
+            parts.push("## " + file + "\n\n```text\n" + text.split("\n").slice(-150).join("\n").slice(-50000) + "\n```");
+          }
+          if (!parts.length) process.exit(0);
+          fs.writeFileSync("/tmp/love-ipa-check.json", JSON.stringify({
+            name: "Chẩn đoán build iOS Hai Trái Tim",
+            head_sha: process.env.GITHUB_SHA,
+            status: "completed",
+            conclusion: "failure",
+            output: {
+              title: "Nhật ký build iOS đã che bí mật",
+              summary: "IPA chưa dựng xong. Xem nhật ký để sửa cấu hình.",
+              text: parts.join("\n\n"),
+            },
+          }));
+          '
+          if [ -f /tmp/love-ipa-check.json ]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" --input /tmp/love-ipa-check.json
+          fi

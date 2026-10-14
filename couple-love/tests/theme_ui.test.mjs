@@ -4,7 +4,9 @@ import {
   THEMES,
   DEFAULT_THEME,
   isTheme,
+  rgbaOf,
   themeById,
+  withWallpaper,
 } from "../src/logic/themes.mjs";
 import {
   daysInMonth,
@@ -344,4 +346,89 @@ test("Ảnh nền gửi qua kênh kết nối như ảnh khoảnh khắc, có đ
   });
   assert.equal(momentPackets[0].meta.role, "moment");
   assert.equal(momentPackets[0].meta.wallpaperId, "");
+});
+
+test("Ảnh nền: các ô trong giao diện mờ đi để thấy ảnh phía sau (kiểu Zalo)", () => {
+  assert.equal(rgbaOf("#ffffff", 0.8), "rgba(255, 255, 255, 0.8)");
+  assert.equal(
+    rgbaOf("rgba(46, 37, 71, 0.86)", 1),
+    "rgba(46, 37, 71, 0.86)",
+    "màu rgba đã có sẵn thì chỉ nhân thêm độ trong",
+  );
+  for (const theme of THEMES) {
+    const clear = withWallpaper(theme, 0.3);
+    const dim = withWallpaper(theme, 0.7);
+    for (const key of ["surface", "soft", "glass", "border"])
+      assert.match(
+        clear[key],
+        rgba,
+        `${theme.id}: ${key} phải trong suốt khi có ảnh nền`,
+      );
+    assert.equal(
+      Number(clear.veil.match(/([0-9.]+)\)$/)[1]) <
+        Number(dim.veil.match(/([0-9.]+)\)$/)[1]),
+      true,
+      `${theme.id}: “ảnh rõ” phải mỏng hơn “chữ rõ”`,
+    );
+    assert.equal(
+      clear.dark ? Number(clear.veil.match(/([0-9.]+)\)$/)[1]) >= 0.55 : true,
+      true,
+      `${theme.id}: chủ đề tối vẫn cần lớp phủ đủ dày để chữ đọc được`,
+    );
+    // Chữ và màu nhấn giữ nguyên, chỉ nền mờ đi.
+    assert.equal(clear.ink, theme.ink);
+    assert.equal(clear.sub, theme.sub);
+    assert.equal(clear.text, theme.text);
+    assert.deepEqual(
+      clear.hero.map((color) => color.startsWith("rgba(")),
+      [true, true],
+      `${theme.id}: thẻ nổi cũng phải trong suốt`,
+    );
+    const clampLow = Number(
+      withWallpaper(theme, 0.1).veil.match(/([0-9.]+)\)$/)[1],
+    );
+    assert.equal(clampLow >= 0.25 && clampLow <= 0.55, true, "kẹp mức thấp");
+    const clampHigh = Number(
+      withWallpaper(theme, 0.99).veil.match(/([0-9.]+)\)$/)[1],
+    );
+    assert.equal(clampHigh <= 0.8, true, "kẹp mức cao");
+  }
+});
+test("Cài đặt: độ rõ của ảnh nền được lưu và kẹp trong khoảng an toàn", () => {
+  let state = emptyState("2026-01-01T00:00:00.000Z");
+  state = reduce(state, {
+    type: "settings.set",
+    notify: true,
+    relay: true,
+    theme: "hong",
+    wallpaperTint: 0.7,
+  });
+  assert.equal(state.settings.wallpaperTint, 0.7);
+  state = reduce(state, {
+    type: "settings.set",
+    notify: true,
+    relay: true,
+    theme: "hong",
+    wallpaperTint: 0.05,
+  });
+  assert.equal(state.settings.wallpaperTint, 0.3, "quá trong thì chữ khó đọc");
+  state = reduce(state, {
+    type: "settings.set",
+    notify: true,
+    relay: true,
+    theme: "hong",
+    wallpaperTint: 1,
+  });
+  assert.equal(state.settings.wallpaperTint, 0.75);
+  const kept = reduce(state, {
+    type: "settings.set",
+    notify: true,
+    relay: true,
+    theme: "tim",
+  });
+  assert.equal(
+    kept.settings.wallpaperTint,
+    0.75,
+    "không truyền thì giữ nguyên mức đang dùng",
+  );
 });

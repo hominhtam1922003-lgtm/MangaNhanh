@@ -292,6 +292,49 @@ export const THEMES = [
     veil: "rgba(246, 253, 248, 0.87)",
   },
 ];
+/** Đổi màu hex (hoặc rgba) sang rgba với độ trong mong muốn. */
+export function rgbaOf(color, alpha, multiply = true) {
+  const safe = Math.min(1, Math.max(0, Number(alpha) || 0));
+  const hex = /^#([0-9a-f]{6})$/i.exec(String(color));
+  if (hex) {
+    const value = parseInt(hex[1], 16);
+    const r = (value >> 16) & 255;
+    const g = (value >> 8) & 255;
+    const b = value & 255;
+    return `rgba(${r}, ${g}, ${b}, ${Number(safe.toFixed(2))})`;
+  }
+  const rgba = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([0-9.]+)\)$/.exec(
+    String(color),
+  );
+  if (rgba) {
+    const keep = Math.min(
+      1,
+      Math.max(0, multiply ? Number(rgba[4]) * safe : safe),
+    );
+    return `rgba(${rgba[1]}, ${rgba[2]}, ${rgba[3]}, ${Number(keep.toFixed(2))})`;
+  }
+  return color;
+}
+/** Giao diện khi có ảnh nền: các ô trong suốt để thấy ảnh phía sau (kiểu Zalo).
+ *  `tint` là độ đậm của lớp phủ trên ảnh — nhỏ thì ảnh rõ hơn, lớn thì chữ
+ *  càng dễ đọc. Ô nhập, thẻ, thanh trên/dưới đều mờ đi để ảnh hiện xuyên qua. */
+export function withWallpaper(theme, tint = 0.5) {
+  const alpha = Math.min(0.8, Math.max(0.25, Number(tint) || 0.5));
+  const surface = theme.dark ? 0.86 : 0.82;
+  const soft = theme.dark ? 0.78 : 0.72;
+  const glass = theme.dark ? 0.62 : 0.55;
+  const hero = theme.dark ? 0.86 : 0.82;
+  return {
+    ...theme,
+    wallpaper: true,
+    surface: rgbaOf(theme.surface, surface),
+    soft: rgbaOf(theme.soft, soft),
+    glass: rgbaOf(theme.glass, glass),
+    border: rgbaOf(theme.border, theme.dark ? 0.7 : 0.62),
+    hero: [rgbaOf(theme.hero[0], hero), rgbaOf(theme.hero[1], hero)],
+    veil: rgbaOf(theme.veil, theme.dark ? Math.max(alpha, 0.55) : alpha, false),
+  };
+}
 export const DEFAULT_THEME = "hong";
 export const isTheme = (id) => THEMES.some((theme) => theme.id === id);
 export function themeById(id) {

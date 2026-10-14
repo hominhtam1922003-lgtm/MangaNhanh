@@ -50,6 +50,8 @@ export type State = {
     relay: boolean;
     loveNotes: boolean;
     theme: string;
+    /** Độ đậm lớp phủ trên ảnh nền: 0,3 = ảnh rõ · 0,75 = chữ rõ. */
+    wallpaperTint?: number;
   };
   moments: {
     id: string;

@@ -1274,6 +1274,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     <ThemeProvider
       themeId={state.appearance?.theme ?? state.settings.theme ?? "hong"}
       wallpaper={hasWallpaper}
+      wallpaperTint={state.settings.wallpaperTint ?? 0.5}
     >
       <LocalShell
         state={state}

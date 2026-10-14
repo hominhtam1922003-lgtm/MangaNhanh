@@ -542,6 +542,10 @@ export function reduce(state, action) {
           ? next.settings.loveNotes
           : action.loveNotes === true,
       theme: isTheme(action.theme) ? action.theme : next.settings.theme,
+      wallpaperTint:
+        action.wallpaperTint === undefined
+          ? next.settings.wallpaperTint
+          : Math.min(0.75, Math.max(0.3, Number(action.wallpaperTint) || 0.5)),
     };
     if (isTheme(action.theme) && action.theme !== next.appearance.theme) {
       next.appearance = {

@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from "react";
-import { themeById } from "../logic/themes.mjs";
+import { themeById, withWallpaper } from "../logic/themes.mjs";
 // Kiểu chủ đề dùng chung cho cả app: mọi màn hình lấy màu từ đây nên không còn
 // cảnh thẻ hồng nằm trên nền tím.
 export type Theme = {
@@ -23,24 +23,35 @@ export type Theme = {
   glow: string;
   veil: string;
 };
-type ThemeValue = { theme: Theme; wallpaper: boolean };
+type ThemeValue = {
+  theme: Theme;
+  wallpaper: boolean;
+  /** Độ đậm lớp phủ trên ảnh nền: 0,3 = ảnh rõ, 0,7 = chữ rõ. */
+  wallpaperTint: number;
+};
 const ThemeContext = createContext<ThemeValue>({
   theme: themeById("hong") as unknown as Theme,
   wallpaper: false,
+  wallpaperTint: 0.5,
 });
 export function ThemeProvider({
   themeId,
   wallpaper = false,
+  wallpaperTint = 0.5,
   children,
 }: {
   themeId: string;
   wallpaper?: boolean;
+  wallpaperTint?: number;
   children: React.ReactNode;
 }) {
+  const base = themeById(themeId) as unknown as Theme;
+  // Có ảnh nền thì mọi ô đều trong suốt để thấy ảnh phía sau, giống Zalo.
+  const theme = wallpaper
+    ? (withWallpaper(base, wallpaperTint) as unknown as Theme)
+    : base;
   return (
-    <ThemeContext.Provider
-      value={{ theme: themeById(themeId) as unknown as Theme, wallpaper }}
-    >
+    <ThemeContext.Provider value={{ theme, wallpaper, wallpaperTint }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -393,10 +393,53 @@ export default function SettingsLocal({
           })}
         </View>
         <Note>
-          Ảnh nền: chọn một tấm trong thư viện để làm nền trang chủ. Ảnh được
-          nén nhỏ rồi gửi sang máy người thương để hai máy nhìn giống nhau; chưa
-          kết nối thì máy kia nhận khi mở app.
+          Ảnh nền: chọn một tấm trong thư viện để làm nền app. Khi có ảnh nền,
+          các ô trong giao diện tự mờ đi để thấy ảnh phía sau (kiểu Zalo). Ảnh
+          được nén nhỏ rồi gửi sang máy người thương để hai máy nhìn giống nhau;
+          chưa kết nối thì máy kia nhận khi mở app.
         </Note>
+        {state.appearance?.wallpaper ? (
+          <View className="mt-3">
+            <Text className="font-semibold" style={{ color: theme.ink }}>
+              Ảnh nền rõ tới đâu?
+            </Text>
+            <Note>
+              Kéo xuống “Ảnh rõ” nếu muốn thấy ảnh nổi hơn, hoặc lên “Chữ rõ”
+              nếu chữ khó đọc trên ảnh.
+            </Note>
+            <View className="flex-row flex-wrap mt-2">
+              {(
+                [
+                  { label: "Ảnh rõ", value: 0.3 },
+                  { label: "Vừa", value: 0.5 },
+                  { label: "Chữ rõ", value: 0.7 },
+                ] as const
+              ).map((item) => {
+                const selected =
+                  Math.abs((state.settings.wallpaperTint ?? 0.5) - item.value) <
+                  0.01;
+                return (
+                  <View key={item.label} className="mr-2 mb-2">
+                    <Button
+                      label={item.label}
+                      secondary={!selected}
+                      onPress={() =>
+                        update({
+                          type: "settings.set",
+                          notify: state.settings.notify,
+                          relay: state.settings.relay,
+                          loveNotes: state.settings.loveNotes,
+                          theme: state.settings.theme,
+                          wallpaperTint: item.value,
+                        })
+                      }
+                    />
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
         {state.appearance?.wallpaper ? (
           <View className="flex-row items-center mb-1">
             <Image
@@ -549,8 +592,8 @@ export default function SettingsLocal({
         </Card>
       ) : null}
       <Note>
-        Hai Trái Tim {Constants.expoConfig?.version ?? "1.9.0"} (chế độ trên
-        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 10}) — ghi
+        Hai Trái Tim {Constants.expoConfig?.version ?? "1.9.1"} (chế độ trên
+        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 11}) — ghi
         lại số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục
         riêng của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ
         liệu, nên hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch,

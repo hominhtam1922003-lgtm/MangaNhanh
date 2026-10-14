@@ -625,6 +625,8 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   const [pairBusy, setPairBusy] = useState(false);
   const [pairMessage, setPairMessage] = useState("");
   const [accountEmail, setAccountEmail] = useState<string | null>(null);
+  /** Bản dựng này có cấu hình máy chủ ghép nối không (biết sau lần kiểm tra đầu). */
+  const [accountReady, setAccountReady] = useState(false);
   const pairWatcherRef = useRef<PairingWatcher | null>(null);
   const wrongPairRef = useRef(false);
   useEffect(() => {
@@ -2405,7 +2407,10 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     const result = await ensureAccount();
     if (!result.ok) {
       setPairError(result.message);
-      setPairChecked(false);
+      // Đã xác nhận ghép nối trong phiên này rồi thì một lần mạng chập chờn không
+      // được làm văng bạn ra khỏi app; còn máy mới mở mà chưa kiểm tra được thì
+      // vẫn phải dừng ở màn ghép nối cho an toàn.
+      if (!accountRef.current?.partnerId) setPairChecked(false);
       return;
     }
     const fresh = result.account!;
@@ -2441,11 +2446,11 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     let alive = true;
     void (async () => {
       const configured = await accountConfigured();
+      if (!alive) return;
+      setAccountReady(configured);
       if (!configured) {
-        if (alive) {
-          setPairChecked(false);
-          setPairError("");
-        }
+        setPairChecked(false);
+        setPairError("");
         return;
       }
       await refreshAccount();
@@ -2674,8 +2679,11 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
 
   // Chưa ghép nối (hoặc chưa kiểm tra được với máy chủ) thì DỪNG ở đây, không cho
   // vào app: đây là chỗ chặn "tự chui vào phòng MQTT cũ" khi khôi phục sao lưu.
-  const hasCfg = Boolean(account || accountEmail || pairChecked || pairError);
-  if (hasCfg && gate.screen !== "paired") {
+  const hasCfg = accountReady;
+  // Lần kiểm tra đầu tiên chưa xong thì chỉ hiện vòng xoay, chưa doạ "chưa liên
+  // lạc được máy chủ" (tránh báo lỗi giả trong 1–2 giây đầu khi mở app).
+  const waitingFirstCheck = hasCfg && gate.screen === "offline" && !pairError;
+  if (hasCfg && gate.screen !== "paired" && !waitingFirstCheck) {
     return (
       <ThemeProvider themeId={state?.appearance?.theme ?? "hong"}>
         <KeyboardAvoidingView
@@ -2704,16 +2712,20 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     );
   }
 
-  if (!state) {
+  if (!state || waitingFirstCheck) {
     return (
-      <ThemeProvider themeId="hong">
+      <ThemeProvider themeId={state?.appearance?.theme ?? "hong"}>
         <View className="flex-1 bg-pink-50 items-center justify-center">
-          {error ? (
+          {error && !waitingFirstCheck ? (
             <Text className="text-ink px-8 text-center">{error}</Text>
           ) : (
             <>
               <ActivityIndicator color="#e64980" />
-              <Text className="text-love mt-4">Đang mở góc yêu thương…</Text>
+              <Text className="text-love mt-4">
+                {waitingFirstCheck
+                  ? "Đang kiểm tra ghép nối với máy chủ…"
+                  : "Đang mở góc yêu thương…"}
+              </Text>
             </>
           )}
         </View>

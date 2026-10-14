@@ -269,7 +269,22 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Hai Trái Tim 1.13.0 (bản mới nhất) — nói chuyện liền mạch hơn, một máy tắt là máy kia tự tắt, cầu tình yêu vẽ theo tranh
+## Hai Trái Tim 1.14.0 (bản mới nhất) — cuộc gọi tiếng trực tiếp WebRTC, bỏ hình cầu, trái tim ở giữa có vũ trụ quay quanh
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.14.0-test-a352b9f/HaiTraiTim-1.14.0.apk · **77.339.423 byte** · SHA256 `664a9c6cc89b15cd58fd153a8155d8012df021d21081b4a6affef1008ca2249a`
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.14.0-test-a352b9f/HaiTraiTim-1.14.0-arm64.apk · **55.025.174 byte** · SHA256 `df5edeb065d123bb3f91f49a86299290d2d09750f930abd15c87ea79632ba49a`
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.14.0-test-a352b9f/HaiTraiTim-1.14.0-unsigned.ipa · **16.671.745 byte** · SHA256 `f95c9de089b9438f3f4f8e0341f0833859cbc2c9f6e2d5884892312503c639dc`
+
+Trong app mở **Cài đặt**, dòng cuối phải là **1.14.0, bản dựng 16**. Dựng từ `a352b9f` (build 38573992913 / 38573992999). APK nặng hơn bản trước khoảng 16 MB vì đã nhúng **bộ máy gọi điện thật (WebRTC)**; mạng yếu thì tải bản arm64.
+
+Bản 1.14.0 làm đúng hai việc bạn nêu:
+
+1. **Bỏ hẳn hình cầu tình yêu.** Màn hình Yêu nhau giờ chỉ còn **một trái tim 3D ở chính giữa**, xung quanh là **vũ trụ trái tim**: ba quỹ đạo nghiêng nhau, mỗi quỹ đạo mang 4–7 trái tim nhỏ quay với tốc độ khác nhau, nền tinh vân hai quầng sáng và 130 ngôi sao. Vẫn **chỉ một vùng WebGL** nên máy ảo không đơ. Tệp `src/components/LoveBridgeArt.tsx` đã xoá.
+2. **Cuộc gọi tiếng trực tiếp (WebRTC) — nói chuyện liền mạch như gọi thường.** Hai máy vẫn trao đổi tín hiệu qua **kênh ghép nối** (offer/answer/ICE, không cần máy chủ), nhưng khi đã nối thì tiếng nói đi **thẳng máy-tới-máy** theo chuẩn RTP/Opus 20 ms một gói, có **khử vọng** và bộ đệm chống rung mạng. Không còn cắt thành tệp 0,9 giây rồi ghép lại, nên không còn đứt quãng vì micro phải nghỉ giữa hai mảnh. Nếu mạng chặn không nối trực tiếp được trong 4 giây (hoặc máy không có WebRTC), app **tự quay về đường tiếng qua kênh ghép nối** — không ai bị mất cuộc gọi. Màn hình gọi hiện rõ đang dùng đường tiếng nào (“Đang nối tiếng trực tiếp…”, “● Tiếng nét trực tiếp (WebRTC)”, hoặc “○ Tiếng đi qua kênh ghép nối”), và Cài đặt có dòng kiểm tra WebRTC của máy.
+
+78 bài kiểm thử đều xanh, TypeScript sạch, `expo export` cho Android thành công.
+
+## Hai Trái Tim 1.13.0 — nói chuyện liền mạch hơn, một máy tắt là máy kia tự tắt, cầu tình yêu vẽ theo tranh
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.13.0-test-d16a04c/HaiTraiTim-1.13.0.apk · **58.937.849 byte** · SHA256 `1733207396ba849cb4d363ff392f8a21c2cd694eb8ad8875328ca0ad5fe7eda6`
 **APK Android (bản NHẸ, tải nhanh hơn ~27%):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.13.0-test-d16a04c/HaiTraiTim-1.13.0-arm64.apk · **43.308.364 byte** · SHA256 `743f9cc0a6cda9e4081ab67087f278c649e5e8bb2e16758c324ad7b756a3fa5c`

@@ -356,6 +356,13 @@ test("sau khi ghép nối, phòng vẫn được ghi vào dữ liệu máy (gi�
   assert.match(app, /roomFromPair\(fresh\.pairSecret/);
 });
 
+test("màn chặn ghép nối vẫn có lối chuyển dữ liệu thủ công", () => {
+  assert.match(app, /const \[gateManual, setGateManual\] = useState\(false\)/);
+  assert.match(app, /onManual: \(\) => setGateManual\(true\)/);
+  assert.match(app, /if \(gateManual && state\)/, "mở được màn chuyển tay");
+  assert.match(app, /Quay lại ghép nối theo tài khoản/);
+});
+
 test("câu chữ trên giao diện: tóm tắt tài khoản luôn có mã cố định", () => {
   assert.match(
     accountSummary({ uid: "u1", shortCode: "ABC234", partnerId: null }),

@@ -629,6 +629,8 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   const [accountEmail, setAccountEmail] = useState<string | null>(null);
   /** Bản dựng này có cấu hình máy chủ ghép nối không (biết sau lần kiểm tra đầu). */
   const [accountReady, setAccountReady] = useState(false);
+  /** Đang mở màn hình chuyển dữ liệu thủ công ngay trong màn chặn ghép nối. */
+  const [gateManual, setGateManual] = useState(false);
   const pairWatcherRef = useRef<PairingWatcher | null>(null);
   const wrongPairRef = useRef(false);
   useEffect(() => {
@@ -2567,7 +2569,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         await refreshAccount();
         setPairBusy(false);
       })(),
-    onManual: () => setTab("pair"),
+    onManual: () => setGateManual(true),
   };
   /**
    * Giữ kết nối khi app ở chế độ nền (công tắc trong Cài đặt): Android mở một
@@ -2741,6 +2743,43 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   // lạc được máy chủ" (tránh báo lỗi giả trong 1–2 giây đầu khi mở app).
   const waitingFirstCheck = hasCfg && gate.screen === "offline" && !pairError;
   if (hasCfg && gate.screen !== "paired" && !waitingFirstCheck) {
+    // Dữ liệu máy phải đọc xong mới mở được màn chuyển tay (đọc tệp dự phòng…).
+    if (gateManual && state)
+      return (
+        <ThemeProvider themeId={state?.appearance?.theme ?? "hong"}>
+          <View className="flex-1 bg-pink-50">
+            <View className="px-5 pt-4">
+              <Text className="text-xl font-bold text-ink">
+                Chuyển dữ liệu thủ công
+              </Text>
+              <Text className="text-xs text-stone-500 mt-1">
+                Không cần ghép nối: dán mã hoặc dùng tệp dự phòng để chuyển dữ
+                liệu khi một máy không có mạng.
+              </Text>
+              <View className="mt-2">
+                <Button
+                  label="Quay lại ghép nối theo tài khoản"
+                  secondary
+                  onPress={() => setGateManual(false)}
+                />
+              </View>
+            </View>
+            <PairLocal
+              state={state}
+              update={update}
+              pairCode={account?.shortCode ?? ""}
+              initialCode=""
+              relayStatus={relayStatus}
+              relayLog={relayLog}
+              selfTest={selfTest}
+              onRunSelfTest={() => setSelfTest(relaySelfTest())}
+              lastError={lastError}
+              onRetryRelay={() => {}}
+              syncNow={() => publishCurrent(true)}
+            />
+          </View>
+        </ThemeProvider>
+      );
     return (
       <ThemeProvider themeId={state?.appearance?.theme ?? "hong"}>
         <KeyboardAvoidingView

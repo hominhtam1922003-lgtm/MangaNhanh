@@ -2,6 +2,116 @@
 // nhưng nội dung luôn được mã hóa đầu-cuối bằng NaCl secretbox nên broker chỉ thấy dữ liệu đã mã hóa.
 import nacl from "tweetnacl";
 
+// React Native/Hermes KHÔNG có TextEncoder/TextDecoder, nên tự viết phần UTF-8.
+function utf8Encode(value) {
+  const text = String(value);
+  const bytes = [];
+  for (let index = 0; index < text.length; index++) {
+    let code = text.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff && index + 1 < text.length) {
+      const next = text.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        code = ((code - 0xd800) << 10) + (next - 0xdc00) + 0x10000;
+        index += 1;
+      }
+    }
+    if (code < 0x80) bytes.push(code);
+    else if (code < 0x800) bytes.push(0xc0 | (code >> 6), 0x80 | (code & 63));
+    else if (code < 0x10000)
+      bytes.push(
+        0xe0 | (code >> 12),
+        0x80 | ((code >> 6) & 63),
+        0x80 | (code & 63),
+      );
+    else
+      bytes.push(
+        0xf0 | (code >> 18),
+        0x80 | ((code >> 12) & 63),
+        0x80 | ((code >> 6) & 63),
+        0x80 | (code & 63),
+      );
+  }
+  return Uint8Array.from(bytes);
+}
+function utf8Decode(bytes) {
+  let out = "";
+  let index = 0;
+  while (index < bytes.length) {
+    const first = bytes[index];
+    let size = 0;
+    let code = 0;
+    if (first < 0x80) {
+      size = 1;
+      code = first;
+    } else if ((first & 0xe0) === 0xc0) {
+      size = 2;
+      code = first & 0x1f;
+    } else if ((first & 0xf0) === 0xe0) {
+      size = 3;
+      code = first & 0x0f;
+    } else if ((first & 0xf8) === 0xf0) {
+      size = 4;
+      code = first & 0x07;
+    } else {
+      out += "\ufffd";
+      index += 1;
+      continue;
+    }
+    if (index + size > bytes.length) {
+      out += "\ufffd";
+      break;
+    }
+    let valid = true;
+    for (let step = 1; step < size; step++) {
+      const next = bytes[index + step];
+      if ((next & 0xc0) !== 0x80) {
+        valid = false;
+        break;
+      }
+      code = (code << 6) | (next & 0x3f);
+    }
+    if (!valid) {
+      out += "\ufffd";
+      index += 1;
+      continue;
+    }
+    index += size;
+    if (code > 0xffff) {
+      code -= 0x10000;
+      out += String.fromCharCode(
+        0xd800 + (code >> 10),
+        0xdc00 + (code & 0x3ff),
+      );
+    } else out += String.fromCharCode(code);
+  }
+  return out;
+}
+// Nguồn ngẫu nhiên an toàn: React Native không có crypto.getRandomValues, nên
+// relay.ts cài nguồn từ expo-crypto (getRandomBytes đồng bộ).
+let randomReady = false;
+export function installRandomBytes(source) {
+  if (typeof source !== "function")
+    throw new Error("Thiếu nguồn ngẫu nhiên an toàn.");
+  nacl.setPRNG((target, count) => {
+    const bytes = source(count);
+    if (!bytes || bytes.length < count)
+      throw new Error("Nguồn ngẫu nhiên của máy trả về không đủ dữ liệu.");
+    for (let index = 0; index < count; index++) target[index] = bytes[index];
+  });
+  randomReady = true;
+}
+export function randomSourceReady() {
+  return randomReady || Boolean(globalThis.crypto?.getRandomValues);
+}
+function secureBytes(count) {
+  try {
+    return nacl.randomBytes(count);
+  } catch {
+    throw new Error(
+      "Máy chưa có nguồn ngẫu nhiên an toàn nên chưa tạo được phòng kết nối.",
+    );
+  }
+}
 export const BROKERS = [
   "wss://broker.emqx.io:8084/mqtt", // trạm chính, thường nhanh nhất
   "wss://broker-cn.emqx.io:8084/mqtt", // trạm châu Á, gần Việt Nam
@@ -10,8 +120,6 @@ export const BROKERS = [
   "wss://test.mosquitto.org:8081/mqtt",
 ];
 export const TOPIC_PREFIX = "haitraitim/v3/";
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 const ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
@@ -50,7 +158,7 @@ function sha512(bytes) {
   return nacl.hash(bytes);
 }
 function roomFromSeed(seed) {
-  const material = sha512(encoder.encode(seed));
+  const material = sha512(utf8Encode(seed));
   return {
     id: toBase64Url(material.slice(0, 16)),
     key: toBase64Url(material.slice(32, 64)),
@@ -62,8 +170,8 @@ function roomFromSeed(seed) {
 const codePattern = /^\d{6}$/;
 export function createRoom() {
   return {
-    id: toBase64Url(nacl.randomBytes(16)),
-    key: toBase64Url(nacl.randomBytes(32)),
+    id: toBase64Url(secureBytes(16)),
+    key: toBase64Url(secureBytes(32)),
     mode: "qr",
     code: null,
   };
@@ -97,8 +205,8 @@ export function roomFromQr(text) {
 export function seal(room, value) {
   const key = fromBase64Url(room.key);
   if (key.length !== 32) throw new Error("Khóa phòng không hợp lệ.");
-  const nonce = nacl.randomBytes(24);
-  const box = nacl.secretbox(encoder.encode(JSON.stringify(value)), nonce, key);
+  const nonce = secureBytes(24);
+  const box = nacl.secretbox(utf8Encode(JSON.stringify(value)), nonce, key);
   const combined = new Uint8Array(nonce.length + box.length);
   combined.set(nonce, 0);
   combined.set(box, nonce.length);
@@ -117,7 +225,7 @@ export function open(room, text) {
     throw new Error(
       "Không giải mã được gói tin (sai phòng hoặc dữ liệu hỏng).",
     );
-  return JSON.parse(decoder.decode(box));
+  return JSON.parse(utf8Decode(box));
 }
 export function buildRelayPayload(state, limit = 60000, deviceId = "me") {
   // Chỉ gửi dữ liệu CỦA MÌNH: nhật ký do mình viết, chu kỳ, kỷ niệm, lời nhắc, hồ sơ.
@@ -173,7 +281,7 @@ function varint(value) {
   return Uint8Array.from(bytes);
 }
 function utf8Field(text) {
-  const bytes = encoder.encode(text);
+  const bytes = utf8Encode(text);
   const length = new Uint8Array([
     (bytes.length >> 8) & 255,
     bytes.length & 255,
@@ -212,7 +320,7 @@ export function encodeSubscribe(packetId, topic) {
   return join([Uint8Array.from([0x82]), varint(body.length), body]);
 }
 export function encodePublish(topic, text) {
-  const body = join([utf8Field(topic), encoder.encode(text)]);
+  const body = join([utf8Field(topic), utf8Encode(text)]);
   return join([Uint8Array.from([0x30]), varint(body.length), body]);
 }
 export function encodePuback(packetId) {
@@ -259,10 +367,10 @@ export function decodePackets(buffer) {
       packets.push({ type: "pingresp" });
     } else if (type === 3) {
       const topicLength = (body[0] << 8) | body[1];
-      const topic = decoder.decode(body.slice(2, 2 + topicLength));
+      const topic = utf8Decode(body.slice(2, 2 + topicLength));
       const qos = (header >> 1) & 3;
       const payloadOffset = 2 + topicLength + (qos > 0 ? 2 : 0);
-      const text = decoder.decode(body.slice(payloadOffset));
+      const text = utf8Decode(body.slice(payloadOffset));
       const packetId =
         qos > 0 ? (body[2 + topicLength] << 8) | body[3 + topicLength] : 0;
       packets.push({ type: "publish", topic, text, qos, packetId });
@@ -276,6 +384,11 @@ const HELLO_MS = 45000;
 const randomMark = () =>
   Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
 const OPEN_MS = 12000;
+const pad2 = (value) => (value < 10 ? "0" : "") + value;
+const clock = () => {
+  const now = new Date();
+  return `${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
+};
 const shortHost = (url) =>
   String(url)
     .replace(/^wss?:\/\//, "")
@@ -404,11 +517,7 @@ export class RelayClient {
   }
   note(slot, text) {
     this.onLog({
-      time: new Date().toLocaleTimeString("vi-VN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      }),
+      time: clock(),
       text: slot ? `${shortHost(slot.url)}: ${text}` : text,
     });
   }
@@ -441,7 +550,7 @@ export class RelayClient {
         event.data instanceof ArrayBuffer
           ? new Uint8Array(event.data)
           : typeof event.data === "string"
-            ? encoder.encode(event.data)
+            ? utf8Encode(event.data)
             : new Uint8Array(event.data?.buffer ?? []);
       this.handle(bytes, slot);
     };

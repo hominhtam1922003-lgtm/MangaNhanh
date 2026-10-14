@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import nacl from "tweetnacl";
 import {
   BROKERS,
   RelayClient,
@@ -12,8 +13,10 @@ import {
   encodePublish,
   encodeSubscribe,
   fromBase64Url,
+  installRandomBytes,
   makeCode,
   open,
+  randomSourceReady,
   roomFromCode,
   roomFromQr,
   roomToQr,
@@ -418,4 +421,111 @@ test("Kết nối tức thời: hai máy nhập cùng mã 6 số thì CẢ HAI c
     for (const client of clients) client.stop();
     globalThis.WebSocket = realWebSocket;
   }
+});
+
+test("Kết nối tức thời: chạy được khi máy KHÔNG có TextEncoder/TextDecoder", async () => {
+  const savedEncoder = globalThis.TextEncoder;
+  const savedDecoder = globalThis.TextDecoder;
+  try {
+    // React Native/Hermes không cấp hai lớp này; nếu mã còn dùng chúng thì app văng.
+    delete globalThis.TextEncoder;
+    delete globalThis.TextDecoder;
+    const module = await import(
+      `../src/services/relayProtocol.mjs?khong-encoder=${Date.now()}`
+    );
+    const room = module.createRoom();
+    const message = {
+      kind: "state",
+      name: "Ngọc Ánh",
+      payload: { note: "ạ ệ ị 💞 nhớ em" },
+    };
+    assert.equal(
+      module.open(room, module.seal(room, message)).name,
+      "Ngọc Ánh",
+    );
+    assert.equal(
+      module.roomFromCode("123456").id,
+      roomFromCode("123456").id,
+      "phòng theo mã 6 số vẫn suy ra y hệt",
+    );
+    const publish = module.encodePublish(
+      "haitraitim/v3/abc",
+      module.seal(room, message),
+    );
+    const decoded = module.decodePackets(publish).packets[0];
+    assert.equal(
+      module.open(room, decoded.text).payload.note,
+      "ạ ệ ị 💞 nhớ em",
+    );
+  } finally {
+    globalThis.TextEncoder = savedEncoder;
+    globalThis.TextDecoder = savedDecoder;
+  }
+});
+test("Kết nối tức thời: UTF-8 tự viết đúng chuẩn (so từng byte với Node)", () => {
+  const room = createRoom();
+  const samples = [
+    "xin chào 💞",
+    "Ngọc Ánh nhớ Minh",
+    "ạ ệ ị ỏ ụ ỳ ỹ",
+    "𠮷 emoji 4 byte",
+    "dòng dài " + "â".repeat(400),
+  ];
+  for (const sample of samples) {
+    const sealed = seal(room, { name: sample, note: sample });
+    const raw = fromBase64Url(sealed);
+    const opened = nacl.secretbox.open(
+      raw.slice(24),
+      raw.slice(0, 24),
+      fromBase64Url(room.key),
+    );
+    assert.ok(opened, "giải mã được bằng tweetnacl của Node");
+    assert.deepEqual(
+      Array.from(opened),
+      Array.from(
+        Buffer.from(JSON.stringify({ name: sample, note: sample }), "utf8"),
+      ),
+      `byte phải khớp chuẩn UTF-8 cho: ${sample.slice(0, 20)}`,
+    );
+    assert.equal(
+      open(room, sealed).name,
+      sample,
+      "đọc lại đúng dấu tiếng Việt",
+    );
+  }
+});
+test("Kết nối tức thời: cài nguồn ngẫu nhiên từ máy và báo lỗi rõ ràng khi thiếu", () => {
+  let counter = 0;
+  const standard = (size) => {
+    const bytes = new Uint8Array(size);
+    for (let offset = 0; offset < size; offset += 4096)
+      globalThis.crypto.getRandomValues(
+        bytes.subarray(offset, Math.min(size, offset + 4096)),
+      );
+    return bytes;
+  };
+  try {
+    installRandomBytes((size) =>
+      Uint8Array.from({ length: size }, () => counter++ % 256),
+    );
+    assert.equal(randomSourceReady(), true, "cài xong thì báo đã sẵn sàng");
+    const room = createRoom();
+    assert.equal(fromBase64Url(room.id).length, 16);
+    assert.deepEqual(
+      Array.from(fromBase64Url(room.id)).slice(0, 4),
+      [0, 1, 2, 3],
+      "phòng dùng đúng byte do máy cấp",
+    );
+    assert.throws(() => installRandomBytes(null), /nguồn ngẫu nhiên/);
+    installRandomBytes(() => new Uint8Array(1));
+    assert.throws(() => createRoom(), /ngẫu nhiên|Nguồn/);
+    assert.throws(() => seal(room, { kind: "ping" }), /ngẫu nhiên|Nguồn/);
+  } finally {
+    installRandomBytes(standard);
+  }
+  assert.equal(
+    createRoom().id.length > 0,
+    true,
+    "sau khi trả lại nguồn chuẩn vẫn tạo được phòng",
+  );
 });

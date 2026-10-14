@@ -32,6 +32,8 @@ export default function SettingsLocal({
   onToggleLock,
   onSwitchMode,
   onOpenPair,
+  lastError,
+  onClearError,
 }: {
   state: State;
   update: (action: Record<string, unknown>) => void;
@@ -41,6 +43,8 @@ export default function SettingsLocal({
   onToggleLock: (value: boolean) => Promise<void>;
   onSwitchMode: () => void;
   onOpenPair: () => void;
+  lastError: string;
+  onClearError: () => void;
 }) {
   const [name, setName] = useState(state.me.nickname);
   const [busy, setBusy] = useState(false);
@@ -290,9 +294,20 @@ export default function SettingsLocal({
           }
         />
       </Card>
+      {lastError ? (
+        <Card>
+          <Title small>Lỗi gần nhất</Title>
+          <Note>{lastError}</Note>
+          <Note>
+            Chụp màn hình dòng lỗi này gửi cho tôi là tôi sửa được ngay. Lỗi
+            không làm mất dữ liệu của bạn.
+          </Note>
+          <Button label="Xóa dòng lỗi này" secondary onPress={onClearError} />
+        </Card>
+      ) : null}
       <Note>
-        Hai Trái Tim {Constants.expoConfig?.version ?? "1.4.0"} (chế độ trên
-        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 5}) — ghi
+        Hai Trái Tim {Constants.expoConfig?.version ?? "1.5.0"} (chế độ trên
+        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 6}) — ghi
         lại số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục
         riêng của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ
         liệu, nên hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch,

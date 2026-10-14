@@ -41,8 +41,15 @@ import {
   RelayClient,
   payloadKey,
   relayPayloadFor,
+  relaySelfTest,
   roomFromState,
 } from "./src/services/relay";
+import {
+  clearCrash,
+  describe,
+  readCrash,
+  saveCrash,
+} from "./src/services/crashlog";
 import HomeLocal from "./src/screens/local/HomeLocal";
 import CycleLocal from "./src/screens/local/CycleLocal";
 import DiaryLocal from "./src/screens/local/DiaryLocal";
@@ -404,6 +411,10 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     summary?: { host: string; state: string }[];
   }>({ state: "off", broker: null, partnerOnline: false });
   const [relayLog, setRelayLog] = useState<string[]>([]);
+  const [lastError, setLastError] = useState("");
+  const [selfTest, setSelfTest] = useState<
+    { name: string; ok: boolean; detail: string }[]
+  >([]);
   const readyRef = useRef(false);
   const authenticating = useRef(false);
   const stateRef = useRef<State | null>(null);
@@ -416,6 +427,26 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   const sentRoomRef = useRef("");
   const joinedRef = useRef("");
   const relayRoom = state ? roomFromState(state) : null;
+  // Bắt mọi lỗi JavaScript: ghi lại để hiển thị trong app thay vì văng im lặng.
+  useEffect(() => {
+    const utils = (
+      globalThis as unknown as {
+        ErrorUtils?: {
+          setGlobalHandler: (
+            handler: (error: unknown, isFatal?: boolean) => void,
+          ) => void;
+          getGlobalHandler?: () => (error: unknown, isFatal?: boolean) => void;
+        };
+      }
+    ).ErrorUtils;
+    if (!utils?.setGlobalHandler) return;
+    utils.setGlobalHandler((error: unknown, isFatal?: boolean) => {
+      const text = `${isFatal ? "Lỗi nghiêm trọng" : "Lỗi"}: ${describe(error)}`;
+      void saveCrash(text);
+      setLastError(text);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     let alive = true;
     void (async () => {
@@ -433,6 +464,16 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       setState(next);
       if (next !== loaded) void persistState(next);
       void rescheduleReminders(next).catch(() => {});
+      setSelfTest(relaySelfTest());
+      const previous = await readCrash();
+      if (previous) {
+        setLastError(previous.split("\n")[0]);
+        Alert.alert(
+          "Lần mở trước app gặp lỗi",
+          previous.split("\n").slice(0, 3).join("\n") +
+            "\n\nXem đầy đủ ở Cài đặt → Lỗi gần nhất.",
+        );
+      }
     })().catch(() => {
       if (alive) setError("Không đọc được dữ liệu trên máy.");
       setState(null);
@@ -791,6 +832,9 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               initialCode={state.links.length > 0 ? "1" : ""}
               relayStatus={relayStatus}
               relayLog={relayLog}
+              selfTest={selfTest}
+              onRunSelfTest={() => setSelfTest(relaySelfTest())}
+              lastError={lastError}
               onRetryRelay={() => {
                 const client = relayRef.current;
                 if (!client) return;
@@ -818,6 +862,11 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               onToggleLock={toggleLock}
               onSwitchMode={onSwitchMode}
               onOpenPair={() => setTab("pair")}
+              lastError={lastError}
+              onClearError={() => {
+                setLastError("");
+                void clearCrash();
+              }}
             />
           )}
         </ScrollView>
@@ -930,16 +979,49 @@ function Root() {
   if (mode === "local") return <LocalApp onSwitchMode={() => pick("cloud")} />;
   return <CloudApp onSwitchMode={() => pick("local")} />;
 }
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { message: string }
+> {
+  state = { message: "" };
+  static getDerivedStateFromError(error: unknown) {
+    return { message: describe(error) };
+  }
+  componentDidCatch(error: unknown) {
+    void saveCrash("Màn hình hiển thị: " + describe(error));
+  }
+  render() {
+    if (this.state.message)
+      return (
+        <View className="flex-1 bg-pink-50 justify-center px-8">
+          <Text className="text-6xl text-center mb-4">💔</Text>
+          <Title>Màn hình này gặp lỗi</Title>
+          <Note>{this.state.message}</Note>
+          <Note>
+            Chụp màn hình này gửi cho tôi là tôi sửa được ngay. Dữ liệu của bạn
+            vẫn còn nguyên trên máy.
+          </Note>
+          <Button
+            label="Mở lại màn hình"
+            onPress={() => this.setState({ message: "" })}
+          />
+        </View>
+      );
+    return this.props.children as React.ReactElement;
+  }
+}
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <SafeAreaView
-        style={{ flex: 1, backgroundColor: "#fff1f2" }}
-        edges={["top", "bottom"]}
-      >
-        <StatusBar style="dark" />
-        <Root />
-      </SafeAreaView>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <SafeAreaView
+          style={{ flex: 1, backgroundColor: "#fff1f2" }}
+          edges={["top", "bottom"]}
+        >
+          <StatusBar style="dark" />
+          <Root />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

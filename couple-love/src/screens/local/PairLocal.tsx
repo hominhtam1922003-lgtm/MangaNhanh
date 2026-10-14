@@ -45,6 +45,9 @@ export default function PairLocal({
   initialCode,
   relayStatus,
   relayLog,
+  selfTest,
+  onRunSelfTest,
+  lastError,
   syncNow,
   onRetryRelay,
 }: {
@@ -53,6 +56,9 @@ export default function PairLocal({
   initialCode: string;
   relayStatus: Status;
   relayLog: string[];
+  selfTest: { name: string; ok: boolean; detail: string }[];
+  onRunSelfTest: () => void;
+  lastError: string;
   syncNow: () => void;
   onRetryRelay: () => void;
 }) {
@@ -278,11 +284,25 @@ export default function PairLocal({
                     {item.host}: {item.state}
                   </Text>
                 ))}
+                {selfTest.map((item) => (
+                  <Text key={item.name} className="text-xs text-stone-600">
+                    {item.ok ? "✓ " : "✗ "}
+                    {item.name}: {item.detail}
+                  </Text>
+                ))}
+                <Button
+                  label="Tự kiểm tra lại"
+                  secondary
+                  onPress={onRunSelfTest}
+                />
                 {relayLog.slice(-6).map((line) => (
                   <Text key={line} className="text-xs text-stone-400 mt-1">
                     {line}
                   </Text>
                 ))}
+                {lastError ? (
+                  <Note>Lỗi gần nhất trên máy: {lastError}</Note>
+                ) : null}
               </View>
             ) : null}
             <Button

@@ -438,9 +438,14 @@ export function reduce(state, action) {
             : action.room.mode === "pair"
               ? "pair"
               : "qr",
+        // Ghép nối theo tài khoản dùng mã cố định chữ–số (ví dụ ABC234); phòng
+        // kiểu QR/cũ vẫn dùng mã 6 số. Ngoài hai dạng đó thì không lưu mã.
         code: /^\d{6}$/.test(String(action.room.code ?? ""))
           ? String(action.room.code)
-          : null,
+          : action.room.mode === "pair" &&
+              /^[A-Za-z0-9]{4,12}$/.test(String(action.room.code ?? ""))
+            ? String(action.room.code).toUpperCase()
+            : null,
         role: action.room.role === "guest" ? "guest" : "host",
       };
     }

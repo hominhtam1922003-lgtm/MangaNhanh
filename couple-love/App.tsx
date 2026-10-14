@@ -122,6 +122,8 @@ import { pairGate, gateReasonText } from "./src/logic/pairing.mjs";
 import {
   accountConfigured,
   currentSession,
+  saveAccountProfile,
+  uploadAvatar,
   ensureAccount,
   pairWithCode,
   signInAnonymously as signInAnonymous,
@@ -2429,6 +2431,22 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         nickname: fresh.partnerName || fresh.partnerCode || "Người thương",
         avatar: fresh.partnerAvatar ?? undefined,
       });
+      // Ghi phòng kết nối vào dữ liệu máy — KHÔNG phải để tin bộ nhớ máy, mà để
+      // các phần khác (giữ kết nối khi tắt màn hình, Chi tiết kết nối) hoạt động.
+      try {
+        const room = roomFromPair(fresh.pairSecret ?? "");
+        const current = stateRef.current?.relay;
+        if (
+          !current ||
+          current.id !== room.id ||
+          current.key !== room.key ||
+          current.mode !== "pair"
+        )
+          update({
+            type: "relay.set",
+            room: { ...room, code: fresh.shortCode ?? "", role: "host" },
+          });
+      } catch {}
     }
     if (reason) setPairMessage(reason);
   }
@@ -2630,6 +2648,45 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   /**
+   * Đổi tên hoặc ảnh đại diện → lưu lên Supabase (hồ sơ theo tài khoản), để lần
+   * sau mở app trên máy nào cũng thấy đúng tên/ảnh. Chỉ gọi khi ĐÃ đăng nhập và
+   * có thay đổi thật; lỗi mạng thì bỏ qua im lặng (dữ liệu vẫn nằm ở máy).
+   */
+  const syncedProfileRef = useRef<{
+    name: string;
+    avatar: string | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!state) return;
+    if (!account?.uid) return;
+    const name = state.me?.nickname ?? "";
+    const avatar = state.me?.avatar ?? null;
+    const previous = syncedProfileRef.current;
+    if (!previous) {
+      // Lần đầu trong phiên: ghi nhận để không đẩy lên máy chủ một cách vô ích,
+      // nhưng nếu máy chủ còn trống tên thì điền luôn.
+      syncedProfileRef.current = { name, avatar };
+      if (name && !account.displayName)
+        void saveAccountProfile({ displayName: name });
+      return;
+    }
+    if (previous.name === name && previous.avatar === avatar) return;
+    syncedProfileRef.current = { name, avatar };
+    void (async () => {
+      if (previous.name !== name && name)
+        await saveAccountProfile({ displayName: name });
+      if (previous.avatar !== avatar && avatar) {
+        const base64 = imageBase64(avatar, AVATAR_LIMIT_BYTES);
+        if (base64) {
+          const saved = await uploadAvatar(account.uid, base64);
+          if (saved.ok) return;
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.me?.nickname, state?.me?.avatar, account?.uid]);
+
+  /**
    * Đổi ảnh đại diện: báo máy kia NGAY bằng một gói hồ sơ nhỏ rồi gửi kèm tệp
    * ảnh (tối đa 120 KB) — máy kia đổi giao diện trong tích tắc, không phải đợi
    * gói dữ liệu định kỳ. Lần mở đầu tiên thì bỏ qua: lúc đó gói dữ liệu và phần
@@ -2800,6 +2857,10 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         tab={tab}
         setTab={setTab}
         wallpaperUri={hasWallpaper ? imageUri(storedWallpaper) : null}
+        account={account}
+        pairMessage={pairMessage}
+        onUnpair={pairActions.onUnpair}
+        onSignOutAccount={pairActions.onSignOut}
         call={call}
         callTick={callTick}
         onStartCall={startCall}
@@ -2884,6 +2945,10 @@ function LocalShell({
   tab,
   setTab,
   wallpaperUri,
+  account,
+  pairMessage,
+  onUnpair,
+  onSignOutAccount,
   notifyState,
   onEnableNotifications,
   call,
@@ -2941,6 +3006,11 @@ function LocalShell({
   tab: string;
   setTab: (value: string) => void;
   wallpaperUri: string | null;
+  /** Tài khoản ghép nối trên máy chủ (null nếu bản dựng không có cấu hình). */
+  account: Account | null;
+  pairMessage: string;
+  onUnpair: () => void;
+  onSignOutAccount: () => void;
   notifyState: "unknown" | "granted" | "denied";
   onEnableNotifications: () => void;
   call: CallInfo | null;
@@ -3232,6 +3302,7 @@ function LocalShell({
             ) : tab === "pair" ? (
               <PairLocal
                 {...props}
+                pairCode={account?.shortCode ?? ""}
                 initialCode={state.links.length > 0 ? "1" : ""}
                 relayStatus={relayStatus}
                 relayLog={relayLog}
@@ -3257,6 +3328,10 @@ function LocalShell({
             ) : (
               <SettingsLocal
                 {...props}
+                account={account}
+                pairMessage={pairMessage}
+                onUnpair={onUnpair}
+                onSignOutAccount={onSignOutAccount}
                 onPickRingtone={onPickRingtone}
                 onResetRingtone={onResetRingtone}
                 replaceState={replaceState}

@@ -296,6 +296,66 @@ test("Bước 2 — bỏ nút Trả lời thừa ngoài bong bóng, chỉ nhấn
   );
 });
 
+test("dữ liệu máy: phòng kiểu ghép nối theo tài khoản giữ mã cố định chữ–số", () => {
+  let state = emptyState();
+  const room = roomFromPair("khoa-du-dai-cho-thoa-dieu-kien-abc");
+  state = reduce(state, {
+    type: "relay.set",
+    room: { ...room, code: "ABC234", role: "host" },
+  });
+  assert.equal(state.relay.mode, "pair");
+  assert.equal(
+    state.relay.code,
+    "ABC234",
+    "mã cố định dùng chữ nên phải giữ được",
+  );
+  assert.equal(state.relay.role, "host");
+  const again = reduce(emptyState(), {
+    type: "relay.set",
+    room: { ...room, code: "abc234" },
+  });
+  assert.equal(again.relay.code, "ABC234", "chuẩn hoá chữ hoa");
+});
+
+test("màn hình ghép nối: hết mã 6 số ngẫu nhiên, còn ghép nối theo tài khoản", () => {
+  const pair = read("src/screens/local/PairLocal.tsx");
+  assert.equal(/makeCode/.test(pair), false, "không còn sinh mã ngẫu nhiên");
+  assert.equal(/Tạo mã 6 số/.test(pair), false, "không còn nút tạo mã 6 số");
+  assert.equal(
+    /roomFromCode|roomToQr|QRCode/.test(pair),
+    false,
+    "bỏ luồng mã/QR cũ",
+  );
+  assert.match(pair, /Ghép nối bằng tài khoản/);
+  assert.match(pair, /pairCode/, "hiện mã cố định của tài khoản");
+});
+
+test("Ngắt kết nối có mặt ở cả màn ghép nối và Cài đặt (cả hai máy)", () => {
+  const settings = read("src/screens/local/SettingsLocal.tsx");
+  assert.match(settings, /Ngắt kết nối \(cả hai máy\)/);
+  assert.match(settings, /onUnpair/);
+  assert.match(settings, /Đăng xuất tài khoản ghép nối/);
+  assert.match(
+    pairGateScreen,
+    /Ngắt kết nối \(cả hai máy\)/,
+    "màn chặn cũng có nút ngắt kết nối",
+  );
+});
+
+test("đổi tên / ảnh đại diện được lưu lên Supabase", () => {
+  assert.match(app, /saveAccountProfile\(\{ displayName: name \}\)/);
+  assert.match(app, /uploadAvatar\(account\.uid, base64\)/);
+  const service = read("src/services/account.ts");
+  assert.match(service, /from\("avatars"\)/);
+  assert.match(service, /avatar\.jpg/);
+});
+
+test("sau khi ghép nối, phòng vẫn được ghi vào dữ liệu máy (giữ kết nối khi tắt màn hình)", () => {
+  assert.match(app, /type: "relay\.set",/);
+  assert.match(app, /pairing\.clear/);
+  assert.match(app, /roomFromPair\(fresh\.pairSecret/);
+});
+
 test("câu chữ trên giao diện: tóm tắt tài khoản luôn có mã cố định", () => {
   assert.match(
     accountSummary({ uid: "u1", shortCode: "ABC234", partnerId: null }),

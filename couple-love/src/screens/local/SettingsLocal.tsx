@@ -27,6 +27,7 @@ import {
 import { requestNotifications } from "../../services/localnotify";
 import { restoreFromPayload } from "../../logic/localState.mjs";
 import { THEMES } from "../../logic/themes.mjs";
+import { formatPairCode } from "../../logic/pairing.mjs";
 import { useTheme } from "../../theme/ThemeContext";
 import { peerSupport, rtcSupport } from "../../services/rtcCall";
 import { callServiceSupport } from "../../services/callService";
@@ -47,6 +48,10 @@ export default function SettingsLocal({
   onOpenHome,
   onPickRingtone,
   onResetRingtone,
+  account,
+  pairMessage,
+  onUnpair,
+  onSignOutAccount,
 }: {
   state: State;
   update: (action: Record<string, unknown>) => void;
@@ -56,6 +61,18 @@ export default function SettingsLocal({
   onToggleLock: (value: boolean) => Promise<void>;
   onSwitchMode: () => void;
   onOpenPair: () => void;
+  /** Tài khoản ghép nối trên máy chủ (null nếu chưa đăng nhập). */
+  account?: {
+    uid: string;
+    shortCode: string;
+    displayName: string;
+    partnerId: string | null;
+    partnerName: string;
+    partnerCode: string | null;
+  } | null;
+  pairMessage?: string;
+  onUnpair?: () => void;
+  onSignOutAccount?: () => void;
   lastError: string;
   onClearError: () => void;
   onOpenHome: () => void;
@@ -750,9 +767,68 @@ export default function SettingsLocal({
         không ai bị mất cuộc gọi. Ghi lại dòng này nếu cuộc gọi còn đứt quãng để
         tôi biết máy đang dùng đường tiếng nào.
       </Note>
+      <Card>
+        <Title small>Tài khoản ghép nối</Title>
+        {account?.uid ? (
+          account.partnerId ? (
+            <>
+              <Note>
+                Đã ghép nối với{" "}
+                {account.partnerName || account.partnerId}
+                {account.partnerCode
+                  ? ` (mã ${formatPairCode(account.partnerCode)})`
+                  : ""}
+                . Mã cố định của bạn: {formatPairCode(account.shortCode)}.
+              </Note>
+              <Note>
+                Bấm “Ngắt kết nối” là máy chủ xoá ghép nối ở CẢ HAI máy và cả
+                hai cùng về màn hình nhập mã. Tin nhắn, nhật ký, kỷ niệm đã viết
+                vẫn còn trên máy này.
+              </Note>
+              <Button
+                label="Ngắt kết nối (cả hai máy)"
+                secondary
+                onPress={() =>
+                  Alert.alert(
+                    "Ngắt kết nối?",
+                    "Máy chủ sẽ xoá ghép nối ở cả hai máy. Dữ liệu đã viết vẫn còn trong máy, nhưng hai máy không còn nhận tin của nhau cho tới khi ghép lại.",
+                    [
+                      { text: "Để sau", style: "cancel" },
+                      {
+                        text: "Ngắt kết nối",
+                        style: "destructive",
+                        onPress: onUnpair,
+                      },
+                    ],
+                  )
+                }
+              />
+            </>
+          ) : (
+            <Note>
+              Đã đăng nhập nhưng chưa ghép nối. Mã cố định của bạn:{" "}
+              {formatPairCode(account.shortCode)} — mở mục Ghép nối để nhập mã
+              của người thương.
+            </Note>
+          )
+        ) : (
+          <Note>
+            Chưa đăng nhập tài khoản ghép nối. Mở mục “Ghép nối” để đăng nhập
+            bằng Google/Facebook rồi nhập mã cố định của người thương.
+          </Note>
+        )}
+        {pairMessage ? <Note>{pairMessage}</Note> : null}
+        {account?.uid && onSignOutAccount ? (
+          <Button
+            label="Đăng xuất tài khoản ghép nối"
+            secondary
+            onPress={onSignOutAccount}
+          />
+        ) : null}
+      </Card>
       <Note>
-        Mật Mã Yêu {Constants.expoConfig?.version ?? "1.17.0"} (chế độ trên máy,
-        bản dựng {Constants.expoConfig?.android?.versionCode ?? 19}) — ghi lại
+        Mật Mã Yêu {Constants.expoConfig?.version ?? "1.18.0"} (chế độ trên máy,
+        bản dựng {Constants.expoConfig?.android?.versionCode ?? 20}) — ghi lại
         số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục riêng
         của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ liệu, nên
         hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch, không phải

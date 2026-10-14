@@ -14,7 +14,31 @@
 --     hồ sơ của hai người đọc được khoá này (RLS), nên không ai khác vào được.
 -- Chạy tệp này trong Supabase → SQL Editor (một lần cho mỗi dự án).
 
-create extension if not exists pgcrypto;
+-- 0) Chạy được cả khi dự án còn trống -------------------------------------------
+-- 001_love.sql dựng cả không gian đôi (couples/members/diary…). Phần ghép nối
+-- theo tài khoản chỉ cần `profiles` và `pair_attempts`, nên tệp này tự tạo hai
+-- bảng đó nếu chưa có (đúng khuôn của 001) để bạn chạy một lệnh là dùng được
+-- ngay trong dự án mới. Nếu đã chạy 001 thì các lệnh dưới không làm gì thêm.
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  nickname text not null default 'Bạn'
+    check (char_length(nickname) between 1 and 40),
+  avatar_path text,
+  mood text not null default 'calm'
+    check (mood in ('happy','sad','tired','angry','calm','love')),
+  mood_note text not null default '' check (char_length(mood_note) <= 300),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.pair_attempts (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+create index if not exists pair_attempts_user_time
+  on public.pair_attempts (user_id, created_at);
+
+alter table public.profiles enable row level security;
+alter table public.pair_attempts enable row level security;
 
 -- 1) Cột mới trên profiles -----------------------------------------------------
 alter table public.profiles
@@ -77,10 +101,18 @@ begin
   return new;
 end $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function public.handle_new_user();
+do $$
+begin
+  begin
+    drop trigger if exists on_auth_user_created on auth.users;
+    create trigger on_auth_user_created
+      after insert on auth.users
+      for each row execute function public.handle_new_user();
+  exception
+    when insufficient_privilege then
+      raise notice 'Không tạo được trigger trên auth.users; hồ sơ vẫn được tạo ở lần đăng nhập đầu nhờ ensure_profile().';
+  end;
+end $$;
 
 -- Bù hồ sơ cho tài khoản đã tạo trước khi chạy tệp này, và cho lần đăng nhập đầu.
 create or replace function public.ensure_profile() returns jsonb
@@ -178,7 +210,9 @@ begin
     raise exception 'Người này đã ghép nối với máy khác rồi.' using errcode = 'P0001';
   end if;
 
-  secret := encode(gen_random_bytes(32), 'base64');
+  -- 256 bit ngẫu nhiên từ hai UUID v4 (hàm có sẵn, không cần phần mở rộng).
+  secret := replace(gen_random_uuid()::text, '-', '') ||
+            replace(gen_random_uuid()::text, '-', '');
   update public.profiles
      set partner_id = other.id, pair_secret = secret, paired_at = now()
    where id = uid;
@@ -238,7 +272,9 @@ begin
   end if;
   update public.profiles
      set display_name = coalesce(nullif(left(coalesce(p_display_name, ''), 40), ''), display_name),
-         avatar_url = coalesce(p_avatar_url, avatar_url)
+         nickname = coalesce(nullif(left(coalesce(p_display_name, ''), 40), ''), nickname),
+         avatar_url = coalesce(p_avatar_url, avatar_url),
+         avatar_path = coalesce(p_avatar_url, avatar_path)
    where id = uid;
   select * into row_profiles from public.profiles where id = uid;
   return jsonb_build_object(

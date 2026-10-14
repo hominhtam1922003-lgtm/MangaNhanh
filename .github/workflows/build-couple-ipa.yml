@@ -3,7 +3,7 @@
 # (AltStore / Sideloadly trên Windows, hoặc Xcode trên Mac). Ký bằng Apple ID
 # miễn phí thì app hết hạn sau 7 ngày và phải ký lại; tài khoản Apple Developer
 # có phí (99 USD/năm) thì dùng TestFlight và không phải ký lại.
-name: IPA Hai Trái Tim (iOS, chưa ký)
+name: IPA Mật Mã Yêu (iOS, chưa ký)
 on:
   workflow_dispatch:
   push:

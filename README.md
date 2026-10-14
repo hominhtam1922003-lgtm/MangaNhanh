@@ -263,13 +263,32 @@ Các lỗi test/Gradle ở những lần CI đầu đã được sửa. Dữ li�
 
 **Chưa kiểm chứng Gemini bằng key của bạn, GPS trên thiết bị thật, thông báo nền/reboot hoặc FPS thực tế.** Test mock/CI không thay thế thử trên điện thoại. Cần thử quyền cho phép/từ chối, mất mạng, thay vị trí, reboot, tiết kiệm pin và buộc dừng. Không cam kết thời tiết chính xác 100% hoặc cảnh báo đúng phút.
 
-## Ứng dụng Hai Trái Tim (thư mục `couple-love/`)
+## Ứng dụng Mật Mã Yêu (tên cũ: Hai Trái Tim — thư mục `couple-love/`)
 
 Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm trong thư mục `couple-love`: React Native/Expo SDK 54, NativeWind, trái tim 3D bằng Three.js/R3F. App dùng được ngay **không cần tài khoản, không cần máy chủ**: hai máy ghép nối bằng **mã 6 số** qua các trạm MQTT công cộng với dữ liệu **mã hóa đầu-cuối** (1.3.0), hoặc chuyển dữ liệu thủ công bằng mã/tệp JSON; chế độ Supabase (realtime, RLS, Storage, Edge Function + cron thông báo kép) vẫn còn cho ai muốn dựng máy chủ riêng. Hướng dẫn backend, push FCM/APNs, secrets ký APK và kiểm thử ở `couple-love/README.md`.
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Hai Trái Tim 1.15.0 (bản mới nhất) — cuộc gọi qua được NAT khó nhờ TURN dự phòng, giữ cuộc gọi khi tắt màn hình
+## Mật Mã Yêu 1.16.0 (bản mới nhất) — nhắn tin kiểu Messenger/Zalo, sửa lỗi gửi ảnh, tim đập theo giọng nói
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.16.0-test-270c362/HaiTraiTim-1.16.0.apk · **77.974.318 byte** (kèm file kiểm tra `HaiTraiTim-1.16.0.apk.sha256` trong Assets)
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.16.0-test-270c362/HaiTraiTim-1.16.0-arm64.apk · **55.660.069 byte** (kèm file `HaiTraiTim-1.16.0-arm64.sha256`)
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.16.0-test-270c362/HaiTraiTim-1.16.0-unsigned.ipa · **16.978.710 byte** (kèm file `HaiTraiTim-1.16.0-unsigned.ipa.sha256`)
+
+Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.16.0, bản dựng 18**. Dựng từ `270c362` (build `38592751848` cho APK, `38592751758` cho iOS). Mạng yếu thì tải bản arm64. **Cài đè lên 1.15.0 được, không mất dữ liệu** (gói `vn.haitraitim.app` và khóa ký giữ nguyên, chỉ đổi tên hiển thị).
+
+Bản 1.16.0 làm đúng các việc bạn nêu:
+
+1. **Hết lỗi “Attempting to launch an unregistered ActivityResultLauncher” khi gửi/chụp ảnh.** Nguyên nhân là lỗi của chính thư viện chọn ảnh hệ thống: khi Activity bị hệ thống dựng lại (đổi cỡ chữ, đổi ngôn ngữ, đổi mật độ màn hình, máy ảo bị thu hồi bộ nhớ) thì bộ đăng ký “launcher” bị xoá mà không đăng ký lại, nên mọi lần gọi sau đều chết. Bản này làm hai việc: (a) plugin `plugins/with-android-activity-config.js` khai `configChanges` cho `MainActivity` (fontScale, locale, layoutDirection, density, uiMode, orientation…) để Activity **không bị dựng lại** nữa — đã kiểm tra trong manifest sau `expo prebuild`; (b) màn hình chat và Cài đặt **không dùng hộp chọn ảnh hệ thống nữa** mà mở **thư viện ảnh + máy ảnh ngay trong app** (`src/components/PhotoPicker.tsx`, `expo-media-library` + `expo-camera`). Lời nhắc cũ vẫn còn: nếu máy ảo đã dính lỗi từ bản trước thì **mở lại app một lần** là sạch.
+2. **Nhắn tin đủ bộ như Messenger/Zalo:** **thu hồi tin nhắn xoá cả hai bên** (giữ dấu “đã thu hồi”, khác hẳn *Xoá trên máy này*), **thả cảm xúc** ❤️😂😮😢😡👍, **vuốt để trả lời**, **giữ nút mic để gửi tin thoại**, chấm **“đang nhập…”**, báo **đã xem** kèm ảnh đại diện nhỏ cạnh tin cuối, **lưu ảnh người thương gửi về máy**.
+3. **Đổi ảnh đại diện là máy kia thấy ngay:** tên tệp ảnh đi kèm mọi gói dữ liệu, máy nào thiếu ảnh thì tự xin gửi lại (`photoRequest`).
+4. **Thanh nhập liệu dạng viên thuốc** nổi ba phần `[+] · [ô chữ] · [mic]`, gõ chữ thì mic biến thành nút **Gửi**, icon nằm gọn phía trên bàn phím; bỏ hàng icon và khối chữ gây rối; tin nhắn cuộn còn thanh chat thì cố định.
+5. **Cuộc gọi:** trái tim **đập theo giọng nói thật** (mức tiếng lấy từ track WebRTC mỗi 0,5 giây, máy ảo thiếu số liệu thì ước lượng theo byte tiếng) và nút **Cúp máy đỏ to** + nút **tắt mic** trắng/xám ở nửa dưới màn hình.
+6. **Thông báo:** bấm là **vào thẳng đoạn chat**, có nút **Trả lời** ngay trên thông báo, và công tắc **Giữ kết nối khi tắt màn hình** (dịch vụ chạy nổi `dataSync`, Android buộc phải hiện thông báo “Đang giữ kết nối”). Nói thẳng giới hạn: nếu vào Cài đặt điện thoại bấm **Buộc dừng** app thì mọi kết nối đều tắt — muốn có tin nhắn khi app đã bị buộc dừng thì phải có máy chủ đẩy riêng (FCM), mà app này cố ý không dùng máy chủ.
+
+**111 bài kiểm thử đều xanh**, TypeScript sạch, Prettier sạch, `expo export` cho Android thành công, `expo prebuild` ra manifest có `configChanges` cho `MainActivity`, dịch vụ chạy nổi `microphone|dataSync` và đủ quyền `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, `READ_MEDIA_IMAGES`, `RECORD_AUDIO`. **Chưa thử trên LDPlayer của bạn nên chưa dám nói là đã hết lỗi** — bạn cài rồi thử: gửi ảnh, chụp ảnh, thu hồi, thả tim, vuốt trả lời, giữ mic gửi thoại, đổi ảnh đại diện ở máy B xem máy A có thấy không, rồi gọi thử xem tim có đập theo giọng.
+
+## Mật Mã Yêu 1.15.0 (bản trước) — cuộc gọi qua được NAT khó nhờ TURN dự phòng, giữ cuộc gọi khi tắt màn hình
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.15.0-test-91bf7bd/HaiTraiTim-1.15.0.apk · **77.814.316 byte** (kèm file kiểm tra `HaiTraiTim-1.15.0.apk.sha256` trong Assets)
 **APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.15.0-test-91bf7bd/HaiTraiTim-1.15.0-arm64.apk · **55.500.067 byte** (kèm file `HaiTraiTim-1.15.0-arm64.sha256`)
@@ -437,7 +456,7 @@ Kèm theo: tự chọn ảnh trong máy làm nền app và **hai máy gửi ản
 - **Icon:** bộ icon trong `couple-love/assets/` tạo bằng `python3 couple-love/scripts/make-icons.py` (chạy kèm đường dẫn ảnh của bạn để đổi icon sang ảnh đó rồi build lại).
 - APK dùng **chữ ký debug của mẫu Expo** — chỉ để thử, không phát hành cửa hàng; cấu hình 4 secret keystore trong Actions để ký bằng khóa riêng. **Gỡ ứng dụng hoặc xóa dữ liệu ứng dụng sẽ mất dữ liệu trên máy**, hãy xuất tệp dự phòng trước.
 
-## Ứng dụng Hai Trái Tim (thư mục `couple-love/`)
+## Ứng dụng Mật Mã Yêu (tên cũ: Hai Trái Tim — thư mục `couple-love/`)
 
 Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm trong thư mục `couple-love`: React Native/Expo SDK 54, NativeWind, trái tim 3D bằng Three.js/R3F, Supabase (đồng bộ realtime, RLS, Storage, Edge Function + cron thông báo kép). Hướng dẫn cấu hình backend, push FCM/APNs, secrets ký APK và kiểm thử ở `couple-love/README.md`.
 

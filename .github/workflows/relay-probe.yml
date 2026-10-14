@@ -1,5 +1,5 @@
 # Dò thật các trạm trung chuyển công cộng của Hai Trái Tim, chạy trên runner có Internet thật.
-name: Dò trạm kết nối Hai Trái Tim
+name: Dò trạm kết nối Mật Mã Yêu
 
 on:
   push:

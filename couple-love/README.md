@@ -1,4 +1,6 @@
-# Hai Trái Tim 💕
+# Mật Mã Yêu 💕
+
+> Tên cũ là **Hai Trái Tim**; từ 1.16.0 app đổi tên hiển thị thành **Mật Mã Yêu**. Gói vẫn là `vn.haitraitim.app`, khoá ký không đổi nên bạn **cài đè** lên bản cũ được, không mất dữ liệu.
 
 Ứng dụng Android/iOS bằng **React Native · Expo SDK 54 · NativeWind · Three.js/R3F native · Supabase**. Tất cả nội dung giao diện của ứng dụng bằng tiếng Việt.
 
@@ -20,6 +22,20 @@ Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo
 - Mỗi gói chỉ chứa **dữ liệu của chính máy gửi** (tên, cảm xúc, chu kỳ, kỷ niệm mình viết, lời nhắc) nên hai máy không gửi trả lại dữ liệu của nhau và không lặp vô tận; gói quá lớn thì cắt bớt khoảnh khắc, lời nhắc, tin nhắn rồi mới rút ngắn chữ trong nhật ký — **nhật ký không bao giờ bị bỏ khỏi gói**. **Ảnh Khoảnh khắc có đi qua kênh này** từ 1.6.0: ảnh được nén còn khoảng 100 KB rồi cắt thành gói 3.500 ký tự, máy kia ghép lại và lưu thành `moment-<mã>.jpg`; máy nào thiếu ảnh thì tự gửi lời xin gửi lại.
 - **Không dùng `TextEncoder`/`TextDecoder` hay `crypto.getRandomValues`** (React Native không cấp): phần chuyển chữ ↔ byte được tự viết trong `relayProtocol.mjs` (đối chiếu từng byte với chuẩn UTF-8 của Node trong `tests/relay.test.mjs`, có bài chạy khi đã xóa hai lớp đó) và nguồn ngẫu nhiên an toàn lấy từ `expo-crypto` qua `installRandomBytes`. Mọi lỗi JavaScript được ghi vào **“Lỗi gần nhất”** trong Cài đặt thay vì làm văng app.
 - Giới hạn thật: cần Internet ở **cả hai** máy; dữ liệu mới chỉ sang nhau khi hai bên cùng mở app (một bên đóng app thì lần mở sau gửi bù); mã 6 số chỉ có 1.000.000 khả năng nên đừng dán công khai ở nơi nhiều người thấy.
+
+### Có gì mới ở 1.16.0 — nhắn tin như Messenger/Zalo, hết lỗi chọn ảnh, tim đập theo giọng nói
+
+**Tải APK 1.16.0 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.16.0-test-270c362/HaiTraiTim-1.16.0.apk · 77.974.318 byte (kèm `HaiTraiTim-1.16.0.apk.sha256` trong Assets). **Bản nhẹ (chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.16.0-test-270c362/HaiTraiTim-1.16.0-arm64.apk · 55.660.069 byte. **iOS (.ipa chưa ký):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.16.0-test-270c362/HaiTraiTim-1.16.0-unsigned.ipa · 16.978.710 byte. Trong app, mở **Cài đặt** xem dòng cuối: phải là **Mật Mã Yêu 1.16.0, bản dựng 18**. Bản này dựng từ `270c362`.
+
+- **Hết lỗi “unregistered ActivityResultLauncher” khi gửi/chụp ảnh.** Đây là lỗi của thư viện chọn ảnh hệ thống: khi Android **dựng lại Activity** vì một thay đổi cấu hình không được khai báo (cỡ chữ, ngôn ngữ, mật độ màn hình, máy ảo thu hồi bộ nhớ), bộ đăng ký launcher bị xoá mà thư viện không đăng ký lại, nên mọi lần mở sau đó đều lỗi cho tới khi khởi động lại tiến trình. Cách sửa: `plugins/with-android-activity-config.js` khai `configChanges` cho `MainActivity` (`mcc, mnc, locale, layoutDirection, fontScale, density, touchscreen, keyboard, keyboardHidden, navigation, orientation, screenLayout, screenSize, smallestScreenSize, uiMode, colorMode`) để **hệ thống không dựng lại Activity**, và **bỏ hẳn hộp chọn ảnh hệ thống khỏi luồng chat**: `src/components/PhotoPicker.tsx` mở **lưới ảnh trong thư viện** (`expo-media-library`, phân trang 60 ảnh, quyền chi tiết cho Android 13+) và **máy ảnh trong app** (`expo-camera`, `takePictureAsync`), ảnh trả về là `file://` nên gửi thẳng qua kênh ghép nối. Nếu máy đã dính lỗi từ bản trước thì mở lại app một lần là sạch.
+- **Thu hồi tin nhắn xoá cả hai bên.** `localState.mjs` thêm kind `recalled` + `recalledAt` và action `message.recall`; `relayProtocol.mjs` mang cờ `recalled` trong danh sách tin nhắn gửi đi, nên mọi lần đẩy dữ liệu sau đó máy kia vẫn nhận được dấu thu hồi kể cả khi khung báo tức thời bị mất. Thu hồi là **xoá ruột tin** (chữ, ảnh, tiếng, vị trí về rỗng) rồi đổi kind thành `recalled`, nên mở lại sau này cũng không hiện lại nội dung; hai bên đều thấy dòng “Bạn/Người thương đã thu hồi một tin nhắn”. Khác hẳn **Xoá trên máy này** (chỉ xoá cục bộ).
+- **Thả cảm xúc, trả lời, tin thoại, đang nhập, đã xem.** `src/logic/chatExtras.mjs` (thuần, có test) giữ `REACTIONS`, `setReact`, `recallMessage`, `replyPreview`, và các hàm mức tiếng. Cảm xúc đi bằng khung `chatReact`, trả lời đi kèm `reply`, tin thoại ghi bằng `expo-audio` rồi gửi như tin nhắn có `audio` + `durationMs`, “đang nhập” đi bằng `{kind:"typing", state:true}` (gửi khi ngừng gõ 1,2 giây, máy nhận tự tắt sau 3 giây), “đã xem” đi bằng `{kind:"chatRead", ids}` — tin cuối mình đã xem hiện **ảnh đại diện nhỏ của người thương** cạnh tin đó, giống Messenger.
+- **Thanh nhập liệu dạng viên thuốc và bớt rối mắt.** `ChatLocal.tsx` viết lại: thanh chat **cố định** ở đáy, ba phần `[+] · [TextInput] · [mic ⇄ Gửi]`, cách mép dưới một chút, bo tròn và đổ bóng; nhấn `+` mở bảng nhỏ (ảnh, chụp, vị trí, sticker, emoji); hàng thao tác dài và khối chú thích bị bỏ; mỗi dòng tin được `memo` hoá và hàm cập nhật được giữ ổn định nên **gõ chữ không làm cả danh sách vẽ lại**.
+- **Đè vào tin nhắn/ảnh** (giữ khoảng 0,4 giây) mở bảng: hàng cảm xúc ❤️😂😮😢😡👍 và các nút **Trả lời**, **Thu hồi (xoá cả hai bên)** (chỉ tin của mình), **Lưu ảnh về máy** (tin có ảnh; `saveToLibraryAsync`, máy thiếu quyền thì mở bảng chia sẻ), **Xoá trên máy này**.
+- **Ảnh đại diện tự sang máy kia:** gói dữ liệu mang `from.avatar` (tên tệp), máy nhận thấy tên lạ thì `writeBase64` và đặt `partner.avatar`; thiếu tệp thì tự `photoRequest` xin gửi lại — gói ảnh có thêm vai `role:"avatar"` với hạn mức riêng 120 KB.
+- **Cuộc gọi:** `rtcCall.ts` báo thêm `level` (mức tiếng 0..1) trong `onStats` mỗi 0,5 giây, lấy từ chỉ số `audioLevel` của track WebRTC nếu máy báo, không thì ước lượng theo byte tiếng đi ra/vào; `CallLocal.tsx` cho trái tim **đập theo mức tiếng** (1 → 1,34 lần, `Animated` với native driver) và đưa **nút Cúp máy đỏ to** + **nút tắt mic** trắng/xám xuống nửa dưới màn hình.
+- **Thông báo:** thêm nhóm `tin-nhan` (`Notifications.setNotificationCategoryAsync`) với nút **Trả lời** (nhập thẳng trên thông báo) và **Đã xem**; `notifyNow` gắn `data.open = "chat"` nên bấm là **vào thẳng đoạn chat**. Công tắc **Giữ kết nối khi tắt màn hình** trong Cài đặt bật dịch vụ chạy nổi `dataSync` (`src/services/relayService.ts`) để kênh ghép nối không bị hệ thống đóng khi tắt màn hình; nói rõ giới hạn: nếu người dùng **Buộc dừng** app thì không cách nào nhận tin nữa (muốn thế phải có máy chủ đẩy FCM).
+- **Kiểm thử:** `tests/round16.test.mjs` (20 bài) phủ cảm xúc, thu hồi, trả lời, mức tiếng, `configChanges`, PhotoPicker và các khung tin nhắn mới — tổng **111 bài xanh**; thêm `scripts/check-workflows.mjs` (chạy trong `npm run check`) để bắt lỗi cú pháp bash/heredoc trong `.github/workflows` trước khi đẩy lên.
 
 ### Có gì mới ở 1.15.0 — cuộc gọi qua NAT khó nhờ TURN dự phòng, giữ cuộc gọi khi tắt màn hình
 
@@ -229,7 +245,7 @@ Function gửi qua Expo Push, Expo chuyển tới **FCM / APNs**. Ticket đượ
 
 ### Khi dùng riêng thư mục này làm repository
 
-Đẩy **toàn bộ nội dung thư mục**, gồm `.github/workflows/build-apk.yml`, `package-lock.json`, source và `scripts`. Workflow tự chạy khi push vào main hoặc chọn **Actions → APK Hai Trái Tim → Run workflow**.
+Đẩy **toàn bộ nội dung thư mục**, gồm `.github/workflows/build-apk.yml`, `package-lock.json`, source và `scripts`. Workflow tự chạy khi push vào main hoặc chọn **Actions → APK Mật Mã Yêu → Run workflow**.
 
 ### Trong repository MangaNhanh hiện tại
 

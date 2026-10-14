@@ -13,7 +13,7 @@ on:
       run_id:
         description: ID lần chạy "IPA Mật Mã Yêu (iOS, chưa ký)" đã thành công
         required: true
-        default: '38592751758'
+        default: "38592751758"
         type: string
 
 permissions:

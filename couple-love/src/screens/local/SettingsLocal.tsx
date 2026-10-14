@@ -29,6 +29,7 @@ import { restoreFromPayload } from "../../logic/localState.mjs";
 import { THEMES } from "../../logic/themes.mjs";
 import { useTheme } from "../../theme/ThemeContext";
 import { peerSupport, rtcSupport } from "../../services/rtcCall";
+import { callServiceSupport } from "../../services/callService";
 import Constants from "expo-constants";
 export default function SettingsLocal({
   state,
@@ -718,7 +719,8 @@ export default function SettingsLocal({
       ) : null}
       <Note>
         Cuộc gọi tiếng trực tiếp — lớp 1 PeerJS: {peerSupport().detail}; lớp 2
-        WebRTC: {rtcSupport().detail}. Khi đã nối trực tiếp, tiếng đi thẳng từ
+        WebRTC: {rtcSupport().detail}; khi tắt màn hình:{" "}
+        {callServiceSupport().detail}. Khi đã nối trực tiếp, tiếng đi thẳng từ
         máy này sang máy kia nên liền mạch như gọi thường; mạng khó thì PeerJS
         đưa tiếng qua máy chủ trung chuyển miễn phí của họ, còn nếu cả hai lớp
         đều không nối được thì app tự quay về đường tiếng qua kênh ghép nối,

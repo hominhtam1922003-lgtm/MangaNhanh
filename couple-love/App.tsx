@@ -90,6 +90,11 @@ import {
 import type { AudioFrame } from "./src/logic/callAudio.mjs";
 import { AudioModule, setAudioModeAsync, useAudioRecorder } from "expo-audio";
 import { RtcCall, rtcSupport } from "./src/services/rtcCall";
+import {
+  onCallServiceHangup,
+  startCallService,
+  stopCallService,
+} from "./src/services/callService";
 import { RTC_RETRY_SIGNAL_MS, rtcStatusText } from "./src/logic/rtcSignal.mjs";
 import type { RtcState } from "./src/logic/rtcSignal.mjs";
 import * as DocumentPicker from "expo-document-picker";
@@ -1743,24 +1748,44 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relayRoom?.id, relayRoom?.key, state?.settings.relay]);
-  // Android: khi đã nối tiếng trực tiếp thì đẩy tiếng ra LOA NGOÀI (như bật loa
-  // Zalo) — WebRTC mặc định đưa vào loa trong nên máy ảo/nhiều máy không nghe
-  // thấy gì. Nhắc lại vài giây một lần vì trình quản lý âm thanh của máy có thể
-  // đổi lại giữa cuộc gọi.
+  // Chế độ âm thanh trong suốt cuộc gọi:
+  // - `shouldPlayInBackground: true`: iOS/Android vẫn cho thu/phát tiếng khi app
+  //   xuống chạy nền hoặc tắt màn hình (cùng với dịch vụ chạy nổi ở Android).
+  // - Android đẩy tiếng ra LOA NGOÀI (như bật loa Zalo): WebRTC mặc định đưa vào
+  //   loa trong nên máy ảo/nhiều máy không nghe thấy gì.
+  // Nhắc lại vài giây một lần vì trình quản lý âm thanh của máy có thể đổi lại.
   useEffect(() => {
-    if (Platform.OS !== "android" || !rtcLive) return;
+    if (call?.phase !== "active") return;
+    const android = Platform.OS === "android";
     const route = () => {
       void setAudioModeAsync({
         allowsRecording: true,
         playsInSilentMode: true,
-        shouldRouteThroughEarpiece: false,
+        shouldPlayInBackground: true,
+        ...(android ? { shouldRouteThroughEarpiece: false } : {}),
       }).catch(() => {});
     };
     route();
     const timer = setInterval(route, 3000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rtcLive]);
+  }, [call?.phase, call?.id, rtcLive]);
+  // Giữ cuộc gọi sống khi tắt màn hình: Android cần dịch vụ chạy nổi kèm thông
+  // báo "Cuộc gọi đang diễn ra…" (có nút Cúp máy); cuộc gọi kết thúc là tắt ngay
+  // để không hao pin. iOS chỉ cần chế độ chạy nền khai trong app.config.js.
+  useEffect(() => {
+    if (call?.phase !== "active") return;
+    void startCallService(call.name ?? "");
+    return () => {
+      void stopCallService();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [call?.phase, call?.id]);
+  // Nút "Cúp máy" trên thông báo làm y như nút trên màn hình cuộc gọi.
+  useEffect(() => {
+    onCallServiceHangup(() => callAction({ type: "hangup" }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Cuộc gọi vừa được nghe máy: mở ngay đường tiếng trực tiếp. Bên gọi mời
   // trước, bên nghe trả lời; chưa nối được trong vài giây thì vẫn gọi bình
   // thường bằng đường tiếng qua kênh ghép nối.
@@ -1908,6 +1933,8 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   useEffect(() => {
     if (!call || call.phase !== "ended") return;
     closeRtc();
+    // Cuộc gọi đã hết: tắt dịch vụ chạy nổi + xoá thông báo ngay.
+    void stopCallService();
     // Ghi nhật ký cuộc gọi vào đoạn chat (một lần cho mỗi cuộc gọi).
     if (callLoggedRef.current !== call.id) {
       callLoggedRef.current = call.id;

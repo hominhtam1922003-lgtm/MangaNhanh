@@ -35,18 +35,61 @@ export const RTC_OPUS_BITRATE = 32000;
 export const RTC_PEER_MS = 2500;
 
 /**
- * Máy chủ TRUNG CHUYỂN (TURN) miễn phí, không cần đăng ký: đúng bộ mà thư viện
- * PeerJS phát sẵn cho mọi máy dùng `peerjs` (xem `DEFAULT_CONFIG` trong
- * node_modules/peerjs). STUN chỉ giúp hai máy "nhìn thấy" nhau; khi nhà mạng
- * chặn kiểu NAT nghiêm ngặt / CGNAT thì bắt buộc phải có TURN để tiếng đi vòng
- * qua máy chủ trung chuyển — đây chính là lý do cuộc gọi "nối rồi mà không nghe
- * gì" ở nhiều mạng. Tiếng vẫn mã hoá đầu-cuối; TURN chỉ chuyển tiếp gói.
+ * Muốn dùng máy chủ trung chuyển RIÊNG của bạn? Đặt ba biến này lúc dựng app,
+ * không cần sửa mã:
+ *   EXPO_PUBLIC_TURN_URLS="turn:turn.cuaban.com:3478,turn:turn.cuaban.com:443?transport=tcp"
+ *   EXPO_PUBLIC_TURN_USER="tên đăng nhập"
+ *   EXPO_PUBLIC_TURN_CREDENTIAL="mật khẩu"
+ * Ba biến này được nhúng thẳng vào bản dựng (Expo thay lúc biên dịch), nên sau
+ * khi thay phải dựng lại APK. Không đặt gì thì app dùng danh sách miễn phí dưới.
+ */
+function turnFromEnv() {
+  if (typeof process === "undefined" || !process?.env) return [];
+  // Ba dòng dưới đây phải viết đúng dạng `process.env.EXPO_PUBLIC_…` thì Expo mới
+  // thay được giá trị lúc biên dịch; đổi cách viết là mất tính năng.
+  const urls = String(process.env.EXPO_PUBLIC_TURN_URLS ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!urls.length) return [];
+  return [
+    {
+      urls,
+      username: String(process.env.EXPO_PUBLIC_TURN_USER ?? ""),
+      credential: String(process.env.EXPO_PUBLIC_TURN_CREDENTIAL ?? ""),
+    },
+  ];
+}
+
+/**
+ * Máy chủ TRUNG CHUYỂN (TURN) miễn phí, không cần đăng ký. STUN chỉ giúp hai máy
+ * "nhìn thấy" nhau; khi nhà mạng chặn kiểu NAT đối xứng / CGNAT / Wi-Fi công ty
+ * thì bắt buộc phải có TURN để tiếng đi vòng qua máy chủ trung chuyển — đây
+ * chính là lý do cuộc gọi "nối rồi mà không nghe gì" ở nhiều mạng. Tiếng vẫn
+ * mã hoá đầu-cuối; TURN chỉ chuyển tiếp gói đã mã hoá.
+ *
+ * Bộ 1: đúng bộ mà thư viện PeerJS phát sẵn cho mọi máy dùng `peerjs`.
+ * Bộ 2: Open Relay của Metered — có cổng 443 và TCP trên 443 nên chui được qua
+ * tường lửa gắt (mạng 4G/Wi-Fi công ty thường chỉ cho 80/443 đi ra).
+ * Cả hai đều là dịch vụ công cộng miễn phí, có thể quá tải hoặc ngừng bất cứ
+ * lúc nào — đó là lý do app vẫn còn hai lớp dự phòng phía sau, và lý do có sẵn
+ * cách thay bằng máy chủ riêng ở trên.
  */
 export const RTC_TURN_SERVERS = [
+  ...turnFromEnv(),
   {
     urls: ["turn:eu-0.turn.peerjs.com:3478", "turn:us-0.turn.peerjs.com:3478"],
     username: "peerjs",
     credential: "peerjsp",
+  },
+  {
+    urls: [
+      "turn:openrelay.metered.ca:80",
+      "turn:openrelay.metered.ca:443",
+      "turn:openrelay.metered.ca:443?transport=tcp",
+    ],
+    username: "openrelayproject",
+    credential: "openrelayproject",
   },
 ];
 
@@ -74,6 +117,13 @@ export const RTC_ICE_SERVERS = [
   { urls: "stun:stun.cloudflare.com:3478" },
   ...RTC_TURN_SERVERS,
 ];
+
+/**
+ * "all" = thử nối TRỰC TIẾP trước, chỉ khi bí mới nhờ máy chủ trung chuyển. Đặt
+ * "relay" sẽ bắt mọi cuộc gọi đi vòng qua TURN (chậm hơn, tốn pin hơn) nên không
+ * dùng. Đây là câu trả lời cho "ưu tiên P2P": ICE tự chọn đường rẻ nhất trước.
+ */
+export const ICE_POLICY = "all";
 
 /**
  * Chỉ lấy tiếng. Bật khử vọng (echo cancellation) và giảm ồn của chính WebRTC:

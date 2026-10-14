@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  ICE_POLICY,
   PEER_CLOUD,
   RTC_DEAD_MS,
   RTC_ICE_SERVERS,
@@ -147,6 +148,105 @@ test("Màn hình gọi hiện số liệu tiếng và nút 'nghe không được
   assert.match(screen, /rtcAudio/, "nhận số liệu từ App");
 });
 
+test("TURN dự phòng cho mạng khó, nhưng vẫn ưu tiên nối trực tiếp (P2P)", () => {
+  const urls = RTC_ICE_SERVERS.flatMap((server) =>
+    Array.isArray(server.urls) ? server.urls : [server.urls],
+  ).map(String);
+  assert.equal(
+    urls.some((url) => url.startsWith("turn:openrelay.metered.ca:443")),
+    true,
+    "cổng 443 đi qua được tường lửa gắt của mạng 4G/Wi-Fi công ty",
+  );
+  assert.equal(
+    urls.some((url) => url.includes("?transport=tcp")),
+    true,
+    "thêm đường TCP cho mạng chặn UDP",
+  );
+  assert.equal(
+    urls.some((url) => url.startsWith("turn:") && url.includes("peerjs.com")),
+    true,
+    "giữ bộ trung chuyển đi kèm PeerJS",
+  );
+  const relay = RTC_TURN_SERVERS.find((server) =>
+    String(server.urls).includes("openrelay"),
+  );
+  assert.equal(relay.username, "openrelayproject");
+  assert.equal(relay.credential, "openrelayproject");
+  assert.equal(
+    ICE_POLICY,
+    "all",
+    "thử nối trực tiếp trước, chỉ khi bí mới nhờ máy chủ trung chuyển",
+  );
+  const call = read("src/services/rtcCall.ts");
+  assert.equal(
+    (call.match(/iceTransportPolicy: ICE_POLICY/g) ?? []).length,
+    2,
+    "áp cho cả lớp PeerJS và lớp WebRTC",
+  );
+  assert.match(
+    read("src/logic/rtcSignal.mjs"),
+    /EXPO_PUBLIC_TURN_URLS/,
+    "thay bằng TURN riêng qua biến môi trường, không phải sửa mã",
+  );
+});
+
+test("Tắt màn hình vẫn gọi được: dịch vụ chạy nổi + chế độ chạy nền", () => {
+  const service = read("src/services/callService.ts");
+  assert.match(service, /registerForegroundService/, "mở dịch vụ chạy nổi");
+  assert.match(
+    service,
+    /asForegroundService: true/,
+    "thông báo gắn với dịch vụ",
+  );
+  assert.match(
+    service,
+    /FOREGROUND_SERVICE_TYPE_MICROPHONE/,
+    "kiểu micro để Android 14 cho thu tiếng khi app ở nền",
+  );
+  assert.match(service, /Cuộc gọi đang diễn ra/, "đúng nội dung thông báo");
+  assert.match(service, /Cúp máy/, "có nút Cúp máy trên thông báo");
+  assert.match(
+    service,
+    /stopForegroundService/,
+    "hết cuộc gọi thì tắt dịch vụ",
+  );
+  assert.match(
+    service,
+    /cancelNotification/,
+    "và xoá thông báo, không hao pin",
+  );
+  const plugin = read("plugins/with-call-foreground-service.js");
+  assert.match(plugin, /app\.notifee\.core\.ForegroundService/);
+  assert.match(plugin, /microphone/, "đổi kiểu dịch vụ thành micro");
+  assert.match(plugin, /tools:replace/, "ghi đè kiểu dịch vụ của thư viện");
+  const config = read("app.config.js");
+  for (const permission of [
+    "FOREGROUND_SERVICE",
+    "FOREGROUND_SERVICE_MICROPHONE",
+    "WAKE_LOCK",
+  ])
+    assert.equal(config.includes(permission), true, `có quyền ${permission}`);
+  assert.match(
+    config,
+    /UIBackgroundModes: \["audio", "voip"\]/,
+    "iOS cho phép thu/phát tiếng khi ở nền",
+  );
+  assert.match(config, /with-call-foreground-service/, "plugin được bật");
+  const app = read("App.tsx");
+  assert.match(
+    app,
+    /startCallService\(call\.name/,
+    "mở dịch vụ khi nói chuyện",
+  );
+  assert.match(app, /stopCallService\(\)/, "tắt dịch vụ khi cuộc gọi kết thúc");
+  assert.match(
+    app,
+    /shouldPlayInBackground: true/,
+    "âm thanh vẫn chạy khi app xuống nền",
+  );
+  assert.match(app, /onCallServiceHangup/, "nút Cúp máy kết thúc cuộc gọi");
+});
+
 test("Bản 1.15.0 (bản dựng 17) đã sẵn sàng", () => {
   const config = read("app.config.js");
   const pkg = JSON.parse(read("package.json"));
@@ -175,9 +275,12 @@ test("Lớp 1 dùng PeerJS: máy chủ chào hỏi + TURN miễn phí, không t�
     assert.equal(typeof server.username, "string");
     assert.equal(typeof server.credential, "string");
     assert.equal(
-      server.urls.every((url) => url.includes("peerjs.com")),
+      server.urls.every(
+        (url) =>
+          url.includes("peerjs.com") || url.includes("openrelay.metered.ca"),
+      ),
       true,
-      "máy chủ trung chuyển miễn phí đi kèm PeerJS, không phải của ta",
+      "toàn máy chủ trung chuyển miễn phí của cộng đồng, không phải của ta",
     );
   }
   const urls = RTC_ICE_SERVERS.flatMap((server) =>

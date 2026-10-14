@@ -15,6 +15,7 @@
     "format:check": "prettier --check App.tsx src scripts tests *.js *.json .github/workflows/*.yml supabase/functions/**/*.ts"
   },
   "dependencies": {
+    "@notifee/react-native": "^9.1.8",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-three/fiber": "^9.4.0",

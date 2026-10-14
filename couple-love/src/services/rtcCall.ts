@@ -18,6 +18,7 @@
  * vào/ra; nối rồi mà im quá lâu thì tự quay về lớp 3 và báo máy kia quay theo.
  */
 import {
+  ICE_POLICY,
   PEER_CLOUD,
   RTC_DROP_MS,
   RTC_ICE_SERVERS,
@@ -228,7 +229,12 @@ export class RtcCall {
         path: PEER_CLOUD.path,
         secure: PEER_CLOUD.secure,
         debug: 0,
-        config: { iceServers: RTC_ICE_SERVERS, sdpSemantics: "unified-plan" },
+        config: {
+          iceServers: RTC_ICE_SERVERS,
+          // Ưu tiên P2P: chỉ nhờ máy chủ trung chuyển khi không nối thẳng được.
+          iceTransportPolicy: ICE_POLICY,
+          sdpSemantics: "unified-plan",
+        },
       });
     } catch {
       this.peer = null;
@@ -348,6 +354,8 @@ export class RtcCall {
     }
     const pc = new (rtc.RTCPeerConnection as new (config: unknown) => any)({
       iceServers: RTC_ICE_SERVERS,
+      // Ưu tiên P2P: chỉ nhờ máy chủ trung chuyển khi không nối thẳng được.
+      iceTransportPolicy: ICE_POLICY,
       iceCandidatePoolSize: 2,
       bundlePolicy: "max-bundle",
       rtcpMuxPolicy: "require",

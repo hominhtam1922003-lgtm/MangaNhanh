@@ -17,6 +17,11 @@ module.exports = {
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.CHANGE_NETWORK_STATE",
+        // Cuộc gọi vẫn chạy khi tắt màn hình: dịch vụ chạy nổi (micro) + quyền
+        // giữ máy thức. RECORD_AUDIO do plugin expo-audio thêm sẵn.
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+        "android.permission.WAKE_LOCK",
       ],
       versionCode: 17,
       adaptiveIcon: {
@@ -37,6 +42,9 @@ module.exports = {
         // WebRTC tự tìm đường nối trực tiếp giữa hai máy trong cùng mạng Wi-Fi.
         NSLocalNetworkUsageDescription:
           "Tìm máy của người thương trong cùng mạng Wi-Fi để nối cuộc gọi trực tiếp.",
+        // Chạy nền: iOS chỉ cho thu/phát tiếng tiếp khi khai báo đúng hai chế độ
+        // này. (App cài bằng Apple ID miễn phí / Sideloadly, không nộp App Store.)
+        UIBackgroundModes: ["audio", "voip"],
       },
     },
     plugins: [
@@ -70,6 +78,9 @@ module.exports = {
         "expo-notifications",
         { icon: "./assets/notification-icon.png", color: "#e64980" },
       ],
+      // Đổi dịch vụ chạy nổi của Notifee sang kiểu "microphone" (Android 14 bắt
+      // buộc) để cuộc gọi không bị tắt khi tắt màn hình.
+      "./plugins/with-call-foreground-service",
       [
         "expo-image-picker",
         {

@@ -1,8 +1,8 @@
-# Nguồn APK 1.15.0: run_id 38582680038 (commit 91bf7bd, artifact HaiTraiTim-1.15.0-APK, gồm cả bản nhẹ arm64).
-# Ghi chú: Release nháp hai-trai-tim-v1.15.0-test-91bf7bd đã tạo sẵn ở máy,
-# runner chỉ tải artifact của run 38573992913 lên rồi mở công khai sau khi kiểm tra.
+# Nguồn APK 1.16.0 "Mật Mã Yêu": run_id 38592751848 (commit 270c362, artifact HaiTraiTim-1.16.0-APK, gồm cả bản nhẹ arm64).
+# Ghi chú: Release nháp hai-trai-tim-v1.16.0-test-270c362 đã tạo sẵn ở máy,
+# runner chỉ tải artifact của run 38592751848 lên rồi mở công khai sau khi kiểm tra.
 # Lưu ý: runner không tạo được Release (403) — luôn tạo Release nháp cục bộ trước rồi push file này để runner tải APK lên.
-name: Đăng APK Hai Trái Tim tải trực tiếp
+name: Đăng APK Mật Mã Yêu tải trực tiếp
 
 on:
   push:
@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: ID lần chạy "APK Hai Trái Tim" đã thành công
+        description: ID lần chạy "APK Mật Mã Yêu" đã thành công
         required: true
-        default: '38582680038'
+        default: '38592751848'
         type: string
 
 permissions:
@@ -35,9 +35,9 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38582680038' }}
-      ARTIFACT_NAME: HaiTraiTim-1.15.0-APK
-      APK_FILE: HaiTraiTim-1.15.0.apk
+      BUILD_RUN_ID: ${{ inputs.run_id || '38592751848' }}
+      ARTIFACT_NAME: HaiTraiTim-1.16.0-APK
+      APK_FILE: HaiTraiTim-1.16.0.apk
     steps:
       - name: Kiểm tra nguồn APK đã build thành công
         id: verify
@@ -54,7 +54,7 @@ jobs:
           assert run['path'] == '.github/workflows/build-couple-apk.yml', 'Sai workflow build'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f"sha={run['head_sha']}\n")
-              output.write(f"tag=hai-trai-tim-v1.15.0-test-{run['head_sha'][:7]}\n")
+              output.write(f"tag=hai-trai-tim-v1.16.0-test-{run['head_sha'][:7]}\n")
           PY
       - name: Lấy APK đã kiểm chứng qua REST API (không build lại, không đổi chữ ký)
         run: |
@@ -112,13 +112,15 @@ jobs:
             fi
           else
             cat > /tmp/love-notes.md <<EOF
-          APK thử nghiệm **Hai Trái Tim 1.15.0** cho **Android 7.0+ (API 24)**.
+          APK thử nghiệm **Mật Mã Yêu 1.16.0** cho **Android 7.0+ (API 24)**, ký bằng khóa gỡ lỗi nên cài đè lên bản 1.15.0 được, không mất dữ liệu.
 
-          Tải **HaiTraiTim-1.15.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP. Mạng yếu thì tải **HaiTraiTim-1.15.0-arm64.apk** (bản nhẹ, chỉ arm64-v8a — dùng được cho máy thật đời mới và LDPlayer 64-bit).
+          Tải **HaiTraiTim-1.16.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP. Mạng yếu thì tải **HaiTraiTim-1.16.0-arm64.apk** (bản nhẹ, chỉ arm64-v8a — dùng được cho máy thật đời mới và LDPlayer 64-bit).
 
-          Bản 1.15.0: cuộc gọi vẫn ba lớp (PeerJS có TURN miễn phí → WebRTC qua kênh ghép nối → kênh ghép nối), nay **qua được cả mạng chặn kiểu NAT đối xứng / Wi-Fi công ty** nhờ thêm TURN dự phòng (Open Relay của Metered: cổng 80/443 và TCP 443) và vẫn **ưu tiên nối trực tiếp P2P** trước. Cuộc gọi **không mất tiếng khi tắt màn hình**: Android có dịch vụ chạy nổi kèm thông báo "Cuộc gọi đang diễn ra…" và nút **Cúp máy**; iOS khai báo chế độ chạy nền cho âm thanh. Muốn dùng TURN riêng thì đặt EXPO_PUBLIC_TURN_URLS/USER/CREDENTIAL rồi dựng lại APK.
+          Bản 1.16.0 đổi tên app thành **Mật Mã Yêu** (gói vn.haitraitim.app giữ nguyên nên cài đè được). Thêm: thu hồi tin nhắn xoá cả hai bên, thả cảm xúc vào tin nhắn và ảnh, vuốt để trả lời, giữ nút mic để gửi tin thoại, chấm "đang nhập…", báo đã xem kèm ảnh đại diện nhỏ, lưu ảnh người thương gửi về máy, đổi ảnh đại diện là máy kia thấy ngay, sửa lỗi gửi và chụp ảnh trong chat (bỏ hộp chọn ảnh hệ thống hay chết với lỗi "unregistered ActivityResultLauncher", chuyển sang thư viện ảnh trong app), thanh nhập liệu dạng viên thuốc, trái tim đập theo giọng nói trong cuộc gọi, nút Cúp máy đỏ to và nút tắt mic ở nửa dưới màn hình, thông báo bấm vào thẳng đoạn chat kèm nút Trả lời, và công tắc Giữ kết nối khi tắt màn hình.
+
+          Cuộc gọi vẫn ba lớp (PeerJS có TURN miễn phí → WebRTC qua kênh ghép nối → kênh ghép nối). Muốn dùng TURN riêng thì đặt EXPO_PUBLIC_TURN_URLS/USER/CREDENTIAL rồi dựng lại APK.
           EOF
-            gh release create "$RELEASE_TAG" "release-apk/$APK_FILE" "release-apk/$APK_FILE.sha256" --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.15.0 — APK thử nghiệm" --notes-file /tmp/love-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
+            gh release create "$RELEASE_TAG" "release-apk/$APK_FILE" "release-apk/$APK_FILE.sha256" --target "$VERIFIED_SHA" --title "Mật Mã Yêu 1.16.0 — APK thử nghiệm" --notes-file /tmp/love-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
           fi
           gh release view "$RELEASE_TAG" --json tagName,isDraft,assets --repo "$GITHUB_REPOSITORY" | tee /tmp/love-release.json
           echo "APK tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$APK_FILE" >> "$GITHUB_STEP_SUMMARY"
@@ -132,6 +134,6 @@ jobs:
             await github.rest.checks.create({
               ...context.repo, head_sha: context.sha,
               name: 'Love APK publication diagnostics', status: 'completed', conclusion: 'neutral',
-              output: { title: 'Nhật ký đăng APK Hai Trái Tim', summary: 'APK không build lại.',
+              output: { title: 'Nhật ký đăng APK Mật Mã Yêu', summary: 'APK không build lại.',
                 text: paths.length ? paths.map((file) => fs.readFileSync(file, 'utf8')).join('\n').slice(-50000) : 'Chưa chạy bước tải hoặc đăng Release.' }
             });

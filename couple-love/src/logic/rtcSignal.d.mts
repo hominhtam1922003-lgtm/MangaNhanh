@@ -4,6 +4,21 @@ export declare const RTC_TRY_MS: number;
 export declare const RTC_RETRY_SIGNAL_MS: number;
 export declare const RTC_SIGNAL_KEEP: number;
 export declare const RTC_DROP_MS: number;
+export declare const RTC_STATS_MS: number;
+export declare const RTC_DEAD_MS: number;
+export declare const RTC_OPUS_BITRATE: number;
+export declare const RTC_PEER_MS: number;
+export declare const RTC_TURN_SERVERS: Array<{
+  urls: string[];
+  username: string;
+  credential: string;
+}>;
+export declare const PEER_CLOUD: {
+  host: string;
+  port: number;
+  path: string;
+  secure: boolean;
+};
 export declare const RTC_ICE_SERVERS: { urls: string | string[] }[];
 export declare const RTC_MEDIA: {
   audio: {
@@ -47,6 +62,20 @@ export declare function rtcWaitingTooLong(
   now: number,
   startedAt: number,
   limit?: number,
+): boolean;
+export declare function tuneOpusSdp(
+  sdp: unknown,
+  options?: { bitrate?: number },
+): string;
+export declare function formatAudioBytes(bytes: unknown): string;
+export declare function rtcAudioText(
+  inBytes: unknown,
+  outBytes: unknown,
+): string;
+export declare function rtcAudioIsDead(
+  now: number,
+  lastAudioAt: number,
+  ms?: number,
 ): boolean;
 export declare function rtcStateIsLive(state: unknown): boolean;
 export declare function rtcStateIsLost(state: unknown): boolean;

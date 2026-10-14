@@ -17,10 +17,51 @@ export const RTC_RETRY_SIGNAL_MS = 700;
 export const RTC_SIGNAL_KEEP = 80;
 /** Nối trực tiếp được nhưng mạng chập chờn quá lâu thì quay về kênh ghép nối. */
 export const RTC_DROP_MS = 2500;
+/** Nhịp đọc số liệu thật của WebRTC (bao nhiêu byte tiếng vào/ra). */
+export const RTC_STATS_MS = 2000;
+/**
+ * Nối rồi mà từng này mili giây không có MỘT byte tiếng nào đi vào/đi ra thì
+ * coi như đường tiếng trực tiếp hỏng (kiểu "nối được mà không nghe gì") và
+ * quay về đường tiếng qua kênh ghép nối. DTX được tắt trong SDP nên tiếng gửi
+ * liên tục, không có khoảng lặng giả — nhờ vậy phép kiểm tra này đáng tin.
+ */
+export const RTC_DEAD_MS = 7000;
+/** Bitrate Opus cho tiếng nói: đủ rõ mà không tốn băng thông. */
+export const RTC_OPUS_BITRATE = 32000;
+/**
+ * Chờ tối đa bao lâu cho đường tiếng qua PeerJS (máy chủ chào hỏi + TURN) trước
+ * khi chuyển sang đường WebRTC cũ. Ngắn để không bắt người dùng chờ lâu.
+ */
+export const RTC_PEER_MS = 2500;
+
+/**
+ * Máy chủ TRUNG CHUYỂN (TURN) miễn phí, không cần đăng ký: đúng bộ mà thư viện
+ * PeerJS phát sẵn cho mọi máy dùng `peerjs` (xem `DEFAULT_CONFIG` trong
+ * node_modules/peerjs). STUN chỉ giúp hai máy "nhìn thấy" nhau; khi nhà mạng
+ * chặn kiểu NAT nghiêm ngặt / CGNAT thì bắt buộc phải có TURN để tiếng đi vòng
+ * qua máy chủ trung chuyển — đây chính là lý do cuộc gọi "nối rồi mà không nghe
+ * gì" ở nhiều mạng. Tiếng vẫn mã hoá đầu-cuối; TURN chỉ chuyển tiếp gói.
+ */
+export const RTC_TURN_SERVERS = [
+  {
+    urls: ["turn:eu-0.turn.peerjs.com:3478", "turn:us-0.turn.peerjs.com:3478"],
+    username: "peerjs",
+    credential: "peerjsp",
+  },
+];
+
+/** Máy chủ "chào hỏi" miễn phí của PeerJS — không cần tài khoản, không cần khoá. */
+export const PEER_CLOUD = {
+  host: "0.peerjs.com",
+  port: 443,
+  path: "/",
+  secure: true,
+};
 
 /**
  * Máy chủ STUN miễn phí: chỉ giúp hai máy biết địa chỉ công khai của nhau để
  * nối trực tiếp. Không có dữ liệu nào đi qua đây (không phải máy chủ trung gian).
+ * Kèm theo cả máy chủ trung chuyển TURN ở dưới cho những mạng khó.
  */
 export const RTC_ICE_SERVERS = [
   {
@@ -31,6 +72,7 @@ export const RTC_ICE_SERVERS = [
     ],
   },
   { urls: "stun:stun.cloudflare.com:3478" },
+  ...RTC_TURN_SERVERS,
 ];
 
 /**
@@ -46,7 +88,12 @@ export const RTC_MEDIA = {
   video: false,
 };
 
-export const RTC_SUBS = ["offer", "answer", "ice", "bye"];
+/**
+ * `pid` = trao đổi mã máy của PeerJS qua kênh ghép nối (kênh này đã chạy sẵn,
+ * không cần tài khoản). Bản cũ không biết `pid` thì bỏ qua gói đó và vẫn gọi
+ * được bằng đường WebRTC cũ — không làm hỏng máy nào.
+ */
+export const RTC_SUBS = ["pid", "offer", "answer", "ice", "bye"];
 
 /** Băm ngắn, ổn định: dùng làm mã tín hiệu để bỏ qua bản gửi lại giống nhau. */
 export function signalFingerprint(value) {
@@ -107,6 +154,82 @@ export function rtcWaitingTooLong(now, startedAt, limit = RTC_TRY_MS) {
   const from = Number(startedAt);
   if (!Number.isFinite(from) || from <= 0) return false;
   return Number(now) - from >= Math.max(1000, Number(limit) || RTC_TRY_MS);
+}
+
+/**
+ * Chỉnh phần SDP của Opus trước khi gửi đi:
+ * - `useinbandfec=1`: gói bị mất vẫn dựng lại được tiếng (hết ngắt quãng kiểu rè).
+ * - `usedtx=0`: không tắt tiếng khi im lặng, gói đi liên tục nên đường tiếng
+ *   được kiểm tra thật và không có khoảng lặng giả.
+ * - `maxaveragebitrate`: mức tiếng nói, nhẹ mà rõ.
+ * SDP là văn bản chuẩn nên sửa thẳng ở đây là cách làm đúng, không cần native.
+ */
+export function tuneOpusSdp(sdp, options = {}) {
+  const text = String(sdp ?? "");
+  if (!text || !/opus/i.test(text)) return text;
+  const bitrate = Math.max(6000, Number(options.bitrate) || RTC_OPUS_BITRATE);
+  const separator = text.includes("\r\n") ? "\r\n" : "\n";
+  const lines = text.split(/\r\n|\n/);
+  const opusPayloads = new Set();
+  for (const line of lines) {
+    const match = /^a=rtpmap:(\d+)\s+opus\//i.exec(line.trim());
+    if (match) opusPayloads.add(match[1]);
+  }
+  if (!opusPayloads.size) return text;
+  const touched = new Set();
+  const tuned = lines.map((line) => {
+    const match = /^a=fmtp:(\d+)\s*(.*)$/i.exec(line.trim());
+    if (!match || !opusPayloads.has(match[1])) return line;
+    touched.add(match[1]);
+    const params = new Map();
+    for (const part of match[2].split(";")) {
+      const [key, value] = part.split("=");
+      if (key && value !== undefined && key.trim())
+        params.set(key.trim(), value.trim());
+    }
+    params.set("useinbandfec", "1");
+    params.set("usedtx", "0");
+    params.set("maxaveragebitrate", String(bitrate));
+    const body = [...params].map(([key, value]) => `${key}=${value}`).join(";");
+    return `a=fmtp:${match[1]} ${body}`;
+  });
+  // Chưa có dòng fmtp cho Opus thì thêm ngay sau dòng rtpmap của nó.
+  const missing = [...opusPayloads].filter((id) => !touched.has(id));
+  if (missing.length) {
+    return tuned
+      .flatMap((line) => {
+        if (!/^a=rtpmap:(\d+)\s+opus\//i.test(line.trim())) return [line];
+        const id = /^a=rtpmap:(\d+)/i.exec(line.trim())[1];
+        if (!missing.includes(id)) return [line];
+        return [
+          line,
+          `a=fmtp:${id} useinbandfec=1;usedtx=0;maxaveragebitrate=${bitrate}`,
+        ];
+      })
+      .join(separator);
+  }
+  return tuned.join(separator);
+}
+
+/** "12,3 KB" — số liệu tiếng cho màn hình gọi, viết kiểu Việt Nam. */
+export function formatAudioBytes(bytes) {
+  const value = Math.max(0, Number(bytes) || 0);
+  if (value < 1024) return `${Math.round(value)} B`;
+  if (value < 1024 * 1024)
+    return `${(value / 1024).toFixed(1).replace(".", ",")} KB`;
+  return `${(value / (1024 * 1024)).toFixed(2).replace(".", ",")} MB`;
+}
+
+/** Dòng số liệu thật: đang nhận bao nhiêu, đang gửi bao nhiêu. */
+export function rtcAudioText(inBytes, outBytes) {
+  return `tiếng vào ${formatAudioBytes(inBytes)} · tiếng ra ${formatAudioBytes(outBytes)}`;
+}
+
+/** Đường tiếng trực tiếp nối rồi mà không có byte nào: coi như không nghe được. */
+export function rtcAudioIsDead(now, lastAudioAt, ms = RTC_DEAD_MS) {
+  const last = Number(lastAudioAt);
+  if (!Number.isFinite(last) || last <= 0) return false;
+  return Number(now) - last >= Math.max(2000, Number(ms) || RTC_DEAD_MS);
 }
 
 /** Trạng thái kết nối của WebRTC đã đủ tốt để nói chuyện chưa. */

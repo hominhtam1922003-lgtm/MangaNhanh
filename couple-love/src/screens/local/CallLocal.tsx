@@ -13,6 +13,7 @@ import { LocalAvatar, Note } from "../../components/UI";
 import { useTheme } from "../../theme/ThemeContext";
 import { callClock } from "../../logic/callLogic.mjs";
 import type { CallInfo } from "../../logic/callLogic.mjs";
+import { formatAudioBytes } from "../../logic/rtcSignal.mjs";
 import {
   CALL_CLOSE_MS,
   CALL_PLAY_GAP_MS,
@@ -142,6 +143,8 @@ export default function CallLocal({
   playingRef,
   rtcInfo,
   rtcLive,
+  rtcAudio,
+  onUseLegacyAudio,
   onToggleMic,
   onMinimize,
   onRestore,
@@ -160,6 +163,10 @@ export default function CallLocal({
   /** Đường tiếng trực tiếp (WebRTC): đã nối thì tiếng đi thẳng, không qua tệp. */
   rtcInfo: { state: string; detail: string };
   rtcLive: boolean;
+  /** Số byte tiếng thật đang vào/ra — nhìn là biết có tiếng hay không. */
+  rtcAudio: { inBytes: number; outBytes: number };
+  /** Bấm khi không nghe được: chuyển về đường tiếng qua kênh ghép nối. */
+  onUseLegacyAudio: () => void;
   onToggleMic: () => void;
   onMinimize: () => void;
   onRestore: () => void;
@@ -465,6 +472,32 @@ export default function CallLocal({
                   {rtcLive ? "● " : "○ "}
                   {rtcInfo.detail}
                 </Text>
+              ) : null}
+              {rtcLive ? (
+                <Text
+                  className="text-xs mt-1"
+                  style={{ color: theme.dark ? theme.sub : "#ffffffaa" }}
+                >
+                  Tiếng vào {formatAudioBytes(rtcAudio.inBytes)} · tiếng ra{" "}
+                  {formatAudioBytes(rtcAudio.outBytes)}
+                </Text>
+              ) : null}
+              {rtcLive ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Nghe không được, dùng đường tiếng thường"
+                  onPress={onUseLegacyAudio}
+                  className="mt-2 px-3 py-1 rounded-full"
+                  style={{
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    backgroundColor: theme.glass,
+                  }}
+                >
+                  <Text className="text-xs" style={{ color: theme.sub }}>
+                    Nghe không được? Chuyển sang đường tiếng thường
+                  </Text>
+                </Pressable>
               ) : null}
             </View>
           ) : null}

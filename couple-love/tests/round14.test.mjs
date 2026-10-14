@@ -93,14 +93,19 @@ test("Tín hiệu WebRTC: gói đúng dạng, gửi lại không áp dụng hai 
   );
 });
 
-test("WebRTC: máy chủ STUN miễn phí, chỉ lấy tiếng, có khử vọng", () => {
+test("WebRTC: máy chủ STUN/TURN miễn phí, chỉ lấy tiếng, có khử vọng", () => {
   const urls = RTC_ICE_SERVERS.flatMap((server) =>
     Array.isArray(server.urls) ? server.urls : [server.urls],
   );
   assert.equal(
-    urls.every((url) => url.startsWith("stun:")),
+    urls.every((url) => url.startsWith("stun:") || url.startsWith("turn:")),
     true,
-    "chỉ dùng STUN công khai, không cần máy chủ riêng của mình",
+    "chỉ dùng máy chủ công khai có sẵn, không cần máy chủ riêng của mình",
+  );
+  assert.equal(
+    urls.some((url) => url.startsWith("turn:")),
+    true,
+    "có TURN miễn phí để nối được cả khi NAT khó",
   );
   assert.equal(
     urls.some((url) => url.includes("stun.l.google.com")),
@@ -196,6 +201,6 @@ test("Cuộc gọi dùng đường tiếng trực tiếp: ghi âm cũ dừng, mi
   );
   const pkg = JSON.parse(read("package.json"));
   assert.equal(pkg.dependencies["react-native-webrtc"], "124.0.8");
-  assert.equal(pkg.version, "1.14.0");
-  assert.equal(config.includes('version: "1.14.0"'), true);
+  assert.equal(pkg.version, "1.15.0");
+  assert.equal(config.includes('version: "1.15.0"'), true);
 });

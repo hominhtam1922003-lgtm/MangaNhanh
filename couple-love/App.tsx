@@ -523,6 +523,8 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   const rtcRef = useRef<RtcCall | null>(null);
   const rtcLiveRef = useRef(false);
   const [rtcLive, setRtcLive] = useState(false);
+  // Số liệu thật của đường tiếng (byte vào/ra) để thấy ngay có tiếng hay không.
+  const [rtcAudio, setRtcAudio] = useState({ inBytes: 0, outBytes: 0 });
   // WebRTC chưa nối được (máy không có thư viện, mạng chặn, micro bận) thì mới
   // bật lại đường tiếng cũ — mic không thể chạy hai nơi cùng lúc.
   const [rtcFallback, setRtcFallback] = useState(false);
@@ -776,6 +778,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     closeRtc();
     setRtcInfo({ state: "off", detail: "" });
     setRtcFallback(false);
+    setRtcAudio({ inBytes: 0, outBytes: 0 });
     const sent = client.publish({
       kind: "call",
       event: "ring",
@@ -811,6 +814,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           setTimeout(() => relayRef.current?.publish(packet), delay);
         }
       },
+      onStats: (info) => setRtcAudio(info),
       onState: (state, detail) => {
         setRtcInfo({ state, detail: detail || rtcStatusText(state) });
         const live = state === "live";
@@ -828,6 +832,23 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     });
     rtcRef.current = controller;
     return controller;
+  }
+  // Người dùng bảo "nghe không được": chuyển ngay sang đường tiếng qua kênh
+  // ghép nối. Máy kia cũng nhận tín hiệu để chuyển theo nên hai bên khớp nhau.
+  function useLegacyAudio() {
+    const controller = rtcRef.current;
+    rtcRef.current = null;
+    rtcLiveRef.current = false;
+    setRtcLive(false);
+    setRtcFallback(true);
+    setRtcAudio({ inBytes: 0, outBytes: 0 });
+    setRtcInfo({
+      state: "failed",
+      detail: "Đang dùng đường tiếng qua kênh ghép nối (bạn chọn).",
+    });
+    try {
+      controller?.giveUp("Bạn đã chuyển sang đường tiếng qua kênh ghép nối.");
+    } catch {}
   }
   function closeRtc() {
     const controller = rtcRef.current;
@@ -1436,6 +1457,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             closeRtc();
             setRtcInfo({ state: "off", detail: "" });
             setRtcFallback(false);
+            setRtcAudio({ inBytes: 0, outBytes: 0 });
             applyCall(newCall({ id: callId, role: "callee", name: who }));
             void notifyNow(
               `${who} đang gọi cho bạn 📞`,
@@ -1447,7 +1469,9 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           const active = callRef.current;
           if (!active || active.id !== callId) return;
           if (event === "rtc") {
-            // Tín hiệu nối tiếng trực tiếp (offer/answer/ICE) của người thương.
+            // Tín hiệu nối tiếng trực tiếp (mã máy PeerJS, offer/answer/ICE) của
+            // người thương. Cuộc gọi đã kết thúc thì bỏ qua: không mở micro trở lại.
+            if (active.phase === "ended") return;
             const controller = rtcRef.current ?? ensureRtc(active);
             void controller?.handle(message);
             return;
@@ -1719,6 +1743,24 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relayRoom?.id, relayRoom?.key, state?.settings.relay]);
+  // Android: khi đã nối tiếng trực tiếp thì đẩy tiếng ra LOA NGOÀI (như bật loa
+  // Zalo) — WebRTC mặc định đưa vào loa trong nên máy ảo/nhiều máy không nghe
+  // thấy gì. Nhắc lại vài giây một lần vì trình quản lý âm thanh của máy có thể
+  // đổi lại giữa cuộc gọi.
+  useEffect(() => {
+    if (Platform.OS !== "android" || !rtcLive) return;
+    const route = () => {
+      void setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: false,
+      }).catch(() => {});
+    };
+    route();
+    const timer = setInterval(route, 3000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rtcLive]);
   // Cuộc gọi vừa được nghe máy: mở ngay đường tiếng trực tiếp. Bên gọi mời
   // trước, bên nghe trả lời; chưa nối được trong vài giây thì vẫn gọi bình
   // thường bằng đường tiếng qua kênh ghép nối.
@@ -2070,6 +2112,8 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         callPlayingRef={callPlayingRef}
         rtcInfo={rtcInfo}
         rtcLive={rtcLive}
+        rtcAudio={rtcAudio}
+        onUseLegacyAudio={useLegacyAudio}
         onSendPhoto={sendChatPhoto}
         onSendLocation={() => void sendLocation()}
         callAction={callAction}
@@ -2146,6 +2190,8 @@ function LocalShell({
   callPlayingRef,
   rtcInfo,
   rtcLive,
+  rtcAudio,
+  onUseLegacyAudio,
   onPickRingtone,
   onResetRingtone,
   onStartCall,
@@ -2197,6 +2243,10 @@ function LocalShell({
   /** Trạng thái đường tiếng trực tiếp (WebRTC) của cuộc gọi đang mở. */
   rtcInfo: { state: string; detail: string };
   rtcLive: boolean;
+  /** Số byte tiếng thật đang vào/ra của WebRTC. */
+  rtcAudio: { inBytes: number; outBytes: number };
+  /** Người dùng bấm "nghe không được" → chuyển về đường tiếng qua kênh ghép nối. */
+  onUseLegacyAudio: () => void;
   onPickRingtone: () => void;
   onResetRingtone: () => void;
   onStartCall: () => void;
@@ -2502,6 +2552,8 @@ function LocalShell({
             playingRef={callPlayingRef}
             rtcInfo={rtcInfo}
             rtcLive={rtcLive}
+            rtcAudio={rtcAudio}
+            onUseLegacyAudio={onUseLegacyAudio}
             onToggleMic={() =>
               callAction({ type: "mic", on: !callRef.current?.micOn })
             }

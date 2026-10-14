@@ -28,7 +28,7 @@ import { requestNotifications } from "../../services/localnotify";
 import { restoreFromPayload } from "../../logic/localState.mjs";
 import { THEMES } from "../../logic/themes.mjs";
 import { useTheme } from "../../theme/ThemeContext";
-import { rtcSupport } from "../../services/rtcCall";
+import { peerSupport, rtcSupport } from "../../services/rtcCall";
 import Constants from "expo-constants";
 export default function SettingsLocal({
   state,
@@ -717,15 +717,17 @@ export default function SettingsLocal({
         </Card>
       ) : null}
       <Note>
-        Cuộc gọi tiếng trực tiếp (WebRTC): {rtcSupport().detail}. Khi đã nối
-        trực tiếp, tiếng đi thẳng từ máy này sang máy kia nên liền mạch như gọi
-        thường; nếu mạng chặn thì app tự quay về đường tiếng qua kênh ghép nối,
+        Cuộc gọi tiếng trực tiếp — lớp 1 PeerJS: {peerSupport().detail}; lớp 2
+        WebRTC: {rtcSupport().detail}. Khi đã nối trực tiếp, tiếng đi thẳng từ
+        máy này sang máy kia nên liền mạch như gọi thường; mạng khó thì PeerJS
+        đưa tiếng qua máy chủ trung chuyển miễn phí của họ, còn nếu cả hai lớp
+        đều không nối được thì app tự quay về đường tiếng qua kênh ghép nối,
         không ai bị mất cuộc gọi. Ghi lại dòng này nếu cuộc gọi còn đứt quãng để
         tôi biết máy đang dùng đường tiếng nào.
       </Note>
       <Note>
-        Hai Trái Tim {Constants.expoConfig?.version ?? "1.14.0"} (chế độ trên
-        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 16}) — ghi
+        Hai Trái Tim {Constants.expoConfig?.version ?? "1.15.0"} (chế độ trên
+        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 17}) — ghi
         lại số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục
         riêng của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ
         liệu, nên hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch,

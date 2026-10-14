@@ -3,7 +3,7 @@ module.exports = {
   expo: {
     name: "Hai Trái Tim",
     slug: "hai-trai-tim",
-    version: "1.14.0",
+    version: "1.15.0",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
@@ -18,7 +18,7 @@ module.exports = {
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.CHANGE_NETWORK_STATE",
       ],
-      versionCode: 16,
+      versionCode: 17,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#fff1f2",

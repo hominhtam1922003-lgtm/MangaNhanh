@@ -1,6 +1,6 @@
-# Nguồn APK 1.13.0: run_id 38568939724 (commit d16a04c, artifact HaiTraiTim-1.13.0-APK, gồm cả bản nhẹ arm64).
-# Ghi chú: Release nháp hai-trai-tim-v1.13.0-test-d16a04c đã tạo sẵn ở máy,
-# runner chỉ tải artifact của run 38568939724 lên rồi mở công khai sau khi kiểm tra.
+# Nguồn APK 1.14.0: run_id 38573992913 (commit a352b9f, artifact HaiTraiTim-1.14.0-APK, gồm cả bản nhẹ arm64).
+# Ghi chú: Release nháp hai-trai-tim-v1.14.0-test-a352b9f đã tạo sẵn ở máy,
+# runner chỉ tải artifact của run 38573992913 lên rồi mở công khai sau khi kiểm tra.
 # Lưu ý: runner không tạo được Release (403) — luôn tạo Release nháp cục bộ trước rồi push file này để runner tải APK lên.
 name: Đăng APK Hai Trái Tim tải trực tiếp
 
@@ -13,7 +13,7 @@ on:
       run_id:
         description: ID lần chạy "APK Hai Trái Tim" đã thành công
         required: true
-        default: '38568939724'
+        default: '38573992913'
         type: string
 
 permissions:
@@ -35,9 +35,9 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38568939724' }}
-      ARTIFACT_NAME: HaiTraiTim-1.13.0-APK
-      APK_FILE: HaiTraiTim-1.13.0.apk
+      BUILD_RUN_ID: ${{ inputs.run_id || '38573992913' }}
+      ARTIFACT_NAME: HaiTraiTim-1.14.0-APK
+      APK_FILE: HaiTraiTim-1.14.0.apk
     steps:
       - name: Kiểm tra nguồn APK đã build thành công
         id: verify
@@ -54,7 +54,7 @@ jobs:
           assert run['path'] == '.github/workflows/build-couple-apk.yml', 'Sai workflow build'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f"sha={run['head_sha']}\n")
-              output.write(f"tag=hai-trai-tim-v1.13.0-test-{run['head_sha'][:7]}\n")
+              output.write(f"tag=hai-trai-tim-v1.14.0-test-{run['head_sha'][:7]}\n")
           PY
       - name: Lấy APK đã kiểm chứng qua REST API (không build lại, không đổi chữ ký)
         run: |
@@ -112,13 +112,13 @@ jobs:
             fi
           else
             cat > /tmp/love-notes.md <<EOF
-          APK thử nghiệm **Hai Trái Tim 1.13.0** cho **Android 7.0+ (API 24)**.
+          APK thử nghiệm **Hai Trái Tim 1.14.0** cho **Android 7.0+ (API 24)**.
 
-          Tải **HaiTraiTim-1.13.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP. Mạng yếu thì tải **HaiTraiTim-1.13.0-arm64.apk** (bản nhẹ, chỉ arm64-v8a — dùng được cho máy thật đời mới và LDPlayer 64-bit).
+          Tải **HaiTraiTim-1.14.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP. Mạng yếu thì tải **HaiTraiTim-1.14.0-arm64.apk** (bản nhẹ, chỉ arm64-v8a — dùng được cho máy thật đời mới và LDPlayer 64-bit).
 
-          Bản 1.13.0: nói chuyện trong cuộc gọi liền mạch hơn, một máy kết thúc là máy kia tự kết thúc, cầu tình yêu vẽ lại theo tranh gửi, bỏ tab Cảm xúc.
+          Bản 1.14.0: cuộc gọi dùng WebRTC — tiếng đi thẳng máy-tới-máy, có khử vọng nên liền mạch như gọi thường; không nối trực tiếp được thì tự quay về kênh ghép nối. Bỏ hình cầu, trái tim ở chính giữa có vũ trụ trái tim quay quanh.
           EOF
-            gh release create "$RELEASE_TAG" "release-apk/$APK_FILE" "release-apk/$APK_FILE.sha256" --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.13.0 — APK thử nghiệm" --notes-file /tmp/love-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
+            gh release create "$RELEASE_TAG" "release-apk/$APK_FILE" "release-apk/$APK_FILE.sha256" --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.14.0 — APK thử nghiệm" --notes-file /tmp/love-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
           fi
           gh release view "$RELEASE_TAG" --json tagName,isDraft,assets --repo "$GITHUB_REPOSITORY" | tee /tmp/love-release.json
           echo "APK tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$APK_FILE" >> "$GITHUB_STEP_SUMMARY"

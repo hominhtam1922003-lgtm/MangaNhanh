@@ -258,6 +258,44 @@ test("cấu hình dự án ghép nối cũng đóng trong app.config.js", () => 
   );
 });
 
+test('Bước 2 — nút "↓ mới nhất" theo vị trí cuộn, không treo lơ lửng nữa', () => {
+  const chat = read("src/screens/local/ChatLocal.tsx");
+  assert.match(chat, /contentOffset, contentSize, layoutMeasurement/);
+  assert.match(
+    chat,
+    /contentSize\.height - \(contentOffset\.y \+ layoutMeasurement\.height\)/,
+  );
+  assert.match(chat, /setJump\(!shortList && fromBottom > 140\)/);
+  assert.equal(
+    /messages\.length > 3 \?/.test(chat),
+    false,
+    "bỏ điều kiện cũ chỉ đếm số tin (làm nút hiện mãi)",
+  );
+  assert.match(chat, /\{showJump \? \(/, "nút chỉ hiện khi đang cuộn lên");
+  assert.match(chat, /onScroll=\{trackScroll\}/);
+  assert.match(chat, /scrollToNewest|setJump\(false\)/);
+});
+
+test("Bước 2 — bỏ nút Trả lời thừa ngoài bong bóng, chỉ nhấn giữ hoặc vuốt", () => {
+  const chat = read("src/screens/local/ChatLocal.tsx");
+  assert.equal(
+    /hint="trả lời"/.test(chat),
+    false,
+    "không còn nhãn trả lời trên từng dòng",
+  );
+  assert.equal(
+    /↩ \{hint\}/.test(chat),
+    false,
+    "không còn vẽ nhãn trả lời ngoài bong bóng",
+  );
+  assert.match(chat, /<SwipeRow onReply=\{/, "vuốt ngang vẫn trả lời");
+  assert.match(
+    chat,
+    /\["↩ Trả lời", \(\) => onReply\(sheet\)\]/,
+    "nhấn giữ vẫn trả lời",
+  );
+});
+
 test("câu chữ trên giao diện: tóm tắt tài khoản luôn có mã cố định", () => {
   assert.match(
     accountSummary({ uid: "u1", shortCode: "ABC234", partnerId: null }),

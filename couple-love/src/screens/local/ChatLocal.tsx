@@ -353,17 +353,20 @@ const REPLY_SWIPE_PX = 56;
  * khi danh sách tin nhắn đang dài). Cử chỉ chỉ được "giành" khi người dùng vuốt
  * NGANG thật sự (activeOffsetX) và không lệch dọc quá nhiều, nhờ vậy việc cuộn
  * dọc trong khung chat vẫn trơn.
+ *
+ * Bản 1.18.0: KHÔNG còn vẽ nhãn "trả lời" nằm ngoài bong bóng. Trước đây nhãn đó
+ * nằm chờ sẵn ở lề trái và chỉ mờ đi nhờ hiệu ứng chạy trên luồng UI; máy nào
+ * hiệu ứng không chạy là nhãn hiện ra ở MỌI dòng (chính là ảnh bạn gửi). Giờ muốn
+ * trả lời thì NHẤN GIỮ tin nhắn (bảng chọn) hoặc VUỐT NGANG — không còn gì thừa
+ * trên từng dòng tin.
  */
 function SwipeRow({
   children,
   onReply,
-  hint,
 }: {
   children: React.ReactNode;
   onReply: () => void;
-  hint: string;
 }) {
-  const { theme } = useTheme();
   const x = useSharedValue(0);
   // Cử chỉ này cố tình chạy callback trên luồng JS (runOnJS) để gọi thẳng hàm
   // trả lời của React mà không cần bắc cầu worklet — nhẹ và dễ hiểu hơn.
@@ -390,29 +393,9 @@ function SwipeRow({
   const style = useAnimatedStyle(() => ({
     transform: [{ translateX: x.value }],
   }));
-  const hintStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(1, x.value / 40),
-  }));
   return (
     <GestureDetector gesture={pan}>
-      <View>
-        <Reanimated.View
-          pointerEvents="none"
-          style={[
-            {
-              position: "absolute",
-              left: 10,
-              top: 0,
-              bottom: 0,
-              justifyContent: "center",
-            },
-            hintStyle,
-          ]}
-        >
-          <Text style={{ color: theme.sub, fontWeight: "600" }}>↩ {hint}</Text>
-        </Reanimated.View>
-        <Reanimated.View style={style}>{children}</Reanimated.View>
-      </View>
+      <Reanimated.View style={style}>{children}</Reanimated.View>
     </GestureDetector>
   );
 }
@@ -829,6 +812,10 @@ export default function ChatLocal({
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<State["messages"][number]> | null>(null);
   const followRef = useRef(true);
+  /** Nút "↓ mới nhất": chỉ hiện khi đang cuộn lên khỏi đáy (xem onScroll). */
+  const [showJump, setShowJump] = useState(false);
+  const jumpRef = useRef(false);
+  const viewportRef = useRef(0);
   const busyRef = useRef(0);
   const textRef = useRef("");
   const replyRef = useRef<typeof reply>(null);
@@ -862,9 +849,36 @@ export default function ChatLocal({
     const timer = setInterval(() => setElapsed(Date.now() - startedAt), 200);
     return () => clearInterval(timer);
   }, [recording, startedAt]);
+  function setJump(value: boolean) {
+    if (jumpRef.current === value) return;
+    jumpRef.current = value;
+    setShowJump(value);
+  }
   function scrollToNewest() {
     followRef.current = true;
+    setJump(false);
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 140);
+  }
+  /**
+   * Đo vị trí cuộn: ẩn nút "mới nhất" khi đang ở đáy, chỉ hiện khi đã cuộn lên.
+   * Dùng đúng `contentOffset` / `contentSize` / `layoutMeasurement` như yêu cầu;
+   * nội dung ngắn hơn khung thì không bao giờ hiện nút (bản 1.17.0 hiện mãi vì
+   * điều kiện cũ chỉ đếm số tin nhắn > 3 nên nút treo lơ lửng trên màn hình).
+   */
+  function trackScroll(event: {
+    nativeEvent: {
+      contentOffset: { y: number };
+      contentSize: { height: number };
+      layoutMeasurement: { height: number };
+    };
+  }) {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const fromBottom =
+      contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    followRef.current = fromBottom < 60;
+    viewportRef.current = layoutMeasurement.height;
+    const shortList = contentSize.height <= layoutMeasurement.height + 8;
+    setJump(!shortList && fromBottom > 140);
   }
   function send(kind: string, body: string) {
     const value = body.trim();
@@ -1058,7 +1072,7 @@ export default function ChatLocal({
   );
   const renderItem = useCallback(
     ({ item, index }: { item: State["messages"][number]; index: number }) => (
-      <SwipeRow hint="trả lời" onReply={() => onReply(item)}>
+      <SwipeRow onReply={() => onReply(item)}>
         <MessageRow
           message={item}
           previousAt={ordered[index - 1]?.createdAt ?? null}
@@ -1204,17 +1218,20 @@ export default function ChatLocal({
           windowSize={9}
           removeClippedSubviews={Platform.OS === "android"}
           // Ở cuối danh sách thì tự bám theo tin mới; kéo lên xem lại thì đứng yên.
-          onScroll={(event) => {
-            const { contentOffset, contentSize, layoutMeasurement } =
-              event.nativeEvent;
-            const fromBottom =
-              contentSize.height - (contentOffset.y + layoutMeasurement.height);
-            followRef.current = fromBottom < 60;
-          }}
+          onScroll={trackScroll}
           scrollEventThrottle={16}
-          onContentSizeChange={() => {
-            if (followRef.current)
+          onLayout={(event) => {
+            viewportRef.current = event.nativeEvent.layout.height;
+          }}
+          onContentSizeChange={(_, height) => {
+            if (followRef.current) {
               listRef.current?.scrollToEnd({ animated: false });
+              setJump(false);
+              return;
+            }
+            // Người thương vừa gửi tin trong lúc mình đang xem lại tin cũ: hiện
+            // nút để nhảy xuống, không tự kéo màn hình khi đang đọc.
+            if (height > viewportRef.current + 8) setJump(true);
           }}
           ListEmptyComponent={
             <Card>
@@ -1226,7 +1243,7 @@ export default function ChatLocal({
           }
           renderItem={renderItem}
         />
-        {messages.length > 3 ? (
+        {showJump ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Xuống tin mới nhất"

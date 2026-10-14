@@ -21,6 +21,21 @@ Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo
 - **Không dùng `TextEncoder`/`TextDecoder` hay `crypto.getRandomValues`** (React Native không cấp): phần chuyển chữ ↔ byte được tự viết trong `relayProtocol.mjs` (đối chiếu từng byte với chuẩn UTF-8 của Node trong `tests/relay.test.mjs`, có bài chạy khi đã xóa hai lớp đó) và nguồn ngẫu nhiên an toàn lấy từ `expo-crypto` qua `installRandomBytes`. Mọi lỗi JavaScript được ghi vào **“Lỗi gần nhất”** trong Cài đặt thay vì làm văng app.
 - Giới hạn thật: cần Internet ở **cả hai** máy; dữ liệu mới chỉ sang nhau khi hai bên cùng mở app (một bên đóng app thì lần mở sau gửi bù); mã 6 số chỉ có 1.000.000 khả năng nên đừng dán công khai ở nơi nhiều người thấy.
 
+### Có gì mới ở 1.11.0 — gọi nói liên tục, nhạc chuông trong máy, cầu tình yêu 3D
+
+**Tải APK 1.11.0 (Android 7.0+, API 24):** xem mục **Releases** của kho (tệp `HaiTraiTim-1.11.0.apk`) — Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.11.0, bản dựng 13**.
+
+- **Gọi nói liên tục, không còn giữ nút.** Tiếng nói được ghi thành từng mảnh **0,7 giây** (16 kHz mono, 24 kbit/s) rồi gửi ngay qua kênh ghép nối; máy kia lưu mảnh lại và phát lên loa (`src/logic/callAudio.mjs`: `pushFrame`, `takeFrame`, hàng đợi 6 mảnh, bỏ mảnh cũ để giữ độ trễ thấp). Bạn nói bình thường như Zalo/Messenger — không phải bấm giữ. _Nói thẳng:_ vẫn là tiếng gửi qua kênh ghép nối nên trễ khoảng một giây và có thể ngắt quãng vài chỗ; muốn chất lượng như cuộc gọi điện thoại thật thì phải thêm WebRTC và build lại phần native.
+- **Cả hai máy cùng nghe chuông.** Bên nhận nghe **nhạc chuông** (`assets/ringtone.wav`, hoặc nhạc riêng của bạn) và rung; bên gọi nghe **hồi chuông** (`assets/ringback.wav`) như tổng đài.
+- **Cài nhạc chuông từ thư viện nhạc trong máy:** Cài đặt → **Nhạc chuông cuộc gọi** → 🎵 _Chọn nhạc trong máy_ (tệp nhạc được sao vào app, chỉ đổi trên máy bạn) và nút **Nhạc mặc định** để quay lại.
+- **Kết thúc cuộc gọi là tự đóng, có nhật ký trong đoạn chat.** Cửa sổ gọi tự tắt sau **2,2 giây** (`CALL_CLOSE_MS`), và đoạn chat có một dòng **“📞 Cuộc gọi đi/đến · 01:23”** (cuộc gọi nhỡ ghi “Cuộc gọi nhỡ”); loại tin mới `call` nằm trong `MESSAGE_KINDS`.
+- **Popup cuộc gọi thiết kế lại:** vòng sáng thở quanh avatar, tên + trạng thái lớn, **vòng sóng chạy khi đang nói**, nút tròn Mic · Thu nhỏ · Kết thúc, và khi thu nhỏ thì thanh nổi gọn có avatar + đồng hồ + mic + kết thúc.
+- **Cầu tình yêu 3D thật** (`src/components/LoveBridge.tsx`): trăng tròn, **đàn chim Ô Thước** bay thành dòng quanh cầu, vòm cầu ghép từ 26 ván + lan can hai bên, **cô dâu chibi** (áo xanh ngọc, khăn đỏ, hoa cài) và **chú rể chibi** (áo lam) chạy từ hai đầu vào giữa, gặp nhau thì tim sáng lên rồi cùng quay về — lặp lại mãi.
+- **Nhắn tin nhanh hơn hẳn:** tin nhắn/vị trí không còn kéo theo việc đẩy **cả gói dữ liệu 60 KB** sang 5 trạm MQTT (`publishCurrent` so khoá `lastLiteRef`, chỉ đẩy lại phần không phải tin nhắn; nhịp an toàn 20 giây), dữ liệu xuống máy được **gộp trong 400 ms** (`persistSoon`), và gửi vị trí/ảnh không còn làm khựng đoạn chat.
+- **Bảng tin mượt hơn:** mỗi dòng tin là một `MessageRow` nhớ sẵn (`React.memo`) + `renderItem` ổn định nên **đang gõ chữ không vẽ lại danh sách**; thêm `initialNumToRender`, `maxToRenderPerBatch`, `windowSize`, `removeClippedSubviews` cho máy yếu.
+- **Ô nhắn tin đứng yên tuyệt đối:** mục Tin nhắn được tách khỏi khung cuộn chung của app, nên dù tin nhắn dài bao nhiêu thì **chỉ phần tin cuộn, thanh chat luôn ở đáy**.
+- 71 bài kiểm thử đều xanh (thêm `tests/round12.test.mjs`), TypeScript sạch, `expo export` cho Android thành công.
+
 ### Có gì mới ở 1.10.0 — hết chữ ngược, gọi điện, sticker, cầu tình yêu
 
 **Tải APK 1.10.0 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.10.0-test-0a44d5f/HaiTraiTim-1.10.0.apk · 58.549.853 byte · SHA256 `6e9426fcd457b010ef58bc01f2ba8045f848201e9aea839ba59224e6abe581f0` · dựng từ `0a44d5f` (build 38552769225). **iOS (.ipa chưa ký):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.10.0-test-0a44d5f/HaiTraiTim-1.10.0-unsigned.ipa · 11.458.596 byte · SHA256 `38aad59124ebe92378810bb2fad5e382e209802c8be33f31bd017d34c34669bc` (build 38552769096).

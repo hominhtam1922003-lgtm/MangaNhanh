@@ -269,7 +269,27 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Hai Trái Tim 1.10.0 (bản mới nhất) — hết chữ ngược, gọi điện, sticker, cầu tình yêu
+## Hai Trái Tim 1.11.0 (bản mới nhất) — gọi nói liên tục, nhạc chuông trong máy, cầu tình yêu 3D
+
+**APK Android (cài trực tiếp, không cần ZIP):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.11.0-test-d987c52/HaiTraiTim-1.11.0.apk · dựng từ `d987c52`. Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.11.0, bản dựng 13**.
+
+**iPhone (file .ipa chưa ký, phải tự ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.11.0-test-d987c52/HaiTraiTim-1.11.0-unsigned.ipa
+
+Bản 1.11.0 sửa đúng những việc bạn nêu:
+
+1. **Gọi nói liên tục như Zalo/Messenger — bỏ hẳn kiểu “giữ để nói”.** Tiếng nói cắt thành mảnh **0,7 giây** gửi liên tục qua kênh ghép nối, máy kia tự phát lên loa; mic bật/tắt bằng một nút. *Nói thẳng:* trễ khoảng một giây và có thể ngắt quãng vài chỗ; muốn như cuộc gọi điện thoại thật thì phải thêm WebRTC và build lại native.
+2. **Cả hai máy cùng nghe chuông:** bên nhận nghe nhạc chuông (rung kèm), bên gọi nghe hồi chuông tổng đài.
+3. **Cài nhạc chuông từ thư viện nhạc trong máy** (Cài đặt → Nhạc chuông cuộc gọi); nhạc chỉ đổi trên máy bạn, có nút quay về nhạc mặc định.
+4. **Kết thúc cuộc gọi tự đóng** sau 2,2 giây và **hiện nhật ký trong đoạn chat**: “📞 Cuộc gọi đi/đến · 01:23”, cuộc gọi nhỡ ghi rõ “Cuộc gọi nhỡ”.
+5. **Popup cuộc gọi thiết kế lại:** vòng sáng thở, vòng sóng khi đang nói, nút tròn Mic · Thu nhỏ · Kết thúc, thanh thu nhỏ gọn gàng.
+6. **Cầu tình yêu 3D** đúng kiểu ảnh bạn gửi: trăng tròn, đàn Ô Thước bay thành dòng, vòm cầu ghép từng ván, **cô dâu và chú rể chibi** chạy vào giữa cầu, gặp nhau thì tim sáng rồi cùng quay về.
+7. **Nhắn tin nhanh hơn:** mỗi tin nhắn/gửi vị trí không còn đẩy cả gói dữ liệu 60 KB lên 5 trạm (chỉ đẩy khi dữ liệu khác tin nhắn thay đổi, kèm nhịp an toàn 20 giây), dữ liệu ghi xuống máy gộp trong 400 ms → đoạn chat hết lag khi gửi vị trí.
+8. **App mượt hơn:** mỗi dòng tin nhắn vẽ riêng và nhớ sẵn nên **gõ chữ không vẽ lại bảng tin**, danh sách chỉ vẽ các dòng đang thấy.
+9. **Ô nhắn tin cố định:** mục Tin nhắn tách khỏi khung cuộn chung → tin nhiều tới đâu cũng **chỉ phần tin cuộn, thanh chat luôn ở đáy**.
+
+71 bài kiểm thử đều xanh, TypeScript sạch, `expo export` cho Android thành công. Chi tiết kỹ thuật ở `couple-love/README.md`.
+
+## Hai Trái Tim 1.10.0 — hết chữ ngược, gọi điện, sticker, cầu tình yêu
 
 **APK Android (cài trực tiếp, không cần ZIP):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.10.0-test-0a44d5f/HaiTraiTim-1.10.0.apk · **58.549.853 byte** · SHA256 `6e9426fcd457b010ef58bc01f2ba8045f848201e9aea839ba59224e6abe581f0` · dựng từ `0a44d5f` (lần build 38552769225, đăng bằng workflow 38554460474). Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.10.0, bản dựng 12**.
 

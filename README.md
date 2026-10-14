@@ -269,20 +269,28 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Hai Trái Tim 1.14.0 (bản mới nhất) — cuộc gọi tiếng trực tiếp WebRTC, bỏ hình cầu, trái tim ở giữa có vũ trụ quay quanh
+## Hai Trái Tim 1.15.0 (bản mới nhất) — cuộc gọi qua được NAT khó nhờ TURN dự phòng, giữ cuộc gọi khi tắt màn hình
 
-**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.14.0-test-a352b9f/HaiTraiTim-1.14.0.apk · **77.339.423 byte** · SHA256 `664a9c6cc89b15cd58fd153a8155d8012df021d21081b4a6affef1008ca2249a`
-**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.14.0-test-a352b9f/HaiTraiTim-1.14.0-arm64.apk · **55.025.174 byte** · SHA256 `df5edeb065d123bb3f91f49a86299290d2d09750f930abd15c87ea79632ba49a`
-**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.14.0-test-a352b9f/HaiTraiTim-1.14.0-unsigned.ipa · **16.671.745 byte** · SHA256 `f95c9de089b9438f3f4f8e0341f0833859cbc2c9f6e2d5884892312503c639dc`
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.15.0-test-91bf7bd/HaiTraiTim-1.15.0.apk · **77.814.316 byte** (kèm file kiểm tra `HaiTraiTim-1.15.0.apk.sha256` trong Assets)
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.15.0-test-91bf7bd/HaiTraiTim-1.15.0-arm64.apk · **55.500.067 byte** (kèm file `HaiTraiTim-1.15.0-arm64.sha256`)
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.15.0-test-91bf7bd/HaiTraiTim-1.15.0-unsigned.ipa · **16.815.744 byte** (kèm file `HaiTraiTim-1.15.0-unsigned.ipa.sha256`)
 
-Trong app mở **Cài đặt**, dòng cuối phải là **1.14.0, bản dựng 16**. Dựng từ `a352b9f` (build 38573992913 / 38573992999). APK nặng hơn bản trước khoảng 16 MB vì đã nhúng **bộ máy gọi điện thật (WebRTC)**; mạng yếu thì tải bản arm64.
+Trong app mở **Cài đặt**, dòng cuối phải là **1.15.0, bản dựng 17**. Dựng từ `91bf7bd` (build 38582680038 cho APK, 38582680084 cho iOS). Mạng yếu thì tải bản arm64.
+
+Bản 1.15.0 làm đúng hai việc bạn nêu:
+
+1. **Cuộc gọi thông qua được cả mạng khó (NAT đối xứng, Wi-Fi công ty).** Đường tiếng vẫn ba lớp và **ưu tiên nối trực tiếp máy-tới-máy**: (1) **PeerJS** — thư viện gọi điện mã nguồn mở, app tự nối vào trạm trung chuyển công khai `0.peerjs.com` kèm TURN miễn phí của PeerJS, không cần tài khoản; (2) không xong trong 2,5 giây thì chuyển sang **WebRTC thuần** (offer/answer/ICE) đi qua kênh ghép nối sẵn có; (3) vẫn không xong thì **quay về tiếng qua kênh ghép nối** — không ai bị mất cuộc gọi. Bản 1.15.0 thêm **máy chủ TURN dự phòng miễn phí** (Open Relay của Metered: cổng 80, 443 và TCP 443) để hai máy vẫn nối được khi mạng chặn P2P; địa chỉ TURN nào cũng nối được thì app dùng, nên tiếng vẫn đi thẳng máy-tới-máy khi có thể. Muốn dùng TURN riêng thì đặt biến `EXPO_PUBLIC_TURN_URLS`, `EXPO_PUBLIC_TURN_USER`, `EXPO_PUBLIC_TURN_CREDENTIAL` rồi dựng lại APK.
+2. **Cuộc gọi không tắt khi tắt màn hình.** Android chạy **dịch vụ chạy nổi** kèm thông báo thường trực “Cuộc gọi đang diễn ra…” có nút **Cúp máy** (chạm nút là cúp ngay cả khi đang ở app khác), xin quyền `FOREGROUND_SERVICE_MICROPHONE` + `WAKE_LOCK`; iOS khai báo `UIBackgroundModes` gồm `audio` và `voip`, phiên âm thanh đặt `shouldPlayInBackground` nên tiếng vẫn chạy khi khoá máy hoặc chuyển app.
+
+91 bài kiểm thử đều xanh, TypeScript sạch, `expo export` cho Android thành công, `expo prebuild` ra manifest có dịch vụ chạy nổi đúng kiểu `microphone`. **Chưa thử trên máy ảo LDPlayer của bạn nên chưa dám nói là đã hết đứt** — bạn gọi thử hai máy rồi báo lại.
+
+Bản 1.14.0 trước đó (đã có sẵn, vẫn tải được):
+`https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.14.0-test-a352b9f/HaiTraiTim-1.14.0.apk`
 
 Bản 1.14.0 làm đúng hai việc bạn nêu:
 
 1. **Bỏ hẳn hình cầu tình yêu.** Màn hình Yêu nhau giờ chỉ còn **một trái tim 3D ở chính giữa**, xung quanh là **vũ trụ trái tim**: ba quỹ đạo nghiêng nhau, mỗi quỹ đạo mang 4–7 trái tim nhỏ quay với tốc độ khác nhau, nền tinh vân hai quầng sáng và 130 ngôi sao. Vẫn **chỉ một vùng WebGL** nên máy ảo không đơ. Tệp `src/components/LoveBridgeArt.tsx` đã xoá.
 2. **Cuộc gọi tiếng trực tiếp (WebRTC) — nói chuyện liền mạch như gọi thường.** Hai máy vẫn trao đổi tín hiệu qua **kênh ghép nối** (offer/answer/ICE, không cần máy chủ), nhưng khi đã nối thì tiếng nói đi **thẳng máy-tới-máy** theo chuẩn RTP/Opus 20 ms một gói, có **khử vọng** và bộ đệm chống rung mạng. Không còn cắt thành tệp 0,9 giây rồi ghép lại, nên không còn đứt quãng vì micro phải nghỉ giữa hai mảnh. Nếu mạng chặn không nối trực tiếp được trong 4 giây (hoặc máy không có WebRTC), app **tự quay về đường tiếng qua kênh ghép nối** — không ai bị mất cuộc gọi. Màn hình gọi hiện rõ đang dùng đường tiếng nào (“Đang nối tiếng trực tiếp…”, “● Tiếng nét trực tiếp (WebRTC)”, hoặc “○ Tiếng đi qua kênh ghép nối”), và Cài đặt có dòng kiểm tra WebRTC của máy.
-
-78 bài kiểm thử đều xanh, TypeScript sạch, `expo export` cho Android thành công.
 
 ## Hai Trái Tim 1.13.0 — nói chuyện liền mạch hơn, một máy tắt là máy kia tự tắt, cầu tình yêu vẽ theo tranh
 

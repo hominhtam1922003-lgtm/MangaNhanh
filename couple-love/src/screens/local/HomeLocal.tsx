@@ -14,7 +14,6 @@ import * as ImagePicker from "expo-image-picker";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
 import ThreeHeart from "../../components/ThreeHeart";
-import LoveBridge from "../../components/LoveBridge";
 import DatePicker from "../../components/DatePicker";
 import {
   Button,
@@ -313,9 +312,9 @@ export default function HomeLocal({
             </View>
           </View>
         </View>
-        {/* Cầu tình yêu: hai bạn chibi chạy từ hai đầu vào giữa cầu */}
-        <LoveBridge height={150} />
-        <ThreeHeart reduced={reduced} height={250} />
+        {/* Cầu tình yêu + trái tim 3D trong CÙNG một canvas (không mở hai vùng
+            WebGL: hai canvas cùng lúc làm máy ảo bị đơ, dính màn hình). */}
+        <ThreeHeart reduced={reduced} height={360} withBridge />
         <View className="items-center mb-4">
           <Text
             className="text-xs uppercase"

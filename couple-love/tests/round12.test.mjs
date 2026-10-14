@@ -161,18 +161,31 @@ test("Nhật ký cuộc gọi là một loại tin nhắn thật, hiện giữa 
   assert.match(relay, /"call",\n\s*\].includes\(message\.kind\)/);
 });
 
-test("Cầu tình yêu vẽ bằng 3D thật, có cô dâu chú rể chibi và đàn Ô Thước", () => {
+test("Cầu tình yêu 3D dùng chung một canvas với trái tim", () => {
   const bridge = read("src/components/LoveBridge.tsx");
-  assert.match(bridge, /Canvas/, "dựng bằng Three.js");
-  assert.match(bridge, /archPoint/, "vòm cầu theo đường cong");
-  assert.match(bridge, /Bride/, "cô dâu chibi");
-  assert.match(bridge, /Groom/, "chú rể chibi");
-  assert.match(bridge, /Magpie/, "chim Ô Thước");
   assert.match(bridge, /useFrame/, "hoạt ảnh chạy lại gần nhau");
+  assert.match(bridge, /BRIDGE_CURVE/, "vòm cầu theo đường cong");
+  assert.match(bridge, /Bride/, "cô dâu");
+  assert.match(bridge, /Groom/, "chú rể");
+  assert.match(bridge, /Magpie/, "chim Ô Thước");
+  assert.match(bridge, /instancedMesh/, "ván cầu và cột dựng theo lô, nhẹ máy");
   assert.match(bridge, /octahedronGeometry/, "trái tim khi gặp nhau");
-  assert.match(bridge, /moon|Trăng/, "trăng tròn sau lưng");
+  assert.match(bridge, /palette/, "màu cầu lấy theo chủ đề đang dùng");
+  // Chỉ MỘT vùng WebGL trên màn hình: hai canvas cùng lúc làm máy ảo đơ.
+  assert.doesNotMatch(
+    bridge,
+    /<Canvas/,
+    "cầu không được tự mở canvas riêng (gây dính màn hình trên máy ảo)",
+  );
+  const heart = read("src/components/ThreeHeart.tsx");
+  assert.match(heart, /BridgeGroup/, "cầu nằm trong canvas của trái tim");
+  assert.match(heart, /antialias: false/, "hạ tải đồ hoạ cho máy yếu");
   const home = read("src/screens/local/HomeLocal.tsx");
-  assert.match(home, /<LoveBridge height=\{150\}/);
+  assert.match(
+    home,
+    /<ThreeHeart reduced=\{reduced\} height=\{360\} withBridge \/>/,
+  );
+  assert.doesNotMatch(home, /LoveBridge/, "không còn canvas cầu riêng");
 });
 
 test("Nhắn tin nhanh hơn: không đẩy cả gói dữ liệu lớn vì một tin nhắn", () => {

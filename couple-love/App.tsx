@@ -1619,7 +1619,10 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relayRoom?.id, relayRoom?.key, state?.settings.relay]);
   // Nhịp 1 giây cho màn hình gọi + tự kết thúc khi chuông reo quá lâu.
+  // Không có cuộc gọi thì không chạy nhịp nào: trước đây app tự vẽ lại toàn bộ
+  // giao diện mỗi giây nên máy yếu bị giật, có lúc đơ dính cả màn hình.
   useEffect(() => {
+    if (!call) return;
     const timer = setInterval(() => {
       setCallTick((value) => value + 1);
       const active = callRef.current;
@@ -1636,7 +1639,8 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [call?.id]);
   // Nói chuyện liên tục: ghi âm thành từng mảnh ngắn rồi gửi ngay, không cần
   // giữ nút. Mảnh nhỏ nên vẫn nhẹ kênh; mic tắt thì tạm dừng gửi tiếng.
   useEffect(() => {
@@ -2176,7 +2180,16 @@ function LocalShell({
         {/* Tin nhắn: khung riêng chiếm hết chiều cao nên ô nhắn tin luôn đứng
             yên dưới đáy, tin nhắn nhiều tới đâu cũng chỉ phần tin cuộn lên. */}
         {!alertPage && tab === "chat" ? (
-          <View style={{ flex: 1, paddingHorizontal: 18, paddingTop: 10 }}>
+          <View
+            key="chat"
+            collapsable={false}
+            style={{
+              flex: 1,
+              minHeight: 240,
+              paddingHorizontal: 18,
+              paddingTop: 10,
+            }}
+          >
             <ChatLocal
               {...props}
               relayStatus={relayStatus}
@@ -2187,125 +2200,131 @@ function LocalShell({
             />
           </View>
         ) : null}
-        <ScrollView
-          key={alertPage ? "alerts" : tab}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 18, paddingBottom: 32 }}
-        >
-          {alertPage ? (
-            <>
-              <Title>Lời nhắc yêu thương</Title>
-              {state.alerts.length === 0 && (
-                <Card>
-                  <Note>
-                    Chưa có lời nhắc. Lời nhắc xuất hiện khi tới mốc kỷ niệm
-                    hoặc mốc chu kỳ ước tính.
-                  </Note>
-                </Card>
-              )}
-              {state.alerts.map((alert) => (
-                <Card key={alert.id}>
-                  <Title small>{alert.title}</Title>
-                  <Note>{alert.body}</Note>
-                  <Text className="text-xs text-stone-400 mt-2">
-                    {new Date(alert.createdAt).toLocaleString("vi-VN")}
-                  </Text>
-                  {!alert.readAt && (
-                    <Button
-                      label="Đã đọc"
-                      secondary
-                      onPress={() =>
-                        update({ type: "alerts.read", id: alert.id })
-                      }
-                    />
-                  )}
-                </Card>
-              ))}
-              {state.alerts.length > 0 && (
-                <Button
-                  label="Xóa hết lời nhắc"
-                  secondary
-                  onPress={() =>
-                    void (async () => {
-                      if (
-                        !(await confirm(
-                          "Xóa hết lời nhắc?",
-                          "Danh sách lời nhắc trên máy sẽ bị xóa. Lịch nhắc vẫn được giữ.",
-                        ))
-                      )
-                        return;
-                      update({ type: "alerts.clear" });
-                    })()
+        {/* Chỉ một trong hai khối được dựng: màn hình Tin nhắn chiếm trọn chiều
+            cao, các mục khác nằm trong khung cuộn. Trước đây hai khối cùng co
+            giãn nên màn hình cũ dính lại, bấm Tin nhắn không mở được. */}
+        {!alertPage && tab === "chat" ? null : (
+          <ScrollView
+            key={alertPage ? "alerts" : tab}
+            keyboardShouldPersistTaps="handled"
+            style={{ flexGrow: 1, flexShrink: 1 }}
+            contentContainerStyle={{ padding: 18, paddingBottom: 32 }}
+          >
+            {alertPage ? (
+              <>
+                <Title>Lời nhắc yêu thương</Title>
+                {state.alerts.length === 0 && (
+                  <Card>
+                    <Note>
+                      Chưa có lời nhắc. Lời nhắc xuất hiện khi tới mốc kỷ niệm
+                      hoặc mốc chu kỳ ước tính.
+                    </Note>
+                  </Card>
+                )}
+                {state.alerts.map((alert) => (
+                  <Card key={alert.id}>
+                    <Title small>{alert.title}</Title>
+                    <Note>{alert.body}</Note>
+                    <Text className="text-xs text-stone-400 mt-2">
+                      {new Date(alert.createdAt).toLocaleString("vi-VN")}
+                    </Text>
+                    {!alert.readAt && (
+                      <Button
+                        label="Đã đọc"
+                        secondary
+                        onPress={() =>
+                          update({ type: "alerts.read", id: alert.id })
+                        }
+                      />
+                    )}
+                  </Card>
+                ))}
+                {state.alerts.length > 0 && (
+                  <Button
+                    label="Xóa hết lời nhắc"
+                    secondary
+                    onPress={() =>
+                      void (async () => {
+                        if (
+                          !(await confirm(
+                            "Xóa hết lời nhắc?",
+                            "Danh sách lời nhắc trên máy sẽ bị xóa. Lịch nhắc vẫn được giữ.",
+                          ))
+                        )
+                          return;
+                        update({ type: "alerts.clear" });
+                      })()
+                    }
+                  />
+                )}
+              </>
+            ) : tab === "home" ? (
+              <HomeLocal
+                {...props}
+                openPair={() => setTab("pair")}
+                relayStatus={relayStatus}
+                onSendMoment={flushMoments}
+                onQuickNote={(text) => {
+                  try {
+                    update({ type: "message.add", kind: "nudge", body: text });
+                    flushMessages();
+                  } catch (error) {
+                    setError(
+                      error instanceof Error
+                        ? error.message
+                        : "Không gửi được lời nhắn.",
+                    );
                   }
-                />
-              )}
-            </>
-          ) : tab === "home" ? (
-            <HomeLocal
-              {...props}
-              openPair={() => setTab("pair")}
-              relayStatus={relayStatus}
-              onSendMoment={flushMoments}
-              onQuickNote={(text) => {
-                try {
-                  update({ type: "message.add", kind: "nudge", body: text });
-                  flushMessages();
-                } catch (error) {
-                  setError(
-                    error instanceof Error
-                      ? error.message
-                      : "Không gửi được lời nhắn.",
-                  );
-                }
-              }}
-            />
-          ) : tab === "pair" ? (
-            <PairLocal
-              {...props}
-              initialCode={state.links.length > 0 ? "1" : ""}
-              relayStatus={relayStatus}
-              relayLog={relayLog}
-              selfTest={selfTest}
-              onRunSelfTest={() => setSelfTest(relaySelfTest())}
-              lastError={lastError}
-              onRetryRelay={() => {
-                const client = relayRef.current;
-                if (!client) return;
-                for (const slot of client.slots) {
-                  clearTimeout(slot.timer);
-                  slot.retry = 0;
-                  if (!slot.subscribed) client.connect(slot);
-                }
-                client.emitStatus();
-              }}
-              syncNow={() => publishCurrent(true)}
-            />
-          ) : tab === "cycle" ? (
-            <CycleLocal {...props} />
-          ) : tab === "diary" ? (
-            <DiaryLocal {...props} />
-          ) : tab === "mood" ? (
-            <MoodLocal {...props} />
-          ) : (
-            <SettingsLocal
-              {...props}
-              onPickRingtone={onPickRingtone}
-              onResetRingtone={onResetRingtone}
-              replaceState={replaceState}
-              clearAll={clearAll}
-              locked={lockEnabled}
-              onToggleLock={toggleLock}
-              onSwitchMode={onSwitchMode}
-              onOpenPair={() => setTab("pair")}
-              onOpenHome={() => setTab("home")}
-              lastError={lastError}
-              onClearError={() => {
-                setLastError("");
-                void clearCrash();
-              }}
-            />
-          )}
-        </ScrollView>
+                }}
+              />
+            ) : tab === "pair" ? (
+              <PairLocal
+                {...props}
+                initialCode={state.links.length > 0 ? "1" : ""}
+                relayStatus={relayStatus}
+                relayLog={relayLog}
+                selfTest={selfTest}
+                onRunSelfTest={() => setSelfTest(relaySelfTest())}
+                lastError={lastError}
+                onRetryRelay={() => {
+                  const client = relayRef.current;
+                  if (!client) return;
+                  for (const slot of client.slots) {
+                    clearTimeout(slot.timer);
+                    slot.retry = 0;
+                    if (!slot.subscribed) client.connect(slot);
+                  }
+                  client.emitStatus();
+                }}
+                syncNow={() => publishCurrent(true)}
+              />
+            ) : tab === "cycle" ? (
+              <CycleLocal {...props} />
+            ) : tab === "diary" ? (
+              <DiaryLocal {...props} />
+            ) : tab === "mood" ? (
+              <MoodLocal {...props} />
+            ) : (
+              <SettingsLocal
+                {...props}
+                onPickRingtone={onPickRingtone}
+                onResetRingtone={onResetRingtone}
+                replaceState={replaceState}
+                clearAll={clearAll}
+                locked={lockEnabled}
+                onToggleLock={toggleLock}
+                onSwitchMode={onSwitchMode}
+                onOpenPair={() => setTab("pair")}
+                onOpenHome={() => setTab("home")}
+                lastError={lastError}
+                onClearError={() => {
+                  setLastError("");
+                  void clearCrash();
+                }}
+              />
+            )}
+          </ScrollView>
+        )}
         {call ? (
           <CallLocal
             call={call}

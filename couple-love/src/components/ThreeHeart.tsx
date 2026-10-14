@@ -3,6 +3,7 @@ import { useTheme } from "../theme/ThemeContext";
 import { PanResponder, Text, View } from "react-native";
 import { Canvas, useFrame } from "@react-three/fiber/native";
 import * as THREE from "three";
+import { BridgeGroup } from "./LoveBridge";
 
 class Boundary extends React.Component<
   { children: React.ReactNode; color: string },
@@ -56,8 +57,8 @@ function useSparkles() {
       seed = (seed * 1664525 + 1013904223) >>> 0;
       return seed / 4294967296;
     };
-    const positions = new Float32Array(110 * 3);
-    const scales = new Float32Array(110);
+    const positions = new Float32Array(70 * 3);
+    const scales = new Float32Array(70);
     for (let index = 0; index < positions.length; index += 3) {
       positions[index] = (random() - 0.5) * 7.5;
       positions[index + 1] = (random() - 0.5) * 5.5;
@@ -75,10 +76,12 @@ function Session({
   drag,
   reduced,
   pressed,
+  withBridge = false,
 }: {
   drag: { x: number; y: number };
   reduced: boolean;
   pressed: boolean;
+  withBridge?: boolean;
 }) {
   const group = useRef<THREE.Group>(null);
   const glow = useRef<THREE.Mesh>(null);
@@ -86,6 +89,17 @@ function Session({
   const shell = useRef<THREE.Mesh>(null);
   const orbit = useRef<THREE.Group>(null);
   const { theme } = useTheme();
+  // Bảng màu cầu lấy từ chủ đề đang chọn nên cầu ăn khớp với cả app.
+  const palette = useMemo(
+    () => ({
+      deck: theme.dark ? "#f4dbe8" : "#fff2f7",
+      post: theme.deep[0],
+      rail: theme.deep[1],
+      moon: theme.dark ? theme.glow : "#fff6ea",
+      sky: theme.glow,
+    }),
+    [theme],
+  );
   const geometry = useHeartGeometry();
   const sparkleGeometry = useSparkles();
   const satellites = useMemo(() => [0, 2.1, 4.2], []);
@@ -137,72 +151,83 @@ function Session({
           depthWrite={false}
         />
       </mesh>
-      <group ref={group}>
-        <mesh geometry={geometry}>
-          <meshPhysicalMaterial
-            color="#f22f74"
-            roughness={0.16}
-            metalness={0.3}
-            clearcoat={1}
-            clearcoatRoughness={0.08}
-            reflectivity={1}
-            sheen={1}
-            sheenColor="#ffd0e4"
-            emissive="#b4074a"
-            emissiveIntensity={0.22}
-          />
-        </mesh>
-        {/* vệt sáng bóng chạy trên mặt tim cho ra dáng 3D */}
-        <mesh position={[-0.62, 0.62, 1.02]} rotation={[0.1, -0.2, 0.5]}>
-          <sphereGeometry args={[0.36, 32, 32]} />
-          <meshBasicMaterial
-            color="#ffffff"
-            transparent
-            opacity={0.22}
-            depthWrite={false}
-          />
-        </mesh>
-        <mesh position={[0.5, -0.7, 1.0]} rotation={[0.2, 0.3, -0.4]}>
-          <sphereGeometry args={[0.16, 24, 24]} />
-          <meshBasicMaterial
-            color={theme.glow}
-            transparent
-            opacity={0.35}
-            depthWrite={false}
-          />
-        </mesh>
-        <mesh geometry={geometry} scale={1.05}>
-          <meshBasicMaterial
-            color="#ff6eaa"
-            transparent
-            opacity={0.09}
-            depthWrite={false}
-            side={THREE.BackSide}
-          />
-        </mesh>
-        <mesh ref={shell} rotation={[Math.PI / 2.4, 0, 0]}>
-          <torusGeometry args={[1.95, 0.012, 8, 96]} />
-          <meshBasicMaterial color="#ffb3d1" transparent opacity={0.55} />
-        </mesh>
-        <group ref={orbit}>
-          {satellites.map((offset, index) => (
-            <mesh
-              key={index}
-              geometry={geometry}
-              position={[
-                Math.cos(offset) * 2.1,
-                Math.sin(offset * 1.3) * 1.1,
-                Math.sin(offset) * 0.6,
-              ]}
-              scale={0.16}
-              rotation={[0.2, offset, -0.1]}
-            >
-              <meshStandardMaterial
-                color={index % 2 ? "#ffd0e4" : theme.glow}
-                roughness={0.28}
-              />
-            </mesh>
-          ))}
+      {/* Cầu tình yêu nằm dưới và phía sau trái tim, cùng một vùng WebGL */}
+      {withBridge ? (
+        <group position={[0, -1.4, -1.1]} scale={0.62}>
+          <BridgeGroup reduced={reduced} palette={palette} />
+        </group>
+      ) : null}
+      <group
+        position={[0, withBridge ? 0.62 : 0, 0]}
+        scale={withBridge ? 0.8 : 1}
+      >
+        <group ref={group}>
+          <mesh geometry={geometry}>
+            <meshPhysicalMaterial
+              color="#f22f74"
+              roughness={0.16}
+              metalness={0.3}
+              clearcoat={1}
+              clearcoatRoughness={0.08}
+              reflectivity={1}
+              sheen={1}
+              sheenColor="#ffd0e4"
+              emissive="#b4074a"
+              emissiveIntensity={0.22}
+            />
+          </mesh>
+          {/* vệt sáng bóng chạy trên mặt tim cho ra dáng 3D */}
+          <mesh position={[-0.62, 0.62, 1.02]} rotation={[0.1, -0.2, 0.5]}>
+            <sphereGeometry args={[0.36, 32, 32]} />
+            <meshBasicMaterial
+              color="#ffffff"
+              transparent
+              opacity={0.22}
+              depthWrite={false}
+            />
+          </mesh>
+          <mesh position={[0.5, -0.7, 1.0]} rotation={[0.2, 0.3, -0.4]}>
+            <sphereGeometry args={[0.16, 24, 24]} />
+            <meshBasicMaterial
+              color={theme.glow}
+              transparent
+              opacity={0.35}
+              depthWrite={false}
+            />
+          </mesh>
+          <mesh geometry={geometry} scale={1.05}>
+            <meshBasicMaterial
+              color="#ff6eaa"
+              transparent
+              opacity={0.09}
+              depthWrite={false}
+              side={THREE.BackSide}
+            />
+          </mesh>
+          <mesh ref={shell} rotation={[Math.PI / 2.4, 0, 0]}>
+            <torusGeometry args={[1.95, 0.012, 8, 96]} />
+            <meshBasicMaterial color="#ffb3d1" transparent opacity={0.55} />
+          </mesh>
+          <group ref={orbit}>
+            {satellites.map((offset, index) => (
+              <mesh
+                key={index}
+                geometry={geometry}
+                position={[
+                  Math.cos(offset) * 2.1,
+                  Math.sin(offset * 1.3) * 1.1,
+                  Math.sin(offset) * 0.6,
+                ]}
+                scale={0.16}
+                rotation={[0.2, offset, -0.1]}
+              >
+                <meshStandardMaterial
+                  color={index % 2 ? "#ffd0e4" : theme.glow}
+                  roughness={0.28}
+                />
+              </mesh>
+            ))}
+          </group>
         </group>
       </group>
       <points ref={sparkles} geometry={sparkleGeometry}>
@@ -221,10 +246,13 @@ function Session({
 
 export default memo(function ThreeHeart({
   reduced = false,
-  height = 320,
+  height = 340,
+  withBridge = false,
 }: {
   reduced?: boolean;
   height?: number;
+  /** Vẽ luôn cầu tình yêu trong cùng một canvas (một vùng WebGL duy nhất). */
+  withBridge?: boolean;
 }) {
   const [drag, setDrag] = useState({ x: 0, y: 0 });
   const [pressed, setPressed] = useState(false);
@@ -258,15 +286,25 @@ export default memo(function ThreeHeart({
   return (
     <Boundary color={theme.text}>
       <View
-        accessibilityLabel="Trái tim 3D, chạm giữ để thấy nhịp đập và vuốt để xoay"
+        accessibilityLabel="Trái tim 3D và cầu tình yêu có cô dâu chú rể chạy vào giữa cầu"
         style={{ height }}
         {...responder.panHandlers}
       >
         <Canvas
           camera={{ position: [0, 0, 5.6], fov: 42 }}
-          gl={{ antialias: true, alpha: true }}
+          // Tắt khử răng cưa và giới hạn độ phân giải: máy ảo/máy yếu không bị đơ.
+          gl={{
+            antialias: false,
+            alpha: true,
+            powerPreference: "high-performance",
+          }}
         >
-          <Session drag={drag} reduced={reduced} pressed={pressed} />
+          <Session
+            drag={drag}
+            reduced={reduced}
+            pressed={pressed}
+            withBridge={withBridge}
+          />
         </Canvas>
       </View>
     </Boundary>

@@ -1,6 +1,6 @@
-# Nguồn IPA 1.9.0: run_id 38541251941 (commit 51bc943, artifact HaiTraiTim-iOS-unsigned-IPA).
-# Ghi chú vòng 10: Release nháp hai-trai-tim-ios-v1.9.0-test-51bc943 đã tạo sẵn ở máy,
-# runner chỉ tải artifact của run 38541251941 lên rồi xoá nháp sau khi kiểm tra.
+# Nguồn IPA 1.9.1: run_id 38543908210 (commit 51bc943, artifact HaiTraiTim-iOS-unsigned-IPA).
+# Ghi chú vòng 10: Release nháp hai-trai-tim-ios-v1.9.1-test-51bc943 đã tạo sẵn ở máy,
+# runner chỉ tải artifact của run 38543908210 lên rồi xoá nháp sau khi kiểm tra.
 # Lưu ý: runner không tạo được Release (403) — luôn tạo Release nháp cục bộ trước rồi push file này để runner tải IPA lên.
 name: Đăng IPA Hai Trái Tim (iOS) tải trực tiếp
 
@@ -13,7 +13,7 @@ on:
       run_id:
         description: ID lần chạy "IPA Hai Trái Tim (iOS, chưa ký)" đã thành công
         required: true
-        default: '38541251941'
+        default: '38543908210'
         type: string
 
 permissions:
@@ -35,9 +35,9 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38541251941' }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38543908210' }}
       ARTIFACT_NAME: HaiTraiTim-iOS-unsigned-IPA
-      IPA_FILE: HaiTraiTim-1.9.0-unsigned.ipa
+      IPA_FILE: HaiTraiTim-1.9.1-unsigned.ipa
     steps:
       - name: Kiểm tra nguồn IPA đã build thành công
         id: verify
@@ -53,7 +53,7 @@ jobs:
           assert run['path'] == '.github/workflows/build-couple-ipa.yml', 'Sai workflow build iOS'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f"sha={run['head_sha']}\n")
-              output.write(f"tag=hai-trai-tim-ios-v1.9.0-test-{run['head_sha'][:7]}\n")
+              output.write(f"tag=hai-trai-tim-ios-v1.9.1-test-{run['head_sha'][:7]}\n")
           PY
       - name: Lấy IPA đã kiểm chứng qua REST API (không build lại)
         run: |
@@ -109,21 +109,23 @@ jobs:
             gh release upload "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --clobber --repo "$GITHUB_REPOSITORY"
           else
             cat > /tmp/ipa-notes.md <<EOF
-          Bản iOS **Hai Trái Tim 1.9.0** (file .ipa **chưa ký**) lấy nguyên vẹn từ [lần build thành công trên macOS](https://github.com/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID).
-
-          **Cách cài — cần biết trước:** iPhone **không cài file trực tiếp như APK**. Bản này chưa ký, nên phải tự ký lại bằng tài khoản Apple **miễn phí** của bạn:
-
-          1. Trên máy Windows: cài **Sideloadly** (hoặc AltStore) và iTunes bản mới.
-          2. Cắm iPhone bằng cáp, mở Sideloadly, kéo file \`$IPA_FILE\` vào.
-          3. Nhập **Apple ID thường** (miễn phí). Nếu bật xác thực 2 lớp, tạo **mật khẩu ứng dụng** tại appleid.apple.com rồi dùng mật khẩu đó.
-          4. Bấm Start, rồi trên iPhone vào **Cài đặt → Cài đặt chung → VPN & Quản lý thiết bị** để tin tưởng hồ sơ của bạn.
-          5. Trong app, mở **Cài đặt → Riêng tư trên máy này → Tin cậy ứng dụng** (chỉ hiện trên iOS) rồi khởi động lại app — việc này tránh lỗi tự thoát ở lần mở đầu.
-
-          **Hạn dùng 7 ngày:** app cài bằng Apple ID miễn phí sẽ hết hạn sau 7 ngày, cứ cắm cáp chạy lại Sideloadly là dùng tiếp. Muốn 1 năm, không cần cắm cáp thì phải có **Apple Developer 99 USD/năm** (TestFlight hoặc ký riêng).
-
-          Commit nguồn: \`$VERIFIED_SHA\`. iOS tối thiểu 15.1. Gói \`vn.haitraitim.app\`.
+          Bản iOS **Hai Trái Tim 1.9.1** (file .ipa **chưa ký**), lấy nguyên vẹn từ lần build trên macOS của GitHub Actions.
+          
+          Tải file **HaiTraiTim-1.9.1-unsigned.ipa** trong Assets. Gói `vn.haitraitim.app`.
+          
+          **Cần biết trước:** iPhone **không cài file trực tiếp như APK**. Bản này chưa ký, phải tự ký lại bằng tài khoản Apple **miễn phí** của bạn:
+          
+          1. Trên Windows: cài **Sideloadly** (hoặc AltStore) và iTunes bản mới.
+          2. Cắm iPhone bằng cáp, mở Sideloadly, kéo file .ipa vào.
+          3. Nhập **Apple ID thường** (miễn phí). Nếu bật xác thực 2 lớp, tạo **mật khẩu ứng dụng** ở appleid.apple.com rồi dùng mật khẩu đó.
+          4. Bấm Start, rồi trên iPhone vào **Cài đặt → Cài đặt chung → VPN & Quản lý thiết bị** để tin cậy hồ sơ của bạn.
+          5. Trong app, mở **Cài đặt → Riêng tư trên máy này → Tin cậy ứng dụng** (chỉ hiện trên iOS) rồi mở lại app.
+          
+          **Hạn dùng 7 ngày:** app cài bằng Apple ID miễn phí hết hạn sau 7 ngày, cứ cắm cáp chạy lại Sideloadly là dùng tiếp. Muốn 1 năm, không cần cắm cáp thì phải có **Apple Developer 99 USD/năm** (TestFlight hoặc ký riêng).
+          
+          Bản 1.9.1 gồm toàn bộ sửa của 1.9.0 (chữ theo chủ đề, thông báo nổi, tin nhắn/tin thoại tự gửi lại, bảng tin cố định, chủ đề có hoạ tiết) và **giao diện trong suốt khi đặt ảnh nền kiểu Zalo**.
           EOF
-            gh release create "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.9.0 — IPA iOS (chưa ký)" --notes-file /tmp/ipa-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
+            gh release create "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.9.1 — IPA iOS (chưa ký)" --notes-file /tmp/ipa-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
           fi
           gh release view "$RELEASE_TAG" --json tagName,isDraft,assets --repo "$GITHUB_REPOSITORY" | tee /tmp/ipa-release.json
           echo "IPA tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$IPA_FILE" >> "$GITHUB_STEP_SUMMARY"

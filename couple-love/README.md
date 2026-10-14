@@ -21,6 +21,14 @@ Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo
 - **Không dùng `TextEncoder`/`TextDecoder` hay `crypto.getRandomValues`** (React Native không cấp): phần chuyển chữ ↔ byte được tự viết trong `relayProtocol.mjs` (đối chiếu từng byte với chuẩn UTF-8 của Node trong `tests/relay.test.mjs`, có bài chạy khi đã xóa hai lớp đó) và nguồn ngẫu nhiên an toàn lấy từ `expo-crypto` qua `installRandomBytes`. Mọi lỗi JavaScript được ghi vào **“Lỗi gần nhất”** trong Cài đặt thay vì làm văng app.
 - Giới hạn thật: cần Internet ở **cả hai** máy; dữ liệu mới chỉ sang nhau khi hai bên cùng mở app (một bên đóng app thì lần mở sau gửi bù); mã 6 số chỉ có 1.000.000 khả năng nên đừng dán công khai ở nơi nhiều người thấy.
 
+### Có gì mới ở 1.7.0
+
+- **Giao diện thiết kế lại theo chủ đề, hài hoà từ trên xuống dưới.** 12 chủ đề: Hồng kẹo, Đào pastel, Tím mộng mơ, Oải hương, Biển xanh, Bạc hà, Trà xanh, Nắng mai, Hoàng hôn, Sen hồng, Tuyết trắng, Đêm sao. Mỗi chủ đề mang đủ màu cho nền (3 lớp chuyển sắc), thẻ, nút, ô nhập, chip trạng thái, bóng đổ, thanh tab và màn hình khoá — không còn thẻ hồng trên nền tím, và chủ đề tối có màu chữ sáng nên đọc được. Mã nguồn: `src/logic/themes.mjs` (bảng màu) + `src/theme/ThemeContext.tsx` (mọi màn hình lấy màu từ một chỗ).
+- **Hai máy dùng chung một giao diện khi đã ghép nối.** `state.appearance = {theme, wallpaper, wallpaperId, updatedAt, by}` đi kèm mỗi gói tin; máy nhận chỉ đổi khi bản của máy kia **mới hơn** (so `updatedAt`) nên hai máy không giành nhau, đổi khi máy kia tắt vẫn áp dụng lúc mở lại.
+- **Chọn ảnh thư viện làm hình nền.** Nén còn rộng 1080 / chất lượng 0.72, lưu thành `wallpaper-<mã>.jpg`, phủ lớp `veil` theo chủ đề để chữ vẫn đọc được; ảnh được gửi sang máy kia qua kênh kết nối (`role: "wallpaper"`), máy thiếu ảnh thì tự `photoRequest` xin gửi lại, và gắn vào đúng bản giao diện (`appearance.wallpaper` chỉ nhận khi `wallpaperId` khớp).
+- **Lịch chọn ngày tự viết** (`src/logic/datepicker.mjs` + `src/components/DatePicker.tsx`), thay cho hộp thoại hệ điều hành: lùi/tiến tháng **và** năm, nút **Hôm nay**, tháng đang xem là state riêng nên không bị nhịp đếm mỗi giây kéo về tháng hiện tại, và **gõ thẳng Ngày/Tháng/Năm** rồi “Lưu ngày này”. Kiểm tra luôn: ngày không tồn tại (29/2 năm thường, 31/4), ngày tương lai, trước 1900. Dùng cho cả **Ngày bắt đầu yêu** và **Chu kỳ → Ngày đầu kỳ**.
+- Giữ nguyên mọi thứ của 1.6.0: Khoảnh khắc kiểu Locket, Lời yêu thương 09:00/21:00 giống nhau trên hai máy, mã 6 số, mã hoá đầu-cuối, chạy hoàn toàn trên máy.
+
 ### Có gì mới ở 1.6.0
 
 - **Khoảnh khắc kiểu Locket** thay cho cách gửi/nhận tệp thủ công: ở trang chủ bấm **Chụp ngay** (camera trước, không cần thoát app) hoặc **Chọn từ thư viện**, viết chú thích ngắn, rồi ảnh tự nén và sang máy người thương. Hai bạn cùng xem trong lưới khoảnh khắc 3 cột, mở ra xem lớn kèm **ngày giờ chụp**, ai gửi, đã gửi hay chưa; xóa được từng khoảnh khắc (có hỏi lại). Tối đa 200 khoảnh khắc gần nhất.
@@ -141,7 +149,7 @@ Secrets tùy chọn trong GitHub Settings → Secrets and variables → Actions:
 
 **Không có secrets vẫn build được**: nhập Supabase khi mở app; push chưa sẵn sàng. Không có bốn secrets keystore thì APK dùng chữ ký debug của mẫu Expo: chỉ dành thử nghiệm, không phát hành cửa hàng. Dùng cùng keystore riêng cho mọi lần nâng cấp để giữ dữ liệu. Không gửi secrets trong chat.
 
-CI: Ubuntu → Node 22 → Java 17 → Android SDK → `npm ci` → tests / TypeScript / format → Expo prebuild → Gradle `assembleRelease` cho ARM64 và ARMv7 → artifact **`HaiTraiTim-1.6.0-APK`**, chứa `.apk` và SHA256, giữ 14 ngày. Tải từ trang run → Artifacts, giải nén và cài APK. Android tối thiểu API 24 (Android 7). Chi phí / hạn mức Actions phụ thuộc repository và tài khoản GitHub, không vô hạn.
+CI: Ubuntu → Node 22 → Java 17 → Android SDK → `npm ci` → tests / TypeScript / format → Expo prebuild → Gradle `assembleRelease` cho ARM64 và ARMv7 → artifact **`HaiTraiTim-1.7.0-APK`**, chứa `.apk` và SHA256, giữ 14 ngày. Tải từ trang run → Artifacts, giải nén và cài APK. Android tối thiểu API 24 (Android 7). Chi phí / hạn mức Actions phụ thuộc repository và tài khoản GitHub, không vô hạn.
 
 ## 5. Bảo mật, vận hành và giới hạn
 

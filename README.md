@@ -269,7 +269,33 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Mật Mã Yêu 1.17.0 (bản mới nhất) — gói tin nhắn đúng chuẩn, tim 3D đập theo giọng, TURN riêng cho 4G
+## Mật Mã Yêu 1.18.0 (bản mới nhất) — ghép nối theo tài khoản, hết “kết nối ảo”
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.0-test-d313f4b/MatMaYeu-1.18.0.apk · **78.670.197 byte** (kèm file kiểm tra `MatMaYeu-1.18.0.apk.sha256` trong Assets)
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.0-test-d313f4b/MatMaYeu-1.18.0-arm64.apk · **56.273.946 byte** (kèm file `MatMaYeu-1.18.0-arm64.sha256`)
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.0-test-d313f4b/MatMaYeu-1.18.0-unsigned.ipa · **17.170.425 byte** (kèm file `MatMaYeu-1.18.0-unsigned.ipa.sha256`)
+
+Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.0, bản dựng 20**. Dựng từ `d313f4b1488d63b8fd997c97056656506360f910` (build `38605801635` cho APK; iOS build `38605801446`). **Cài đè lên 1.17.0 được, không mất dữ liệu** (gói `vn.haitraitim.app`, slug và khóa ký giữ nguyên). **Không gỡ app** nếu chưa chấp nhận mất dữ liệu.
+
+**Bước 1 — ghép nối theo tài khoản, bỏ hẳn mã 6 số ngẫu nhiên:**
+
+- Đăng nhập **Google/Facebook** bằng Supabase Auth (mỗi người một `uid` cố định). Đổi tên/ảnh đại diện được lưu lên Supabase.
+- **Mã kết nối = mã cố định 6 ký tự gắn với `uid`** (ví dụ `ABC-234`; bảng chữ bỏ I, O, 0, 1 cho khỏi nhầm), lưu ở bảng `profiles`. Ai nhập trước cũng được — máy chủ ghi ghép đôi cho **cả hai** máy.
+- `partner_id` lưu trên Supabase và **đọc lại mỗi lần mở app**. Chưa có `partner_id` → app **dừng ở màn nhập mã**, không cho vào phần chat.
+- App **không còn đọc phòng MQTT cũ trong bộ nhớ máy**: phòng kết nối suy ra từ khoá `pair_secret` mà máy chủ sinh khi ghép đôi, chỉ hai hàng hồ sơ của hai bạn đọc được. Nhờ vậy hết cảnh tự chui vào phòng cũ sau khi khôi phục dữ liệu/Auto Backup — đúng lỗi “kết nối ảo” bạn gặp.
+- Nút **“Ngắt kết nối (cả hai máy)”** trong **Cài đặt** (và ở màn ghép nối): máy chủ xoá `partner_id` của **cả hai** bên, cả hai máy tự về màn nhập mã trong vài giây (realtime + hỏi lại mỗi 20 giây). Tin nhắn, nhật ký, kỷ niệm đã viết vẫn còn trên máy.
+- Mục **Ghép nối** không còn nút tạo mã 6 số/QR; màn đó giờ có mã cố định của bạn, “Chi tiết kết nối” và lối **chuyển dữ liệu thủ công** (dán mã/tệp dự phòng) cho khi một máy không có mạng.
+
+**Bước 2 — sửa giao diện chat:**
+
+- Nút **“↓ mới nhất”** giờ theo **vị trí cuộn** (`onScroll` với `contentOffset` / `contentSize` / `layoutMeasurement`): ẩn khi đang ở cuối, chỉ hiện khi cuộn lên quá 140 px, danh sách ngắn hơn khung thì không hiện — bản 1.17.0 hiện mãi vì chỉ đếm số tin nhắn.
+- **Bỏ hẳn nhãn “↩ trả lời” thừa** ngoài bong bóng (trước đây nằm chờ ở lề trái, chỉ mờ đi nhờ hiệu ứng luồng UI nên máy nào hiệu ứng không chạy là hiện ở mọi dòng). Trả lời bằng **nhấn giữ** hoặc **vuốt ngang**.
+
+**Việc phải làm trong Supabase (một lần):** ① SQL Editor → chạy toàn bộ `couple-love/supabase/migrations/002_pairing.sql`; ② Authentication → Providers → bật **Google** và/hoặc **Facebook** (hoặc bật **Anonymous Sign-Ins** để thử nhanh bằng nút “Đăng nhập nhanh”); ③ Authentication → URL Configuration → thêm Redirect URL `haitraitim://auth-callback`. Chưa làm 3 bước này thì app dừng ở màn đăng nhập — đúng thiết kế, vì không có tài khoản thì không biết đang ghép với ai.
+
+**140 bài kiểm thử đều xanh** (thêm 20 bài cho vòng này), TypeScript sạch, Prettier sạch, `expo export` ra bundle chứa đúng dự án ghép nối + các hàm `ensure_profile` / `pair_with_code` / `unpair` / `save_profile`, bản dựng Android ra `versionName 1.18.0` + `versionCode 20`. **Chưa thử trên LDPlayer của bạn nên chưa dám nói là đã hết mọi lỗi** — bạn thử: máy A đăng nhập lấy mã → máy B nhập mã đó; bấm Ngắt kết nối ở máy A xem máy B có tự văng về màn nhập mã; ghép lại xem tin cũ còn nguyên; kéo lên xem tin cũ rồi kéo xuống đáy xem nút “↓ mới nhất” có tự ẩn; kiểm tra không còn nhãn “trả lời” nào ngoài bong bóng.
+
+## Mật Mã Yêu 1.17.0 (bản trước) — gói tin nhắn đúng chuẩn, tim 3D đập theo giọng, TURN riêng cho 4G
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.17.0-test-068e170/MatMaYeu-1.17.0.apk · **78.566.174 byte** (kèm file kiểm tra `MatMaYeu-1.17.0.apk.sha256` trong Assets)
 **APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.17.0-test-068e170/MatMaYeu-1.17.0-arm64.apk · **56.169.923 byte** (kèm file `MatMaYeu-1.17.0-arm64.sha256`)

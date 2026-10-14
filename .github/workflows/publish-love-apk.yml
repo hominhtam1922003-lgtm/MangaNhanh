@@ -1,4 +1,4 @@
-# Nguồn APK 1.5.0: cập nhật run_id bên dưới thành lần build 1.5.0 thành công rồi push file này.
+# Nguồn APK 1.5.0: run_id 38514856188 (commit b30f5c2, artifact HaiTraiTim-1.5.0-APK).
 # Lưu ý: runner không tạo được Release (403) — luôn tạo Release nháp cục bộ trước rồi push file này để runner tải APK lên.
 name: Đăng APK Hai Trái Tim tải trực tiếp
 
@@ -11,7 +11,7 @@ on:
       run_id:
         description: ID lần chạy "APK Hai Trái Tim" đã thành công
         required: true
-        default: '38512750846'
+        default: '38514856188'
         type: string
 
 permissions:
@@ -33,7 +33,7 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38512750846' }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38514856188' }}
     steps:
       - name: Kiểm tra nguồn APK đã build thành công
         id: verify

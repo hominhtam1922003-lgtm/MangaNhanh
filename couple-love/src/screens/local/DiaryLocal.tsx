@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { useTheme } from "../../theme/ThemeContext";
-import { Alert, Image, Text } from "react-native";
+import { Alert, Image, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Manipulator from "expo-image-manipulator";
 import {
   Button,
   Card,
+  Chip,
   GradientCard,
   Input,
   Note,
@@ -40,11 +41,15 @@ export default function DiaryLocal({
         quality: 0.8,
       });
       if (result.canceled || !result.assets?.length) return;
-      const processed = await Manipulator.manipulateAsync(
+      const context = Manipulator.ImageManipulator.manipulate(
         result.assets[0].uri,
-        [{ resize: { width: 900 } }],
-        { compress: 0.75, format: Manipulator.SaveFormat.JPEG },
       );
+      context.resize({ width: 900 });
+      const rendered = await context.renderAsync();
+      const processed = await rendered.saveAsync({
+        compress: 0.75,
+        format: Manipulator.SaveFormat.JPEG,
+      });
       const name = saveImage(processed.uri, `draft-${Date.now()}.jpg`);
       if (image && image !== name) deleteImage(image);
       setImage(name);
@@ -72,8 +77,8 @@ export default function DiaryLocal({
       setBody("");
       setImage(null);
       Alert.alert(
-        "Đã lưu",
-        "Kỷ niệm được lưu trên máy. Gửi cho người thương bằng tệp dữ liệu trong phần ghép nối.",
+        "Đã lưu kỷ niệm",
+        "Kỷ niệm tự sang máy người thương khi cả hai cùng mở app; máy kia sẽ thấy ngay ở mục Nhật ký.",
       );
     } catch (error) {
       Alert.alert(
@@ -140,7 +145,14 @@ export default function DiaryLocal({
                 resizeMode="cover"
               />
             )}
-            <Title small>{item.title}</Title>
+            <View className="flex-row items-center justify-between mb-1">
+              <Title small>{item.title}</Title>
+              <Chip tone={item.authorId === "me" ? "soft" : "deep"}>
+                {item.authorId === "me"
+                  ? "của bạn"
+                  : `từ ${state.partner?.nickname || "người thương"}`}
+              </Chip>
+            </View>
             <Note>{item.body}</Note>
             <Text className="text-xs mt-3" style={{ color: theme.sub }}>
               {item.authorId === "me"
@@ -170,7 +182,11 @@ export default function DiaryLocal({
           </Card>
         ))
       )}
-      <Note>Đang hiển thị {state.diary.length} kỷ niệm trên máy này.</Note>
+      <Note>
+        Đang hiển thị {state.diary.length} kỷ niệm trên máy này (
+        {state.diary.filter((entry) => entry.authorId === "partner").length} bài
+        của người thương). Bài mới tự sang máy kia khi cả hai cùng mở app.
+      </Note>
     </>
   );
 }

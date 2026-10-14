@@ -11,6 +11,8 @@ export const MOODS = [
   { id: "angry", name: "Bực mình", emoji: "😤" },
 ];
 const moodIds = MOODS.map((m) => m.id);
+/** Tin nhắn: chữ, emoji, tin thoại, hoặc lời nhắn nhanh ("nhớ người thương"). */
+export const MESSAGE_KINDS = ["text", "emoji", "voice", "nudge"];
 const text = (value, max) =>
   (typeof value === "string" ? value : "").slice(0, max);
 const iso = (value, fallback) => {
@@ -56,6 +58,7 @@ export function emptyState(now = new Date().toISOString()) {
     },
     relay: null,
     links: [],
+    messages: [],
     moments: [],
     // Giao diện dùng chung cho cả hai máy: ai đổi sau thì cả hai cùng đổi,
     // ảnh nền cũng đi theo (ảnh gửi qua kênh kết nối như ảnh khoảnh khắc).
@@ -140,6 +143,29 @@ export function migrate(raw, now = new Date().toISOString()) {
     loveNotes: raw.settings?.loveNotes !== false,
     theme: state.appearance.theme,
   };
+  const messages = Array.isArray(raw.messages) ? raw.messages : [];
+  state.messages = messages
+    .filter((message) => message && typeof message === "object")
+    .map((message) => ({
+      id: text(message.id, 40) || uid(),
+      authorId: message.authorId === "partner" ? "partner" : "me",
+      kind: MESSAGE_KINDS.includes(message.kind) ? message.kind : "text",
+      body: text(message.body, 600),
+      audio:
+        typeof message.audio === "string" && message.audio
+          ? text(message.audio, 90)
+          : null,
+      durationMs: Math.min(
+        120000,
+        Math.max(0, Number(message.durationMs) || 0),
+      ),
+      createdAt: iso(message.createdAt, now),
+      sentAt: message.sentAt ? iso(message.sentAt, now) : null,
+      receivedAt: message.receivedAt ? iso(message.receivedAt, now) : null,
+      readAt: message.readAt ? iso(message.readAt, now) : null,
+    }))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .slice(0, 300);
   state.moments = Array.isArray(raw.moments)
     ? raw.moments
         .filter((moment) => moment && typeof moment === "object")
@@ -388,6 +414,104 @@ export function reduce(state, action) {
     next.moments = next.moments.filter(
       (moment) => moment.id !== text(action.id, 40),
     );
+  } else if (type === "message.add") {
+    const kind = MESSAGE_KINDS.includes(action.kind) ? action.kind : "text";
+    const body = text(action.body, 600).trim();
+    const audio =
+      typeof action.audio === "string" && action.audio
+        ? text(action.audio, 90)
+        : null;
+    if (kind === "voice" ? !audio : !body)
+      throw new Error(
+        kind === "voice" ? "Tin thoại chưa ghi xong." : "Tin nhắn còn trống.",
+      );
+    next.messages = [
+      {
+        id: text(action.id, 40) || uid(),
+        authorId: "me",
+        kind,
+        body,
+        audio,
+        durationMs: Math.min(
+          120000,
+          Math.max(0, Number(action.durationMs) || 0),
+        ),
+        createdAt: new Date().toISOString(),
+        sentAt: null,
+        receivedAt: null,
+        readAt: null,
+      },
+      ...next.messages,
+    ].slice(0, 300);
+  } else if (type === "message.received") {
+    const id = text(action.id, 40);
+    if (!id) throw new Error("Tin nhắn nhận được thiếu mã.");
+    const kind = MESSAGE_KINDS.includes(action.kind) ? action.kind : "text";
+    const current = next.messages.find((message) => message.id === id);
+    if (current) {
+      next.messages = next.messages.map((message) =>
+        message.id === id
+          ? {
+              ...message,
+              body: message.body || text(action.body, 600),
+              audio:
+                typeof action.audio === "string" && action.audio
+                  ? text(action.audio, 90)
+                  : message.audio,
+              receivedAt: new Date().toISOString(),
+            }
+          : message,
+      );
+    } else {
+      next.messages = [
+        {
+          id,
+          authorId: "partner",
+          kind,
+          body: text(action.body, 600),
+          audio:
+            typeof action.audio === "string" && action.audio
+              ? text(action.audio, 90)
+              : null,
+          durationMs: Math.min(
+            120000,
+            Math.max(0, Number(action.durationMs) || 0),
+          ),
+          createdAt: iso(action.createdAt, new Date().toISOString()),
+          sentAt: null,
+          receivedAt: new Date().toISOString(),
+          readAt: null,
+        },
+        ...next.messages,
+      ]
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+        .slice(0, 300);
+    }
+  } else if (type === "message.audio") {
+    const id = text(action.id, 40);
+    const audio = text(action.file, 90);
+    if (!id || !audio) throw new Error("Tin thoại nhận được thiếu tệp.");
+    next.messages = next.messages.map((message) =>
+      message.id === id ? { ...message, audio } : message,
+    );
+  } else if (type === "message.sent") {
+    const id = text(action.id, 40);
+    next.messages = next.messages.map((message) =>
+      message.id === id
+        ? { ...message, sentAt: new Date().toISOString() }
+        : message,
+    );
+  } else if (type === "message.read") {
+    const at = new Date().toISOString();
+    next.messages = next.messages.map((message) =>
+      message.authorId === "partner" && !message.readAt
+        ? { ...message, readAt: at }
+        : message,
+    );
+  } else if (type === "message.remove") {
+    next.messages = next.messages.filter(
+      (message) => message.id !== text(action.id, 40),
+    );
   } else if (type === "settings.set") {
     next.settings = {
       ...next.settings,
@@ -444,6 +568,7 @@ export function reduce(state, action) {
     if (incoming.me?.nickname) next.partner = { ...incoming.me, id: "partner" };
     next.alerts = mergeAlerts(next.alerts, incoming.alerts);
     next.moments = mergeMoments(next.moments, incoming.moments);
+    next.messages = mergeMessages(next.messages, incoming.messages);
     if (
       incoming.cycle &&
       (!next.cycle ||
@@ -494,6 +619,9 @@ export function reduce(state, action) {
   } else if (type === "partner.unlink") {
     next.moments = next.moments.filter(
       (moment) => moment.authorId !== "partner",
+    );
+    next.messages = next.messages.filter(
+      (message) => message.authorId !== "partner",
     );
     next.partner = null;
   } else if (type === "state.replace") {
@@ -783,6 +911,58 @@ function mergeAlerts(local, remote) {
   return merged
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
     .slice(0, 200);
+}
+function mergeMessages(local, remote) {
+  const mine = new Map(local.map((message) => [message.id, message]));
+  let merged = [...local];
+  for (const message of Array.isArray(remote) ? remote : []) {
+    const id = text(message?.id, 40);
+    if (!id) continue;
+    // Tin của máy kia đi sang đây thành tin của "người thương"; tin của mình
+    // quay lại thì giữ nguyên bản trên máy này (không nhân đôi, không mất thoại).
+    if (message.authorId === "me") {
+      const mirror = mine.get(id);
+      if (mirror) continue;
+    }
+    const incoming = {
+      id,
+      authorId: message.authorId === "me" ? "partner" : "me",
+      kind: MESSAGE_KINDS.includes(message.kind) ? message.kind : "text",
+      body: text(message.body, 600),
+      audio:
+        typeof message.audio === "string" && message.audio
+          ? text(message.audio, 90)
+          : null,
+      durationMs: Math.min(
+        120000,
+        Math.max(0, Number(message.durationMs) || 0),
+      ),
+      createdAt: iso(message.createdAt, new Date().toISOString()),
+      sentAt: null,
+      receivedAt: message.receivedAt
+        ? iso(message.receivedAt, new Date().toISOString())
+        : new Date().toISOString(),
+      readAt: null,
+    };
+    const existing = mine.get(incoming.id);
+    if (existing) {
+      merged = merged.map((item) =>
+        item.id === incoming.id
+          ? {
+              ...item,
+              body: item.body || incoming.body,
+              audio: item.audio || incoming.audio,
+              durationMs: item.durationMs || incoming.durationMs,
+            }
+          : item,
+      );
+      continue;
+    }
+    merged.push(incoming);
+  }
+  return merged
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .slice(0, 300);
 }
 function mergeMoments(local, remote) {
   const mine = new Map(local.map((moment) => [moment.id, moment]));

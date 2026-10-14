@@ -23,6 +23,29 @@ export async function requestNotifications() {
     permission = await Notifications.requestPermissionsAsync();
   return permission.status === "granted";
 }
+/** Báo ngay lập tức (tin nhắn mới, nhật ký mới, cảm xúc mới) — kiểu thông báo
+ * tin nhắn: hiện ngay cả khi app đang mở ở màn hình khác. Chưa cấp quyền thì bỏ
+ * qua, người dùng vẫn thấy trong mục “Lời nhắc”. */
+export async function notifyNow(title: string, body: string) {
+  try {
+    if (Notifications.getPermissionsAsync === undefined) return false;
+    const permission = await Notifications.getPermissionsAsync();
+    if (permission.status !== "granted") return false;
+    await ensureChannel();
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        sound: "default",
+        data: { key: `now-${Date.now()}` },
+      },
+      trigger: null,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 function atEight(day: string) {
   const date = new Date(`${day}T08:00:00`);
   return Number.isFinite(date.getTime()) ? date : null;

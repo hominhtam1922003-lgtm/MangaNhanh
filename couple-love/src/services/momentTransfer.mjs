@@ -30,8 +30,18 @@ export function photoMessages(photo, chunkSize = CHUNK_SIZE) {
         height: Number(photo.height) || 0,
         // Ảnh nền dùng chung thì gửi kèm role + mã bản giao diện để máy kia
         // biết ảnh này thuộc bản nào (ảnh khoảnh khắc để trống).
-        role: photo.role === "wallpaper" ? "wallpaper" : "moment",
+        role:
+          photo.role === "wallpaper"
+            ? "wallpaper"
+            : photo.role === "voice"
+              ? "voice"
+              : "moment",
         wallpaperId: String(photo.wallpaperId ?? "").slice(0, 60),
+        voiceId: String(photo.voiceId ?? "").slice(0, 60),
+        durationMs: Math.min(
+          120000,
+          Math.max(0, Number(photo.durationMs) || 0),
+        ),
       },
     });
   }
@@ -113,4 +123,18 @@ export function missingPhotoIds(moments, hasFile, limit = 3) {
     )
     .slice(0, limit)
     .map((moment) => String(moment.id));
+}
+/** Tin thoại của người thương mà máy này chưa có tệp: xin máy kia gửi lại. */
+export function missingVoiceIds(messages, hasFile, limit = 3) {
+  return (Array.isArray(messages) ? messages : [])
+    .filter(
+      (message) =>
+        message &&
+        message.authorId === "partner" &&
+        message.kind === "voice" &&
+        typeof hasFile === "function" &&
+        !hasFile(message),
+    )
+    .slice(0, limit)
+    .map((message) => String(message.id));
 }

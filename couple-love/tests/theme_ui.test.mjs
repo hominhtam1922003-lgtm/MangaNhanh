@@ -22,6 +22,51 @@ import { buildRelayPayload } from "../src/services/relayProtocol.mjs";
 import { photoMessages } from "../src/services/momentTransfer.mjs";
 const hex = /^#[0-9a-f]{6}$/i;
 const rgba = /^rgba\(\d+, \d+, \d+, [0-9.]+\)$/;
+const toRgb = (hex) =>
+  [0, 2, 4].map((i) => parseInt(hex.slice(1 + i, 3 + i), 16));
+const luminance = (color) => {
+  const [r, g, b] = toRgb(color)
+    .map((value) => value / 255)
+    .map((value) =>
+      value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+    );
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a, b) => {
+  const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (high + 0.05) / (low + 0.05);
+};
+test("Chủ đề: chữ luôn đủ tương phản nên không bị mờ/mất khi đổi chủ đề", () => {
+  for (const theme of THEMES) {
+    const rows = [
+      ["chữ chính trên thẻ", theme.ink, theme.surface, 4.5],
+      ["chữ chính trên nền ô nhập", theme.ink, theme.soft, 4.5],
+      ["chữ chính trên nền app", theme.ink, theme.bg[1], 4.5],
+      ["chữ mờ trên thẻ", theme.sub, theme.surface, 3],
+      ["chữ mờ trên nền app", theme.sub, theme.bg[1], 3],
+      ["màu nhấn trên ô nhập", theme.text, theme.soft, 3.2],
+      ["màu nhấn trên thẻ", theme.text, theme.surface, 3.2],
+      ["chữ trên nút chính", theme.onDeep, theme.deep[0], 3.2],
+      ["chữ trên nút chính (đậm)", theme.onDeep, theme.deep[1], 4.6],
+      ["chữ chính trên thẻ nổi", theme.ink, theme.hero[0], 4.5],
+      ["chữ mờ trên thẻ nổi", theme.sub, theme.hero[0], 3],
+    ];
+    for (const [label, a, b, min] of rows)
+      assert.equal(
+        contrast(a, b) >= min,
+        true,
+        `${theme.id}: ${label} chỉ ${contrast(a, b).toFixed(2)} (cần ${min})`,
+      );
+    assert.match(theme.onDeep, hex, `${theme.id}: thiếu onDeep`);
+    // Nền có ảnh: lớp phủ phải đủ dày để chữ trên nền vẫn đọc được.
+    const alpha = Number(theme.veil.match(/([0-9.]+)\)$/)[1]);
+    assert.equal(
+      alpha >= (theme.dark ? 0.7 : 0.85),
+      true,
+      `${theme.id}: lớp phủ mỏng quá`,
+    );
+  }
+});
 test("Chủ đề: 12 bảng màu đầy đủ, mọi màn hình lấy đủ màu để hài hoà", () => {
   assert.equal(THEMES.length, 12);
   assert.equal(new Set(THEMES.map((theme) => theme.id)).size, 12);

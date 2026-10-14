@@ -153,7 +153,9 @@ export function Chip({
         style={{ borderRadius: 999 }}
         className="px-3 py-1 self-start"
       >
-        <Text className="text-xs font-semibold text-white">{children}</Text>
+        <Text className="text-xs font-semibold" style={{ color: theme.onDeep }}>
+          {children}
+        </Text>
       </LinearGradient>
     );
   return (
@@ -190,13 +192,13 @@ export function Button({
     <View className="flex-row items-center justify-center">
       {busy && (
         <ActivityIndicator
-          color={secondary ? theme.text : "#ffffff"}
+          color={secondary ? theme.text : theme.onDeep}
           style={{ marginRight: 8 }}
         />
       )}
       <Text
         className="font-bold text-center"
-        style={{ color: secondary ? theme.text : "#ffffff" }}
+        style={{ color: secondary ? theme.text : theme.onDeep }}
       >
         {label}
       </Text>

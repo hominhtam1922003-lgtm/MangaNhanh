@@ -1,6 +1,15 @@
 // Chủ đề cho toàn bộ ứng dụng — nền, màu chữ, màu nhấn, bóng đổ và biểu tượng
 // trang trí đều lấy từ một bảng màu duy nhất nên mọi màn hình luôn hài hoà với
 // nhau. Có ảnh nền riêng hay không thì giao diện vẫn đọc được (xem `veil`).
+//
+// Luật tương phản (được kiểm thử tự động trong tests/theme_ui.test.mjs, nên
+// không chủ đề nào có chữ mờ/chữ chìm):
+//   ink trên surface/soft/bg  >= 4,5   ·  sub trên surface/bg >= 3,0
+//   text trên soft/surface     >= 3,2   ·  onDeep trên deep[0] >= 3,2 và deep[1] >= 4,6
+//   ink trên hero[0]           >= 4,5
+// Khi đặt ảnh làm nền, `veil` phủ lên ảnh; nền tối cần veil đục hơn (>= 0,8)
+// để ảnh nền sáng cũng không làm chữ sáng bị chìm.
+// `onDeep` là màu chữ dùng trên nền `deep` (nút chính, thanh tab đang chọn).
 export const THEMES = [
   {
     id: "hong",
@@ -9,7 +18,8 @@ export const THEMES = [
     dark: false,
     bg: ["#ffe9f2", "#fff5f9", "#ffe9f2"],
     hero: ["#ffd7e8", "#ffeef5"],
-    deep: ["#ff6fa5", "#e0356f"],
+    deep: ["#e26292", "#d33268"],
+    onDeep: "#ffffff",
     soft: "#ffe4ee",
     surface: "#ffffff",
     glass: "rgba(255, 255, 255, 0.9)",
@@ -27,7 +37,8 @@ export const THEMES = [
     dark: false,
     bg: ["#ffece4", "#fff7f1", "#ffece4"],
     hero: ["#ffd9c7", "#fff1e8"],
-    deep: ["#ff9066", "#e3603a"],
+    deep: ["#c77050", "#bc5031"],
+    onDeep: "#ffffff",
     soft: "#ffe9dd",
     surface: "#ffffff",
     glass: "rgba(255, 255, 255, 0.9)",
@@ -46,6 +57,7 @@ export const THEMES = [
     bg: ["#f0e8ff", "#f9f5ff", "#f0e8ff"],
     hero: ["#ddd0ff", "#f3ecff"],
     deep: ["#9b6bff", "#7543e6"],
+    onDeep: "#ffffff",
     soft: "#ece2ff",
     surface: "#ffffff",
     glass: "rgba(255, 255, 255, 0.9)",
@@ -63,7 +75,8 @@ export const THEMES = [
     dark: false,
     bg: ["#eceaff", "#f7f6ff", "#eceaff"],
     hero: ["#d9d6ff", "#efeeff"],
-    deep: ["#8f8ae8", "#6a63c9"],
+    deep: ["#8682da", "#6a63c9"],
+    onDeep: "#ffffff",
     soft: "#e8e6ff",
     surface: "#ffffff",
     glass: "rgba(255, 255, 255, 0.9)",
@@ -81,7 +94,8 @@ export const THEMES = [
     dark: false,
     bg: ["#e2f3ff", "#f2faff", "#e2f3ff"],
     hero: ["#c9e9ff", "#eaf7ff"],
-    deep: ["#3fa7ea", "#1a76ae"],
+    deep: ["#3794cf", "#1a76ae"],
+    onDeep: "#ffffff",
     soft: "#dff0ff",
     surface: "#ffffff",
     glass: "rgba(255, 255, 255, 0.9)",
@@ -99,7 +113,8 @@ export const THEMES = [
     dark: false,
     bg: ["#ddfaee", "#f3fdf8", "#ddfaee"],
     hero: ["#c3f5e2", "#eafcf5"],
-    deep: ["#34c79a", "#0d9871"],
+    deep: ["#289b78", "#0a7e5e"],
+    onDeep: "#ffffff",
     soft: "#d9f7ea",
     surface: "#ffffff",
     glass: "rgba(255, 255, 255, 0.9)",
@@ -117,7 +132,8 @@ export const THEMES = [
     dark: false,
     bg: ["#eef7de", "#f9fcef", "#eef7de"],
     hero: ["#dcf0bd", "#f0f9e0"],
-    deep: ["#8dc63f", "#5e9420"],
+    deep: ["#6f9b31", "#4e7b1a"],
+    onDeep: "#ffffff",
     soft: "#e7f5d3",
     surface: "#ffffff",
     glass: "rgba(255, 255, 255, 0.9)",
@@ -135,14 +151,15 @@ export const THEMES = [
     dark: false,
     bg: ["#fff4cf", "#fffcee", "#fff4cf"],
     hero: ["#ffe9ab", "#fff8dd"],
-    deep: ["#f5b423", "#d18c05"],
+    deep: ["#b48419", "#996705"],
+    onDeep: "#ffffff",
     soft: "#fff2cc",
     surface: "#ffffff",
     glass: "rgba(255, 255, 255, 0.9)",
     border: "#ffe19a",
     ink: "#453213",
     sub: "#94795a",
-    text: "#c07f04",
+    text: "#b47704",
     glow: "#f7c451",
     veil: "rgba(255, 251, 235, 0.88)",
   },
@@ -153,7 +170,8 @@ export const THEMES = [
     dark: false,
     bg: ["#ffe8d6", "#fff6ee", "#ffe8d6"],
     hero: ["#ffd3b0", "#ffefe0"],
-    deep: ["#ff8b5e", "#e2552b"],
+    deep: ["#d4744e", "#c74b26"],
+    onDeep: "#ffffff",
     soft: "#ffe6d5",
     surface: "#ffffff",
     glass: "rgba(255, 255, 255, 0.9)",
@@ -171,7 +189,8 @@ export const THEMES = [
     dark: false,
     bg: ["#ffeaf0", "#fff7fa", "#ffeaf0"],
     hero: ["#ffd6e4", "#fff0f6"],
-    deep: ["#f472a2", "#c93a6c"],
+    deep: ["#d7658f", "#c93a6c"],
+    onDeep: "#ffffff",
     soft: "#ffe5ee",
     surface: "#ffffff",
     glass: "rgba(255, 255, 255, 0.9)",
@@ -189,7 +208,8 @@ export const THEMES = [
     dark: false,
     bg: ["#eef5fb", "#fafdff", "#eef5fb"],
     hero: ["#dbe9f5", "#f2f8fd"],
-    deep: ["#8fa8bd", "#5b768d"],
+    deep: ["#768c9d", "#5b768d"],
+    onDeep: "#ffffff",
     soft: "#e8f1f8",
     surface: "#ffffff",
     glass: "rgba(255, 255, 255, 0.92)",
@@ -208,6 +228,7 @@ export const THEMES = [
     bg: ["#241d3a", "#332955", "#241d3a"],
     hero: ["#3a2f5e", "#4c3e7a"],
     deep: ["#8d7bff", "#b39dff"],
+    onDeep: "#1d1633",
     soft: "#372c57",
     surface: "#2e2547",
     glass: "rgba(46, 37, 71, 0.86)",
@@ -216,7 +237,7 @@ export const THEMES = [
     sub: "#c0b1e0",
     text: "#cbb6ff",
     glow: "#8d7bff",
-    veil: "rgba(22, 17, 38, 0.66)",
+    veil: "rgba(22, 17, 38, 0.82)",
   },
 ];
 export const DEFAULT_THEME = "hong";

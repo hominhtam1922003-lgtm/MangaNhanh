@@ -7,6 +7,7 @@ export type Profile = {
   mood: string;
   moodNote: string;
   avatar: string | null;
+  updatedAt: string;
 };
 export type CycleRecord = {
   lastPeriod: string;
@@ -66,6 +67,18 @@ export type State = {
     role: string;
   } | null;
   links: { id: string; name: string; linkedAt: string }[];
+  messages: {
+    id: string;
+    authorId: string;
+    kind: string;
+    body: string;
+    audio: string | null;
+    durationMs: number;
+    createdAt: string;
+    sentAt: string | null;
+    receivedAt: string | null;
+    readAt: string | null;
+  }[];
   appearance: {
     theme: string;
     wallpaper: string | null;

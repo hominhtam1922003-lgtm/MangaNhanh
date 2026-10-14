@@ -37,6 +37,7 @@ import {
 import type { State } from "./src/services/localdb";
 import {
   dueAlertActions,
+  notifyNow,
   rescheduleEverything,
 } from "./src/services/localnotify";
 import {
@@ -55,9 +56,11 @@ import {
 import {
   PhotoAssembler,
   missingPhotoIds,
+  missingVoiceIds,
   photoMessages,
   WALLPAPER_LIMIT_BYTES,
 } from "./src/services/momentTransfer.mjs";
+import ChatLocal from "./src/screens/local/ChatLocal";
 import { wallpaperFile } from "./src/logic/localState.mjs";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeContext";
 import {
@@ -81,6 +84,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Button, Card, Note, Title, confirm } from "./src/components/UI";
 const localTabs = [
   { id: "home", label: "Yêu nhau", icon: "♡" },
+  { id: "chat", label: "Tin nhắn", icon: "✉" },
   { id: "cycle", label: "Chăm sóc", icon: "✿" },
   { id: "diary", label: "Nhật ký", icon: "▤" },
   { id: "mood", label: "Cảm xúc", icon: "☺" },
@@ -428,8 +432,10 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   }>({ state: "off", broker: null, partnerOnline: false });
   const [relayLog, setRelayLog] = useState<string[]>([]);
   const assemblerRef = useRef(new PhotoAssembler());
+  const appStartRef = useRef(Date.now());
   const askedPhotosRef = useRef<Set<string>>(new Set());
   const momentQueueRef = useRef(false);
+  const messageQueueRef = useRef(false);
   const [lastError, setLastError] = useState("");
   const [selfTest, setSelfTest] = useState<
     { name: string; ok: boolean; detail: string }[]
@@ -597,8 +603,19 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     const payload = relayPayloadFor(current, deviceIdRef.current);
     const key = payloadKey(payload);
     if (!force && key === lastSentRef.current) return;
-    if (client.publishState(payload, current.me.nickname))
+    if (client.publishState(payload, current.me.nickname)) {
       lastSentRef.current = key;
+      // Ghi lại ngay trong nhật ký kết nối để cả hai máy đều nhìn thấy dữ liệu
+      // nào đã đi: nhật ký, cảm xúc, tin nhắn.
+      setRelayLog((lines) =>
+        [
+          ...lines,
+          `Đã gửi sang máy kia: ${payload.diary.length} kỷ niệm · ${
+            (payload.messages ?? []).length
+          } tin nhắn · cảm xúc “${payload.from?.mood ?? "?"}”`,
+        ].slice(-12),
+      );
+    }
   }
   // Gửi ảnh khoảnh khắc của mình cho người thương, mỗi lần một ảnh để không
   // làm nghẽn kênh; ảnh nào chưa gửi sẽ được gửi ở lần kết nối sau.
@@ -652,6 +669,74 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       }
     })();
   }
+  // Gửi tin nhắn của mình: chữ/emoji đi một gói, tin thoại kèm thêm các gói âm
+  // thanh. Mỗi lần gửi một tin để không làm nghẽn kênh.
+  function flushMessages() {
+    const client = relayRef.current;
+    const current = stateRef.current;
+    if (!client || !current || messageQueueRef.current) return;
+    const pending = (current.messages ?? []).filter(
+      (message: State["messages"][number]) =>
+        message.authorId !== "partner" && !message.sentAt,
+    );
+    if (!pending.length) return;
+    const message = pending[0];
+    messageQueueRef.current = true;
+    void (async () => {
+      try {
+        client.publish({
+          kind: "chat",
+          message: {
+            id: message.id,
+            kind: message.kind,
+            body: message.body,
+            createdAt: message.createdAt,
+            durationMs: message.durationMs,
+            hasAudio: Boolean(message.audio),
+          },
+          name: current.me.nickname,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        if (message.kind === "voice" && message.audio) {
+          const base64 = imageBase64(message.audio, WALLPAPER_LIMIT_BYTES);
+          if (base64) {
+            for (const packet of photoMessages({
+              id: message.id,
+              base64,
+              nickname: current.me.nickname,
+              role: "voice",
+              voiceId: message.id,
+              durationMs: message.durationMs,
+            })) {
+              client.publish(packet);
+              await new Promise((resolve) => setTimeout(resolve, 60));
+            }
+          }
+        }
+        update({ type: "message.sent", id: message.id });
+      } catch (error) {
+        setRelayLog((lines) =>
+          [
+            ...lines,
+            `Chưa gửi được tin nhắn: ${
+              error instanceof Error ? error.message : "lỗi không rõ"
+            }`,
+          ].slice(-12),
+        );
+      } finally {
+        messageQueueRef.current = false;
+        setTimeout(() => flushMessages(), 400);
+      }
+    })();
+  }
+  // Thông báo kiểu tin nhắn: hiện ngay khi người thương vừa nhắn / viết nhật
+  // ký / đổi cảm xúc, kèm một dòng trong mục “Lời nhắc”.
+  function noticeFromPartner(title: string, body: string, key: string) {
+    try {
+      update({ type: "alerts.add", title, body, key, category: "love" });
+    } catch {}
+    void notifyNow(title, body);
+  }
   // Ảnh nền dùng chung: máy đang có ảnh gửi lại khi máy kia xin.
   function sendWallpaper(id: string) {
     const client = relayRef.current;
@@ -695,6 +780,15 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       askedPhotosRef.current.add(wallpaperId);
       ids.push(wallpaperId);
     }
+    for (const voiceId of missingVoiceIds(
+      current.messages ?? [],
+      (message: State["messages"][number]) =>
+        Boolean(message.audio && imageExists(message.audio)),
+    ))
+      if (!askedPhotosRef.current.has(String(voiceId))) {
+        askedPhotosRef.current.add(String(voiceId));
+        ids.push(String(voiceId));
+      }
     if (!ids.length) return;
     for (const id of ids) askedPhotosRef.current.add(id);
     client.publish({ kind: "photoRequest", ids });
@@ -714,8 +808,59 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       deviceId: deviceIdRef.current,
       onPayload: (payload: Record<string, unknown>) => {
         try {
+          const before = stateRef.current;
           update({ type: "partner.merge", state: payload });
           setError("");
+          const after = stateRef.current;
+          if (after)
+            setRelayLog((lines) =>
+              [
+                ...lines,
+                `Đã nhận từ ${after.partner?.nickname ?? "người thương"}: ${
+                  after.diary.filter((entry) => entry.authorId === "partner")
+                    .length
+                } kỷ niệm · cảm xúc “${after.partner?.mood ?? "?"}”`,
+              ].slice(-12),
+            );
+          if (before && after) {
+            const fresh = after.diary.filter(
+              (entry) =>
+                entry.authorId === "partner" &&
+                Date.parse(entry.createdAt) > appStartRef.current &&
+                !before.diary.some((item) => item.id === entry.id),
+            );
+            if (fresh.length)
+              noticeFromPartner(
+                `${after.partner?.nickname ?? "Người thương"} vừa viết nhật ký 📖`,
+                fresh[0].title,
+                `diary-${fresh[0].id}`,
+              );
+            const moodChanged =
+              before.partner?.mood !== after.partner?.mood ||
+              before.partner?.moodNote !== after.partner?.moodNote;
+            if (
+              moodChanged &&
+              after.partner &&
+              Date.parse(after.partner.updatedAt) > appStartRef.current
+            )
+              noticeFromPartner(
+                `${after.partner.nickname} vừa đổi cảm xúc 💗`,
+                after.partner.moodNote || "Mở mục Cảm xúc để xem nhé.",
+                `mood-${after.partner.updatedAt}`,
+              );
+            const newMoments = after.moments.filter(
+              (moment) =>
+                moment.authorId === "partner" &&
+                Date.parse(moment.createdAt) > appStartRef.current &&
+                !before.moments.some((item) => item.id === moment.id),
+            );
+            if (newMoments.length)
+              noticeFromPartner(
+                `${after.partner?.nickname ?? "Người thương"} vừa gửi khoảnh khắc 📸`,
+                newMoments[0].caption || "Mở trang chủ để xem nhé.",
+                `moment-${newMoments[0].id}`,
+              );
+          }
           const incoming = payload?.appearance as
             { wallpaperId?: string | null; updatedAt?: string } | undefined;
           const wanted = incoming?.wallpaperId;
@@ -737,8 +882,65 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       },
       onMessage: (message: Record<string, unknown>) => {
         const kind = String(message.kind ?? "");
+        if (kind === "chat") {
+          const incoming = message.message as
+            | {
+                id?: string;
+                kind?: string;
+                body?: string;
+                createdAt?: string;
+                durationMs?: number;
+              }
+            | undefined;
+          if (incoming?.id) {
+            const isNew = !(stateRef.current?.messages ?? []).some(
+              (item) => item.id === incoming.id,
+            );
+            update({
+              type: "message.received",
+              id: incoming.id,
+              kind: incoming.kind,
+              body: incoming.body,
+              createdAt: incoming.createdAt,
+              durationMs: incoming.durationMs,
+            });
+            if (isNew) {
+              const nickname =
+                (message.name as string) ||
+                stateRef.current?.partner?.nickname ||
+                "Người thương";
+              const label =
+                incoming.kind === "voice"
+                  ? "đã gửi một tin thoại 🎙"
+                  : String(incoming.body ?? "");
+              noticeFromPartner(`${nickname} 💌`, label, `chat-${incoming.id}`);
+            }
+          }
+          return;
+        }
         if (kind === "photo") {
           const photo = assemblerRef.current.add(message);
+          if (photo && photo.meta?.role === "voice") {
+            try {
+              const id = String(photo.meta?.voiceId || photo.id);
+              const name = `voice-${id}.m4a`;
+              writeBase64(name, photo.base64);
+              update({ type: "message.audio", id, file: name });
+              setRelayLog((lines) =>
+                [...lines, "Đã nhận một tin thoại"].slice(-12),
+              );
+            } catch (error) {
+              setRelayLog((lines) =>
+                [
+                  ...lines,
+                  `Nhận tin thoại nhưng chưa lưu được: ${
+                    error instanceof Error ? error.message : "lỗi không rõ"
+                  }`,
+                ].slice(-12),
+              );
+            }
+            return;
+          }
           if (photo && photo.meta?.role === "wallpaper") {
             try {
               const id = String(photo.meta?.wallpaperId || photo.id);
@@ -799,6 +1001,37 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               sendWallpaper(String(id));
               continue;
             }
+            const voiceMessage = (current.messages ?? []).find(
+              (message: State["messages"][number]) =>
+                message.id === String(id) &&
+                message.authorId !== "partner" &&
+                message.kind === "voice" &&
+                message.audio,
+            );
+            if (voiceMessage) {
+              const base64 = imageBase64(
+                voiceMessage.audio as string,
+                WALLPAPER_LIMIT_BYTES,
+              );
+              if (base64) {
+                void (async () => {
+                  try {
+                    for (const packet of photoMessages({
+                      id: voiceMessage.id,
+                      base64,
+                      nickname: current.me.nickname,
+                      role: "voice",
+                      voiceId: voiceMessage.id,
+                      durationMs: voiceMessage.durationMs,
+                    })) {
+                      client.publish(packet);
+                      await new Promise((resolve) => setTimeout(resolve, 60));
+                    }
+                  } catch {}
+                })();
+              }
+              continue;
+            }
             const moment = (current.moments ?? []).find(
               (item: State["moments"][number]) =>
                 item.id === String(id) && item.authorId !== "partner",
@@ -840,6 +1073,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         readyRef.current = true;
         publishCurrent(true);
         flushMoments();
+        flushMessages();
         askMissingPhotos();
       },
     });
@@ -851,6 +1085,15 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relayRoom?.id, relayRoom?.key, state?.settings.relay]);
+  useEffect(() => {
+    if (
+      state?.messages?.some(
+        (message) => message.authorId !== "partner" && !message.sentAt,
+      )
+    )
+      flushMessages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.messages]);
   useEffect(() => {
     if (
       state?.moments?.some(
@@ -879,6 +1122,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     if (!relayStatus.partnerOnline) return;
     publishCurrent(true);
     flushMoments();
+    flushMessages();
     askMissingPhotos();
     const name = relayStatus.partnerName || stateRef.current?.partner?.nickname;
     if (!name || joinedRef.current === name) return;
@@ -967,6 +1211,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         replaceState={replaceState}
         clearAll={clearAll}
         flushMoments={flushMoments}
+        flushMessages={flushMessages}
         publishCurrent={publishCurrent}
         relayRef={relayRef}
         tab={tab}
@@ -1020,6 +1265,7 @@ function LocalShell({
   replaceState,
   clearAll,
   flushMoments,
+  flushMessages,
   publishCurrent,
   relayRef,
   tab,
@@ -1054,6 +1300,7 @@ function LocalShell({
   replaceState: (next: State) => void;
   clearAll: () => Promise<void>;
   flushMoments: () => void;
+  flushMessages: () => void;
   publishCurrent: (force?: boolean) => void;
   relayRef: React.MutableRefObject<RelayClient | null>;
   tab: string;
@@ -1061,6 +1308,9 @@ function LocalShell({
   wallpaperUri: string | null;
 }) {
   const { theme } = useTheme();
+  const unreadMessages = state.messages.filter(
+    (message) => message.authorId === "partner" && !message.readAt,
+  ).length;
   return (
     <View className="flex-1">
       <LinearGradient colors={theme.bg} style={StyleSheet.absoluteFill} />
@@ -1216,12 +1466,30 @@ function LocalShell({
                 />
               )}
             </>
+          ) : tab === "chat" ? (
+            <ChatLocal
+              {...props}
+              relayStatus={relayStatus}
+              onSendMessage={flushMessages}
+            />
           ) : tab === "home" ? (
             <HomeLocal
               {...props}
               openPair={() => setTab("pair")}
               relayStatus={relayStatus}
               onSendMoment={flushMoments}
+              onQuickNote={(text) => {
+                try {
+                  update({ type: "message.add", kind: "nudge", body: text });
+                  flushMessages();
+                } catch (error) {
+                  setError(
+                    error instanceof Error
+                      ? error.message
+                      : "Không gửi được lời nhắn.",
+                  );
+                }
+              }}
             />
           ) : tab === "pair" ? (
             <PairLocal
@@ -1277,6 +1545,7 @@ function LocalShell({
           }}
         >
           {localTabs.map((item) => (
+            // (huy hiệu tin chưa đọc nằm ngay trên biểu tượng tab Tin nhắn)
             <Pressable
               key={item.id}
               accessibilityRole="tab"
@@ -1293,6 +1562,9 @@ function LocalShell({
                 style={{ color: tab === item.id ? theme.deep[0] : theme.sub }}
               >
                 {item.icon}
+                {item.id === "chat" && unreadMessages > 0
+                  ? `·${unreadMessages > 9 ? "9+" : unreadMessages}`
+                  : ""}
               </Text>
               <Text
                 className={`text-xs mt-1 ${tab === item.id ? "font-bold" : ""}`}

@@ -212,7 +212,7 @@ export default function CycleLocal({
             accessibilityLabel="Lời nhắc chăm sóc"
             value={reminders}
             onValueChange={setReminders}
-            trackColor={{ true: "#e64980" }}
+            trackColor={{ true: theme.deep[1] }}
           />
         </View>
         <Button label="Lưu chu kỳ" onPress={save} />
@@ -236,7 +236,7 @@ export default function CycleLocal({
         )}
       </Card>
       {forecast && (
-        <GradientCard colors={["#fff0f5", "#f4e8ff"]}>
+        <GradientCard>
           {forecast.stale ? (
             <>
               <Title small>Cần cập nhật kỳ gần nhất</Title>

@@ -32,12 +32,24 @@ import { MOODS } from "../../logic/localState.mjs";
 import { loveLineFor } from "../../logic/lovelines.mjs";
 import { imageUri, saveImage } from "../../services/localdb";
 import type { State } from "../../services/localdb";
+// Ba câu nhớ nhau bấm một cái là đi ngay: máy người thương nổi thông báo như
+// tin nhắn Messenger, nội dung cũng nằm trong mục Nhắn tin.
+const QUICK_NOTES = [
+  {
+    emoji: "💌",
+    label: "Nhớ người thương",
+    text: "Nhớ người thương nhiều lắm 💌",
+  },
+  { emoji: "🥰", label: "Thương lắm", text: "Thương người thương lắm 🥰" },
+  { emoji: "🌙", label: "Ngủ ngon nhé", text: "Ngủ ngon nhé, mơ đẹp 🌙" },
+] as const;
 export default function HomeLocal({
   state,
   update,
   openPair,
   relayStatus,
   onSendMoment,
+  onQuickNote,
 }: {
   state: State;
   update: (action: Record<string, unknown>) => void;
@@ -48,6 +60,7 @@ export default function HomeLocal({
     partnerName?: string | null;
   };
   onSendMoment?: () => void;
+  onQuickNote?: (text: string) => void;
 }) {
   const { theme, wallpaper } = useTheme();
   const [now, setNow] = useState(Date.now());
@@ -314,6 +327,35 @@ export default function HomeLocal({
           Đồng hồ chạy theo ngày bắt đầu ở trên; ngày được lưu ngay trên máy này
           và gửi cho người thương khi hai máy cùng mở app.
         </Note>
+      </Card>
+      <Card>
+        <Title small>Nhớ nhau một cái 💌</Title>
+        <Note>
+          Bấm một nút là tin bay sang máy người thương ngay: máy kia nổi thông
+          báo như tin nhắn Messenger và tin cũng nằm trong mục Nhắn tin.
+        </Note>
+        <View className="flex-row flex-wrap mt-2">
+          {QUICK_NOTES.map((item) => (
+            <View key={item.label} className="mr-2 mb-2">
+              <Button
+                label={`${item.emoji} ${item.label}`}
+                secondary
+                onPress={() => {
+                  try {
+                    onQuickNote?.(item.text);
+                  } catch (error) {
+                    Alert.alert(
+                      "Chưa gửi được",
+                      error instanceof Error
+                        ? error.message
+                        : "Tin nhắn không hợp lệ.",
+                    );
+                  }
+                }}
+              />
+            </View>
+          ))}
+        </View>
       </Card>
       <GradientCard>
         <View className="flex-row items-center justify-between mb-1">

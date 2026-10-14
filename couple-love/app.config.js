@@ -3,7 +3,7 @@ module.exports = {
   expo: {
     name: "Hai Trái Tim",
     slug: "hai-trai-tim",
-    version: "1.7.0",
+    version: "1.8.0",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
@@ -11,7 +11,7 @@ module.exports = {
     icon: "./assets/icon.png",
     android: {
       package: "vn.haitraitim.app",
-      versionCode: 8,
+      versionCode: 9,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#fff1f2",
@@ -31,6 +31,13 @@ module.exports = {
     },
     plugins: [
       "expo-asset",
+      [
+        "expo-audio",
+        {
+          microphonePermission:
+            "Ghi âm tin thoại gửi cho người thương của bạn.",
+        },
+      ],
       "expo-secure-store",
       "expo-local-authentication",
       [

@@ -1,6 +1,7 @@
 import React from "react";
 import { useTheme } from "../../theme/ThemeContext";
 import { Alert, Pressable, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   Button,
   Card,
@@ -33,8 +34,8 @@ export default function MoodLocal({
         moodNote: note,
       });
       Alert.alert(
-        "Đã lưu",
-        "Cảm xúc được lưu trên máy này. Mở phần ghép nối để gửi cho người thương.",
+        "Đã lưu cảm xúc",
+        "Cảm xúc tự sang máy người thương ngay khi cả hai cùng mở app — không cần gửi tay.",
       );
     } catch (error) {
       Alert.alert(
@@ -55,12 +56,31 @@ export default function MoodLocal({
               accessibilityLabel={item.name}
               accessibilityState={{ selected: mood === item.id }}
               onPress={() => setMood(item.id)}
-              className={`w-1/3 p-3 items-center rounded-2xl ${mood === item.id ? "bg-pink-100" : ""}`}
+              className="w-1/3 p-3 items-center rounded-2xl"
             >
-              <Text className="text-3xl">{item.emoji}</Text>
-              <Text className="text-sm mt-2" style={{ color: theme.ink }}>
-                {item.name}
-              </Text>
+              <LinearGradient
+                colors={
+                  mood === item.id ? theme.deep : [theme.soft, theme.soft]
+                }
+                style={{
+                  width: "100%",
+                  borderRadius: 18,
+                  paddingVertical: 10,
+                  alignItems: "center",
+                  borderWidth: 1,
+                  borderColor: mood === item.id ? theme.deep[1] : theme.border,
+                }}
+              >
+                <Text className="text-3xl">{item.emoji}</Text>
+                <Text
+                  className="text-sm mt-2 font-semibold"
+                  style={{
+                    color: mood === item.id ? theme.onDeep : theme.ink,
+                  }}
+                >
+                  {item.name}
+                </Text>
+              </LinearGradient>
             </Pressable>
           ))}
         </View>

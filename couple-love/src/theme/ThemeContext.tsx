@@ -10,6 +10,7 @@ export type Theme = {
   bg: [string, string, string];
   hero: [string, string];
   deep: [string, string];
+  onDeep: string;
   soft: string;
   surface: string;
   glass: string;

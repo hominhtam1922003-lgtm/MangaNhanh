@@ -158,7 +158,7 @@ export default function SettingsLocal({
                 ),
               )
             }
-            trackColor={{ true: "#e64980" }}
+            trackColor={{ true: theme.deep[1] }}
           />
         </View>
         <Note>
@@ -188,7 +188,7 @@ export default function SettingsLocal({
                 });
               })
             }
-            trackColor={{ true: "#e64980" }}
+            trackColor={{ true: theme.deep[1] }}
           />
         </View>
         <Note>
@@ -212,7 +212,7 @@ export default function SettingsLocal({
                 theme: state.settings.theme,
               })
             }
-            trackColor={{ true: "#e64980" }}
+            trackColor={{ true: theme.deep[1] }}
           />
         </View>
         <Note>
@@ -355,7 +355,7 @@ export default function SettingsLocal({
                 <Text
                   className="text-xs mt-1"
                   style={{
-                    color: active ? item.deep[1] : "#8a7784",
+                    color: active ? item.deep[1] : theme.sub,
                     fontWeight: active ? "700" : "400",
                   }}
                 >
@@ -463,7 +463,7 @@ export default function SettingsLocal({
                 loveNotes: value,
               })
             }
-            trackColor={{ true: "#e64980" }}
+            trackColor={{ true: theme.deep[1] }}
           />
         </View>
         <Note>

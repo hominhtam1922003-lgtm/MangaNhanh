@@ -262,6 +262,21 @@ export function buildRelayPayload(state, limit = 60000, deviceId = "me") {
     },
     cycle: state.cycle ?? null,
     diary: [],
+    // Tin nhắn của mình (40 tin mới nhất): phần mô tả đi ở đây, còn tệp tin
+    // thoại đi bằng gói riêng như ảnh khoảnh khắc.
+    messages: (Array.isArray(state.messages) ? state.messages : [])
+      .filter((message) => message && message.authorId !== "partner")
+      .slice(0, 40)
+      .map((message) => ({
+        id: String(message.id),
+        kind: ["text", "emoji", "voice", "nudge"].includes(message.kind)
+          ? message.kind
+          : "text",
+        body: String(message.body ?? "").slice(0, 600),
+        createdAt: String(message.createdAt ?? ""),
+        hasAudio: Boolean(message.audio),
+        durationMs: Number(message.durationMs) || 0,
+      })),
     alerts: (Array.isArray(state.alerts) ? state.alerts : []).slice(0, 60),
     // Chỉ gửi phần mô tả khoảnh khắc; ảnh đi bằng gói riêng (mã hóa như nhau).
     moments: (Array.isArray(state.moments) ? state.moments : [])
@@ -275,22 +290,53 @@ export function buildRelayPayload(state, limit = 60000, deviceId = "me") {
       })),
   };
   const trimmedDiary = ownDiary.map((entry) => ({ ...entry, image: null }));
+  // Nhật ký KHÔNG bao giờ bị bỏ khỏi gói dữ liệu (trước đây gói quá lớn thì
+  // nhật ký bị cắt mất nên máy kia không thấy bài mới). Khi gói quá lớn, cắt
+  // bớt khoảnh khắc → lời nhắc → tin nhắn → chữ trong nhật ký, theo thứ tự này.
+  const gọnDiary = (count, chars) =>
+    ownDiary.slice(0, count).map((entry) => ({
+      ...entry,
+      image: null,
+      body: typeof entry.body === "string" ? entry.body.slice(0, chars) : "",
+    }));
   const attempts = [
     { ...base, diary: trimmedDiary },
     { ...base, diary: trimmedDiary, moments: base.moments.slice(0, 12) },
     {
       ...base,
-      diary: trimmedDiary.map((entry) => ({
-        ...entry,
-        body: typeof entry.body === "string" ? entry.body.slice(0, 400) : "",
-      })),
+      diary: trimmedDiary,
+      moments: base.moments.slice(0, 12),
+      alerts: base.alerts.slice(0, 20),
     },
-    base,
+    {
+      ...base,
+      diary: trimmedDiary,
+      moments: base.moments.slice(0, 12),
+      alerts: base.alerts.slice(0, 20),
+      messages: base.messages.slice(0, 20),
+    },
+    {
+      ...base,
+      diary: gọnDiary(40, 400),
+      moments: base.moments.slice(0, 8),
+      alerts: base.alerts.slice(0, 12),
+      messages: base.messages.slice(0, 10),
+    },
+    {
+      ...base,
+      diary: gọnDiary(20, 200),
+      moments: base.moments.slice(0, 4),
+      alerts: base.alerts.slice(0, 8),
+      messages: base.messages.slice(0, 4),
+    },
+    // Trường hợp xấu nhất: gói cực nhỏ. Vẫn phải còn nhật ký mới nhất, phần
+    // còn lại gửi bù ở các gói sau (khoảnh khắc và tin nhắn có gói riêng).
+    { ...base, diary: gọnDiary(6, 120), moments: [], alerts: [], messages: [] },
   ];
   for (const candidate of attempts) {
     if (JSON.stringify(candidate).length <= limit) return candidate;
   }
-  return base;
+  return attempts[attempts.length - 1];
 }
 /* ------- MQTT 3.1.1 trên WebSocket (chỉ phần cần dùng: QoS 0) ------- */
 function varint(value) {
@@ -647,7 +693,8 @@ export class RelayClient {
             message?.kind === "hello" ||
             message?.kind === "state" ||
             message?.kind === "photo" ||
-            message?.kind === "photoRequest"
+            message?.kind === "photoRequest" ||
+            message?.kind === "chat"
           ) {
             const firstContact = !this.partnerOnline;
             this.partnerSeen = Date.now();

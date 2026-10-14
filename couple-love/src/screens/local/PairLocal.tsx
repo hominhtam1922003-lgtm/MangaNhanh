@@ -180,7 +180,7 @@ export default function PairLocal({
   return (
     <>
       <LinearGradient
-        colors={["#ffe3ee", "#fff1f5"]}
+        colors={[theme.hero[0], theme.hero[1]]}
         className="rounded-3xl p-5 mb-4"
       >
         <Text className="text-4xl mb-2">💞</Text>
@@ -206,14 +206,12 @@ export default function PairLocal({
             className="flex-1 mx-1"
           >
             <LinearGradient
-              colors={
-                mode === id ? ["#f6699f", "#d61f69"] : ["#ffe3ee", "#fff1f5"]
-              }
+              colors={mode === id ? theme.deep : [theme.soft, theme.soft]}
               className="rounded-2xl py-3 items-center"
             >
               <Text
                 className={mode === id ? "font-bold" : "font-semibold"}
-                style={{ color: mode === id ? "#ffffff" : theme.text }}
+                style={{ color: mode === id ? theme.onDeep : theme.text }}
               >
                 {label}
               </Text>

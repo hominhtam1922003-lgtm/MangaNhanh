@@ -156,7 +156,7 @@ const DatePicker = memo(function DatePicker({
               className="text-center text-sm font-semibold"
               style={{
                 color: picked
-                  ? "#ffffff"
+                  ? theme.onDeep
                   : cell.inMonth
                     ? theme.ink
                     : theme.sub,
@@ -246,7 +246,10 @@ const DatePicker = memo(function DatePicker({
             </View>
           </View>
           {error ? (
-            <Text className="text-sm mb-1" style={{ color: "#d6336c" }}>
+            <Text
+              className="text-sm mb-1"
+              style={{ color: theme.dark ? "#ffc2cf" : "#c2255c" }}
+            >
               {error}
             </Text>
           ) : (

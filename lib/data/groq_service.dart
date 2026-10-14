@@ -232,7 +232,7 @@ class GroqService {
     final rejected = <String>{};
     final recent = <ChatMessage>[];
     var remaining = 3000;
-    for (final message in history.reversed.take(6)) {
+    for (final message in history.reversed.take(20)) {
       if (!['user', 'assistant'].contains(message.role) ||
           message.content.length > remaining) {
         break;

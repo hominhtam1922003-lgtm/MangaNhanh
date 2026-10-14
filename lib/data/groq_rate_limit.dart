@@ -5,7 +5,7 @@ import 'weather_api.dart';
 class GroqRateLimit extends UserMessage {
   GroqRateLimit(this.retryAt, {this.daily = false}) : super(daily
     ? 'GroqCloud báo hạn mức ngày đã hết. Không tự gửi lại; kiểm tra hạn mức tài khoản hoặc chờ thời điểm được phép.'
-    : 'GroqCloud đang giới hạn lượt gửi/token. App giữ nguyên câu hỏi và khóa gửi đến khi hết thời gian chờ.');
+    : 'GroqCloud báo hạn mức lượt gửi/token đã chạm trần. App giữ nguyên câu hỏi, không tự gửi lại và khóa gửi đến khi hết thời gian chờ.');
   final DateTime retryAt;
   final bool daily;
 }

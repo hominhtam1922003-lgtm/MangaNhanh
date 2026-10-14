@@ -1,4 +1,4 @@
-# Nguồn APK 1.5.0: run_id 38514856188 (commit b30f5c2, artifact HaiTraiTim-1.5.0-APK).
+# Nguồn APK 1.6.0: run_id 38519724865 (commit 7bbe0b0, artifact HaiTraiTim-1.6.0-APK).
 # Lưu ý: runner không tạo được Release (403) — luôn tạo Release nháp cục bộ trước rồi push file này để runner tải APK lên.
 name: Đăng APK Hai Trái Tim tải trực tiếp
 
@@ -11,7 +11,7 @@ on:
       run_id:
         description: ID lần chạy "APK Hai Trái Tim" đã thành công
         required: true
-        default: '38514856188'
+        default: '38519724865'
         type: string
 
 permissions:
@@ -33,7 +33,7 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38514856188' }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38519724865' }}
     steps:
       - name: Kiểm tra nguồn APK đã build thành công
         id: verify
@@ -50,11 +50,11 @@ jobs:
           assert run['path'] == '.github/workflows/build-couple-apk.yml', 'Sai workflow build'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f"sha={run['head_sha']}\n")
-              output.write(f"tag=hai-trai-tim-v1.5.0-test-{run['head_sha'][:7]}\n")
+              output.write(f"tag=hai-trai-tim-v1.6.0-test-{run['head_sha'][:7]}\n")
           PY
       - name: Lấy APK đã kiểm chứng qua REST API (không build lại, không đổi chữ ký)
         env:
-          ARTIFACT_NAME: HaiTraiTim-1.5.0-APK
+          ARTIFACT_NAME: HaiTraiTim-1.6.0-APK
         run: |
           exec > >(tee /tmp/love-download.log) 2>&1
           echo "BUILD_RUN_ID=$BUILD_RUN_ID · ARTIFACT_NAME=$ARTIFACT_NAME"
@@ -82,18 +82,18 @@ jobs:
           exit 1
       - name: Kiểm tra gói APK và băm SHA256
         run: |
-          test -s release-apk/HaiTraiTim-1.5.0.apk
+          test -s release-apk/HaiTraiTim-1.6.0.apk
           python3 - <<'PY'
           import zipfile
-          with zipfile.ZipFile('release-apk/HaiTraiTim-1.5.0.apk') as apk:
+          with zipfile.ZipFile('release-apk/HaiTraiTim-1.6.0.apk') as apk:
               names = set(apk.namelist())
               assert 'AndroidManifest.xml' in names and 'classes.dex' in names, 'Không phải APK Android'
               assert apk.testzip() is None, 'APK bị hỏng'
           PY
           cd release-apk
-          sha256sum HaiTraiTim-1.5.0.apk > HaiTraiTim-1.5.0.apk.sha256
-          cat HaiTraiTim-1.5.0.apk.sha256 | tee /tmp/love-hash.log
-          stat -c 'Dung lượng: %s byte' HaiTraiTim-1.5.0.apk | tee -a /tmp/love-hash.log
+          sha256sum HaiTraiTim-1.6.0.apk > HaiTraiTim-1.6.0.apk.sha256
+          cat HaiTraiTim-1.6.0.apk.sha256 | tee /tmp/love-hash.log
+          stat -c 'Dung lượng: %s byte' HaiTraiTim-1.6.0.apk | tee -a /tmp/love-hash.log
       - name: Đăng APK vào Release để tải trực tiếp
         env:
           VERIFIED_SHA: ${{ steps.verify.outputs.sha }}
@@ -101,26 +101,32 @@ jobs:
         run: |
           exec > >(tee /tmp/love-publish.log) 2>&1
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" release-apk/HaiTraiTim-1.5.0.apk release-apk/HaiTraiTim-1.5.0.apk.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$RELEASE_TAG" release-apk/HaiTraiTim-1.6.0.apk release-apk/HaiTraiTim-1.6.0.apk.sha256 --clobber --repo "$GITHUB_REPOSITORY"
           else
             cat > /tmp/love-notes.md <<EOF
-          APK thử nghiệm **Hai Trái Tim 1.5.0** cho **Android 7.0+ (API 24)**, lấy nguyên vẹn từ [lần build thành công](https://github.com/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID).
+          APK thử nghiệm **Hai Trái Tim 1.6.0** cho **Android 7.0+ (API 24)**, lấy nguyên vẹn từ [lần build thành công](https://github.com/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID).
 
-          Tải file **HaiTraiTim-1.5.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP.
+          Tải file **HaiTraiTim-1.6.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP.
           Commit nguồn: \`$VERIFIED_SHA\`.
 
-          Bản 1.5.0 sửa lỗi **app văng** khi mở (mã kết nối dùng `TextEncoder` mà React Native không có) và lỗi lấy số ngẫu nhiên (`crypto.getRandomValues` cũng không có nên nay lấy từ `expo-crypto`). Trong app: **Cài đặt** hiện số phiên bản + **Lỗi gần nhất** nếu app từng gặp lỗi, và màn hình Ghép nối có **Tự kiểm tra** (nguồn ngẫu nhiên / mã hóa / WebSocket).
+          Bản 1.6.0 sửa đúng 5 việc bạn nêu:
+
+          1. **Chọn ngày bắt đầu yêu không còn nhảy về tháng 10/2026** — bộ chọn ngày được tách riêng, chỉ nhận ngày đã lưu và chặn ngày tương lai, nên đồng hồ đếm từng giây không còn kéo nó về hôm nay.
+          2. **Đổi ảnh đại diện chạy được** — thay lời gọi cũ đã bị thư viện ảnh bỏ (`manipulateAsync`) bằng API mới, và mỗi lần đổi dùng tên tệp mới nên không hiện lại ảnh cũ trong bộ đệm.
+          3. **“Gửi và nhận tệp” được thay bằng Khoảnh khắc kiểu Locket** — ở trang chủ bấm **Chụp ngay** (hoặc chọn từ thư viện), ảnh tự nén nhỏ rồi gửi sang máy người thương; cả hai cùng thấy trong lưới khoảnh khắc, mở ra xem lớn kèm **ngày giờ chụp** và tên người gửi. Ảnh chưa gửi xong sẽ tự gửi tiếp ở lần mở app sau, và nếu máy kia thiếu ảnh thì tự xin gửi lại.
+          4. **Lời yêu thương mỗi ngày** — hai máy cùng nhận một câu nhắc yêu thương/thơ ngắn lúc **09:00** và **21:00** (câu chọn theo ngày, không cần mạng), tắt được trong Cài đặt.
+          5. **Đổi hình nền / chủ đề trang chủ** — 8 chủ đề (Hồng, Tím, Biển, Bạc hà, Hoàng hôn, Nắng, Tuyết, Đêm) đổi cả nền và màu nhấn, giống đổi chủ đề trong tin nhắn.
 
           Không cần máy chủ, không cần đăng ký: hai bạn mở mục **Ghép nối**, một bạn bấm **Tạo mã 6 số**, bạn kia nhập đúng 6 số đó là hai máy chung dữ liệu. Dữ liệu đi qua một trạm trung chuyển công cộng miễn phí nhưng luôn được **mã hóa đầu-cuối**; khóa phòng chỉ nằm trong máy hai bạn.
 
-          **Cần có:** cả hai máy đều có Internet, và dữ liệu mới chỉ tự sang nhau khi cả hai cùng mở app (một bên đóng app thì lần mở sau sẽ gửi bù). Kỷ niệm có ảnh vẫn nên gửi qua “Xuất và chia sẻ tệp dữ liệu”.
+          **Cần có:** cả hai máy đều có Internet (máy ảo LDPlayer cũng phải bật mạng), và dữ liệu mới chỉ tự sang nhau khi cả hai cùng mở app (một bên đóng app thì lần mở sau sẽ gửi bù).
 
           **Chưa kiểm chứng:** hai điện thoại thật, quét QR bằng camera thật, FCM/APNs, Face ID thật, FPS thực tế. Dự báo chu kỳ chỉ là phép tính lịch, không dùng để tránh thai. APK dùng chữ ký debug của mẫu Expo; hãy cấu hình keystore riêng để ký bản phát hành.
           EOF
-            gh release create "$RELEASE_TAG" release-apk/HaiTraiTim-1.5.0.apk release-apk/HaiTraiTim-1.5.0.apk.sha256 --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.5.0 — APK thử nghiệm" --notes-file /tmp/love-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
+            gh release create "$RELEASE_TAG" release-apk/HaiTraiTim-1.6.0.apk release-apk/HaiTraiTim-1.6.0.apk.sha256 --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.6.0 — APK thử nghiệm" --notes-file /tmp/love-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
           fi
           gh release view "$RELEASE_TAG" --json tagName,isDraft,assets --repo "$GITHUB_REPOSITORY" | tee /tmp/love-release.json
-          echo "APK tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/HaiTraiTim-1.5.0.apk" >> "$GITHUB_STEP_SUMMARY"
+          echo "APK tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/HaiTraiTim-1.6.0.apk" >> "$GITHUB_STEP_SUMMARY"
       - name: Công bố chẩn đoán đăng APK
         if: always()
         uses: actions/github-script@v8

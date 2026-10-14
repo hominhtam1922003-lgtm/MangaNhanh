@@ -62,22 +62,33 @@ jobs:
           SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" -json \
             | python3 -c "import json,sys; schemes = json.load(sys.stdin)['workspace']['schemes']; print(next((s for s in schemes if 'Pod' not in s and 'EX' not in s), schemes[0]))")
           echo "Workspace: $WORKSPACE · Scheme: $SCHEME"
+          DERIVED="$PWD/ios/build"
           xcodebuild \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphoneos \
             -destination "generic/platform=iOS" \
-            -archivePath ios/build/HaiTraiTim.xcarchive \
+            -derivedDataPath "$DERIVED" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_ENTITLEMENTS="" \
             EXPANDED_CODE_SIGN_IDENTITY="" \
-            archive 2>&1 | tee ../ios-build.log | tail -30
-          echo "--- Kết quả build ---"
-          find ios/build -maxdepth 5 -type d -name "*.app" -print || true
-          ls -la ios/build/HaiTraiTim.xcarchive/Products/Applications 2>/dev/null || true
+            build 2>&1 | tee ../ios-build.log | tail -20
+          echo "--- Hỏi Xcode xem sản phẩm nằm ở đâu ---"
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$DERIVED" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            -showBuildSettings > ../ios-settings.log 2>&1 || true
+          grep -E "(TARGET_BUILD_DIR|FULL_PRODUCT_NAME|WRAPPER_NAME|BUILT_PRODUCTS_DIR) = " ../ios-settings.log || true
+          find "$DERIVED" -maxdepth 5 -type d -name "*.app" -print || true
       - name: Đóng gói .ipa chưa ký
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -91,9 +102,21 @@ jobs:
           echo "=== Sản phẩm build ==="
           ls -la ios/build/Build/Products 2>/dev/null || true
           for dir in ios/build/Build/Products/*; do ls -la "$dir" 2>/dev/null | head -20; done
+          echo "=== Vị trí Xcode báo ==="
+          APP=""
+          if [ -f ../ios-settings.log ]; then
+            BUILT=$(grep -m1 "^ *TARGET_BUILD_DIR = " ../ios-settings.log | sed "s/^ *TARGET_BUILD_DIR = //")
+            NAME=$(grep -m1 "^ *FULL_PRODUCT_NAME = " ../ios-settings.log | sed "s/^ *FULL_PRODUCT_NAME = //")
+            echo "TARGET_BUILD_DIR=$BUILT · FULL_PRODUCT_NAME=$NAME"
+            if [ -n "$BUILT" ] && [ -n "$NAME" ] && [ -d "$BUILT/$NAME" ]; then
+              APP="$BUILT/$NAME"
+            fi
+          fi
           echo "=== Tìm .app trong toàn dự án ==="
           find . -maxdepth 8 -type d -name "*.app" 2>/dev/null | head -20 || true
-          APP=$(find . -maxdepth 8 -type d -name "*.app" 2>/dev/null | head -1)
+          if [ -z "$APP" ]; then
+            APP=$(find . -maxdepth 8 -type d -name "*.app" 2>/dev/null | head -1)
+          fi
           if [ -z "$APP" ]; then
             APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -maxdepth 8 -type d -name "*.app" 2>/dev/null | head -1)
           fi
@@ -141,7 +164,7 @@ jobs:
               return safe;
             };
             const sections = [];
-            for (const file of ['/tmp/check.log', 'ios-build.log', 'ipa-package.log']) {
+            for (const file of ['/tmp/check.log', 'ios-build.log', 'ios-settings.log', 'ipa-package.log']) {
               if (!fs.existsSync(file)) continue;
               const lines = fs.readFileSync(file, 'utf8').split('\n').slice(-150).join('\n');
               sections.push(`## ${file}\n\n\`\`\`text\n${clean(lines).slice(-limit)}\n\`\`\``);

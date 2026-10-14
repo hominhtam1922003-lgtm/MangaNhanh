@@ -1,10 +1,11 @@
 import React, { memo, useMemo, useRef, useState } from "react";
+import { useTheme } from "../theme/ThemeContext";
 import { PanResponder, Text, View } from "react-native";
 import { Canvas, useFrame } from "@react-three/fiber/native";
 import * as THREE from "three";
 
 class Boundary extends React.Component<
-  { children: React.ReactNode },
+  { children: React.ReactNode; color: string },
   { failed: boolean }
 > {
   state = { failed: false };
@@ -16,7 +17,9 @@ class Boundary extends React.Component<
       return (
         <View className="h-80 items-center justify-center">
           <Text style={{ fontSize: 120 }}>♥️</Text>
-          <Text className="text-love">Hai nhịp tim, một hành trình</Text>
+          <Text style={{ color: this.props.color }}>
+            Hai nhịp tim, một hành trình
+          </Text>
         </View>
       );
     return this.props.children;
@@ -192,6 +195,7 @@ export default memo(function ThreeHeart({
 }) {
   const [drag, setDrag] = useState({ x: 0, y: 0 });
   const [pressed, setPressed] = useState(false);
+  const { theme } = useTheme();
   const base = useRef({ x: 0, y: 0 });
   const responder = useMemo(
     () =>
@@ -219,7 +223,7 @@ export default memo(function ThreeHeart({
     [drag],
   );
   return (
-    <Boundary>
+    <Boundary color={theme.text}>
       <View
         accessibilityLabel="Trái tim 3D, chạm giữ để thấy nhịp đập và vuốt để xoay"
         style={{ height: 320 }}

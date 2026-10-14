@@ -1,69 +1,37 @@
-import React, {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   Alert,
   Image,
   Modal,
-  Platform,
   Pressable,
+  ScrollView,
   Text,
   View,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
 import ThreeHeart from "../../components/ThreeHeart";
+import DatePicker from "../../components/DatePicker";
 import {
   Button,
   Card,
+  Chip,
+  GradientCard,
   Input,
   LocalAvatar,
   Note,
   Title,
   confirm,
-  GradientCard,
 } from "../../components/UI";
+import { useTheme } from "../../theme/ThemeContext";
 import { loveCounter } from "../../logic/time.mjs";
 import { MOODS } from "../../logic/localState.mjs";
 import { loveLineFor } from "../../logic/lovelines.mjs";
-import { themeById } from "../../logic/themes.mjs";
 import { imageUri, saveImage } from "../../services/localdb";
 import type { State } from "../../services/localdb";
-/** Picker nằm riêng và được memo: đồng hồ đếm mỗi giây không làm nó tự nhảy về hôm nay. */
-const MIN_DATE = new Date(1900, 0, 1);
-const AnniversaryPicker = memo(function AnniversaryPicker({
-  valueMs,
-  onPick,
-  onClose,
-}: {
-  valueMs: number;
-  onPick: (date: Date) => void;
-  onClose: () => void;
-}) {
-  const maximum = useMemo(() => new Date(), []);
-  return (
-    <DateTimePicker
-      value={new Date(valueMs)}
-      maximumDate={maximum}
-      minimumDate={MIN_DATE}
-      mode="date"
-      display={Platform.OS === "ios" ? "spinner" : "default"}
-      onChange={(event, date) => {
-        if (Platform.OS === "android") onClose();
-        if (event.type === "set" && date) onPick(date);
-      }}
-    />
-  );
-});
 export default function HomeLocal({
   state,
   update,
@@ -81,6 +49,7 @@ export default function HomeLocal({
   };
   onSendMoment?: () => void;
 }) {
+  const { theme, wallpaper } = useTheme();
   const [now, setNow] = useState(Date.now());
   const [reduced, setReduced] = useState(false);
   const [picker, setPicker] = useState(false);
@@ -90,7 +59,6 @@ export default function HomeLocal({
   const [busy, setBusy] = useState(false);
   const cameraRef = useRef<CameraView | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
-  const theme = themeById(state.settings.theme);
   const today = new Date().toISOString().slice(0, 10);
   const line = loveLineFor(today);
   useEffect(() => {
@@ -114,24 +82,16 @@ export default function HomeLocal({
         if (
           !(await confirm(
             "Đổi ngày bắt đầu?",
-            "Ngày này được lưu trên máy bạn và gửi cho người thương ở lần ghép nối tiếp theo.",
+            "Ngày này được lưu trên máy bạn và gửi cho người thương ở lần mở app kế tiếp.",
           ))
         )
           return;
         try {
-          // Lưu ở 12 giờ trưa để đổi múi giờ không làm lệch ngày.
-          const kept = new Date(
-            date.getFullYear(),
-            date.getMonth(),
-            date.getDate(),
-            12,
-            0,
-            0,
-          );
-          update({ type: "anniversary.set", iso: kept.toISOString() });
+          update({ type: "anniversary.set", iso: date.toISOString() });
+          setPicker(false);
           Alert.alert(
             "Đã lưu ngày bắt đầu yêu",
-            `Từ ${kept.toLocaleDateString("vi-VN")} — số ngày bên nhau đã tính lại.`,
+            `Từ ${date.toLocaleDateString("vi-VN")} — số ngày bên nhau đã tính lại.`,
           );
         } catch (error) {
           Alert.alert(
@@ -143,6 +103,7 @@ export default function HomeLocal({
     },
     [update],
   );
+  const closePicker = useCallback(() => setPicker(false), []);
   async function keepMoment(uri: string) {
     const context = ImageManipulator.manipulate(uri);
     context.resize({ width: 720 });
@@ -157,10 +118,6 @@ export default function HomeLocal({
     update({ type: "moment.add", id, file, caption });
     setCaption("");
     setCamera(false);
-    Alert.alert(
-      "Đã lưu khoảnh khắc",
-      "Ảnh sẽ tự sang máy người thương khi cả hai cùng mở app.",
-    );
     onSendMoment?.();
   }
   async function shoot() {
@@ -217,98 +174,207 @@ export default function HomeLocal({
     setCamera(true);
   }
   const viewingMoment = moments.find((moment) => moment.id === viewing);
+  const statusText =
+    relayStatus.state === "online"
+      ? `Đang kết nối với ${state.partner?.nickname || relayStatus.partnerName || "người thương"}`
+      : relayStatus.state === "alone"
+        ? "Đã vào phòng, chờ người thương mở app"
+        : relayStatus.state === "connecting"
+          ? "Đang kết nối…"
+          : "Chưa bật kết nối tức thời";
   return (
     <>
       <LinearGradient
-        colors={theme.colors as [string, string]}
-        className="rounded-3xl p-4 mb-3 -mt-1"
+        colors={wallpaper ? [theme.glass, theme.glass] : theme.hero}
+        style={{
+          borderRadius: 32,
+          padding: 18,
+          marginBottom: 12,
+          borderWidth: 1,
+          borderColor: theme.border,
+          shadowColor: theme.glow,
+          shadowOpacity: 0.22,
+          shadowRadius: 20,
+          shadowOffset: { width: 0, height: 10 },
+          elevation: 5,
+        }}
       >
         {theme.emoji.map((symbol, index) => (
           <Text
             key={symbol + index}
             className="absolute text-2xl"
             style={{
-              opacity: 0.5,
-              right: 12 + index * 34,
-              top: 8 + (index % 2) * 46,
+              opacity: 0.45,
+              right: 14 + index * 36,
+              top: 10 + (index % 2) * 44,
             }}
           >
             {symbol}
           </Text>
         ))}
-        <View className="flex-row items-center justify-around mb-2">
-          <View className="items-center max-w-36">
-            <LocalAvatar name={state.me.nickname} image={state.me.avatar} />
-            <Text className="text-ink font-semibold mt-2 text-center">
+        <View className="flex-row items-center justify-around mb-1">
+          <View className="items-center" style={{ maxWidth: 132 }}>
+            <LocalAvatar
+              name={state.me.nickname}
+              image={state.me.avatar}
+              size={62}
+            />
+            <Text
+              className="font-bold mt-2 text-center"
+              style={{ color: theme.ink }}
+            >
               {state.me.nickname}
             </Text>
           </View>
-          <View className="items-center max-w-36">
+          <Text className="text-2xl" style={{ color: theme.text }}>
+            ♥
+          </Text>
+          <View className="items-center" style={{ maxWidth: 132 }}>
             <LocalAvatar
               name={state.partner?.nickname || "Người thương"}
               image={state.partner?.avatar ?? null}
+              size={62}
             />
-            <Text className="text-ink font-semibold mt-2 text-center">
+            <Text
+              className="font-bold mt-2 text-center"
+              style={{ color: theme.ink }}
+            >
               {state.partner?.nickname || "Chưa ghép nối"}
             </Text>
           </View>
         </View>
         <ThreeHeart reduced={reduced} />
-        <View className="items-center mb-5">
+        <View className="items-center mb-4">
           <Text
-            className="text-sm uppercase tracking-widest"
-            style={{ color: theme.text }}
+            className="text-xs uppercase"
+            style={{ color: theme.text, letterSpacing: 3 }}
           >
             Chúng mình đã bên nhau
           </Text>
-          <Text className="text-6xl font-bold text-ink mt-2">
+          <Text
+            className="text-6xl font-bold mt-1"
+            style={{ color: theme.ink }}
+          >
             {elapsed.totalDays}
           </Text>
-          <Text className="mt-1" style={{ color: theme.text }}>
-            ngày yêu thương
-          </Text>
+          <Text style={{ color: theme.sub }}>ngày yêu thương</Text>
         </View>
+        <View className="flex-row flex-wrap items-center">
+          <View className="mr-2 mb-2">
+            <Chip>{statusText}</Chip>
+          </View>
+          <View className="mr-2 mb-2">
+            <Chip>
+              Bắt đầu: {new Date(state.anniversary).toLocaleDateString("vi-VN")}
+            </Chip>
+          </View>
+        </View>
+        <View className="flex-row">
+          <View className="flex-1 mr-1">
+            <Button
+              label={picker ? "Đang mở lịch" : "Đổi ngày bắt đầu"}
+              secondary={picker}
+              onPress={() => setPicker(!picker)}
+            />
+          </View>
+          <View className="flex-1 ml-1">
+            <Button label="Khoảnh khắc mới" onPress={() => void openCamera()} />
+          </View>
+        </View>
+        {picker ? (
+          <DatePicker
+            valueMs={new Date(state.anniversary).getTime()}
+            onPick={pickDate}
+            onClose={closePicker}
+          />
+        ) : null}
       </LinearGradient>
-      {moments.length > 0 ? (
-        <Card>
+      <Card>
+        <View className="flex-row flex-wrap justify-between">
+          {[
+            ["Năm", elapsed.years],
+            ["Tháng", elapsed.months],
+            ["Ngày", elapsed.days],
+            ["Giờ", elapsed.hours],
+            ["Phút", elapsed.minutes],
+            ["Giây", elapsed.seconds],
+          ].map(([label, value]) => (
+            <View key={String(label)} className="items-center w-1/3 py-3">
+              <Text
+                className="text-3xl font-bold"
+                style={{ color: theme.text }}
+              >
+                {String(value).padStart(2, "0")}
+              </Text>
+              <Text style={{ color: theme.sub }}>{String(label)}</Text>
+            </View>
+          ))}
+        </View>
+        <Note>
+          Đồng hồ chạy theo ngày bắt đầu ở trên; ngày được lưu ngay trên máy này
+          và gửi cho người thương khi hai máy cùng mở app.
+        </Note>
+      </Card>
+      <GradientCard>
+        <View className="flex-row items-center justify-between mb-1">
+          <Title small>Lời yêu thương hôm nay</Title>
+          <Text className="text-2xl">{line.emoji}</Text>
+        </View>
+        <Text className="text-lg leading-7" style={{ color: theme.ink }}>
+          {line.text}
+        </Text>
+        <Note>
+          Câu này đổi mỗi ngày và giống nhau trên cả hai máy. Bật/tắt lời nhắc
+          trong Cài đặt (mặc định 09:00 và 21:00).
+        </Note>
+      </GradientCard>
+      <Card>
+        <View className="flex-row items-center justify-between mb-2">
           <Title small>Khoảnh khắc của hai đứa</Title>
-          <Note>
-            {moments.length} khoảnh khắc — chụp là ảnh tự sang máy người thương,
-            cả hai cùng xem.
-          </Note>
-          <View className="flex-row flex-wrap">
-            {moments.slice(0, 9).map((moment) => (
+          <Chip tone="deep">{`${moments.length} tấm`}</Chip>
+        </View>
+        {moments.length ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {moments.slice(0, 20).map((moment) => (
               <Pressable
                 key={moment.id}
                 accessibilityRole="imagebutton"
                 accessibilityLabel={`Khoảnh khắc ${new Date(moment.createdAt).toLocaleDateString("vi-VN")}`}
                 onPress={() => setViewing(moment.id)}
-                className="m-1"
+                className="mr-3"
               >
                 <LinearGradient
-                  colors={theme.deep as [string, string]}
-                  className="rounded-2xl p-1"
+                  colors={theme.deep}
+                  style={{ borderRadius: 20, padding: 2 }}
                 >
                   <Image
                     source={{ uri: imageUri(moment.file) ?? "" }}
-                    style={{ width: 96, height: 96, borderRadius: 14 }}
+                    style={{ width: 118, height: 148, borderRadius: 18 }}
                   />
                 </LinearGradient>
-                <Text className="text-xs text-stone-500 mt-1 text-center">
+                <Text
+                  className="text-xs mt-1 text-center"
+                  style={{ color: theme.sub }}
+                >
                   {moment.authorId === "partner" ? "người thương" : "bạn"} ·{" "}
                   {new Date(moment.createdAt).toLocaleDateString("vi-VN")}
                 </Text>
               </Pressable>
             ))}
-          </View>
-        </Card>
-      ) : null}
+          </ScrollView>
+        ) : (
+          <Note>
+            Chưa có tấm nào. Bấm “Khoảnh khắc mới” ở trên để chụp — ảnh tự sang
+            máy người thương và cả hai cùng xem kèm ngày giờ.
+          </Note>
+        )}
+      </Card>
       <Card>
         <Title small>Gửi khoảnh khắc cho người thương</Title>
         <Note>
-          Chụp hoặc chọn một tấm ảnh, ghi vài chữ nếu muốn — ảnh được gửi tới
-          máy người thương kèm ngày tháng, cả hai cùng xem. Cần Internet ở cả
-          hai máy; người thương chưa mở app thì ảnh sẽ sang ở lần mở sau.
+          Chụp hoặc chọn một tấm ảnh, ghi vài chữ nếu muốn — ảnh được nén nhỏ
+          rồi gửi tới máy người thương kèm ngày tháng. Cần Internet ở cả hai
+          máy; người thương chưa mở app thì ảnh sang ở lần mở sau.
         </Note>
         <Input
           label="Ghi vài chữ cho khoảnh khắc này (không bắt buộc)"
@@ -336,10 +402,10 @@ export default function HomeLocal({
           <View className="mt-3">
             <CameraView
               ref={cameraRef}
-              style={{ height: 360, borderRadius: 22 }}
+              style={{ height: 340, borderRadius: 22 }}
               facing="front"
             />
-            <View className="flex-row mt-2">
+            <View className="flex-row mt-1">
               <View className="flex-1 mr-1">
                 <Button label="Chụp" busy={busy} onPress={() => void shoot()} />
               </View>
@@ -356,7 +422,7 @@ export default function HomeLocal({
         <Note>
           Trạng thái kết nối:{" "}
           {relayStatus.state === "online"
-            ? `người thương đang trực tuyến — ảnh sang ngay`
+            ? "người thương đang trực tuyến — ảnh sang ngay"
             : relayStatus.state === "alone"
               ? "đã vào phòng, chờ người thương mở app"
               : relayStatus.state === "connecting"
@@ -365,66 +431,14 @@ export default function HomeLocal({
           .
         </Note>
       </Card>
-      <GradientCard colors={theme.colors as [string, string]}>
-        <Title small>Lời yêu thương hôm nay</Title>
-        <Text className="text-3xl my-2">{line.emoji}</Text>
-        <Text className="text-ink text-lg leading-7">{line.text}</Text>
-        <Note>
-          Câu này đổi mỗi ngày và giống nhau trên cả hai máy, nên hai đứa đọc
-          cùng một câu. Có thể bật/tắt lời nhắc yêu thương trong Cài đặt (mặc
-          định 09:00 và 21:00).
-        </Note>
-      </GradientCard>
-      <Card>
-        <View className="flex-row flex-wrap justify-between">
-          {[
-            ["Năm", elapsed.years],
-            ["Tháng", elapsed.months],
-            ["Ngày", elapsed.days],
-            ["Giờ", elapsed.hours],
-            ["Phút", elapsed.minutes],
-            ["Giây", elapsed.seconds],
-          ].map(([label, value]) => (
-            <View key={String(label)} className="items-center w-1/3 py-3">
-              <Text className="text-3xl text-love font-bold">
-                {String(value).padStart(2, "0")}
-              </Text>
-              <Text className="text-stone-500 mt-1">{String(label)}</Text>
-            </View>
-          ))}
-        </View>
-        <Note>
-          Bắt đầu: {new Date(state.anniversary).toLocaleDateString("vi-VN")} ·
-          lưu ngay trên máy này.
-        </Note>
-        <Button
-          label="Chọn ngày bắt đầu"
-          secondary
-          onPress={() => setPicker(true)}
-        />
-        {picker ? (
-          <>
-            <AnniversaryPicker
-              valueMs={new Date(state.anniversary).getTime()}
-              onPick={pickDate}
-              onClose={() => setPicker(false)}
-            />
-            {Platform.OS === "ios" ? (
-              <Button
-                label="Đóng bảng chọn ngày"
-                secondary
-                onPress={() => setPicker(false)}
-              />
-            ) : null}
-          </>
-        ) : null}
-      </Card>
       {state.partner ? (
-        <GradientCard colors={theme.colors as [string, string]}>
-          <Title small>{state.partner.nickname}</Title>
-          <Text className="text-love mb-2">
-            {partnerMood?.emoji} {partnerMood?.name}
-          </Text>
+        <GradientCard>
+          <View className="flex-row items-center justify-between">
+            <Title small>{state.partner.nickname}</Title>
+            <Chip>
+              {partnerMood?.emoji} {partnerMood?.name}
+            </Chip>
+          </View>
           <Note>{state.partner.moodNote || "Chưa có ghi chú cảm xúc."}</Note>
           <Note>
             Cập nhật tự động qua kết nối tức thời khi hai máy cùng mở app.
@@ -445,12 +459,12 @@ export default function HomeLocal({
         transparent
         onRequestClose={() => setViewing(null)}
       >
-        <View className="flex-1 bg-black/80 items-center justify-center px-5">
+        <View className="flex-1 bg-black/85 items-center justify-center px-5">
           {viewingMoment ? (
             <>
               <Image
                 source={{ uri: imageUri(viewingMoment.file) ?? "" }}
-                style={{ width: 300, height: 380, borderRadius: 22 }}
+                style={{ width: 300, height: 380, borderRadius: 24 }}
                 resizeMode="cover"
               />
               <Text className="text-white text-lg mt-3">
@@ -466,31 +480,40 @@ export default function HomeLocal({
                   {viewingMoment.caption}
                 </Text>
               ) : null}
-              <Note>
+              <Text
+                className="text-xs mt-2 text-center"
+                style={{ color: "#e9d8ff" }}
+              >
                 {viewingMoment.authorId === "partner"
                   ? "Ảnh nhận từ người thương."
                   : viewingMoment.sentAt
                     ? "Đã gửi cho người thương."
                     : "Chưa gửi — sẽ gửi khi người thương mở app."}
-              </Note>
-              <Button label="Đóng" secondary onPress={() => setViewing(null)} />
-              <Button
-                label="Xóa khoảnh khắc này"
-                secondary
-                onPress={() =>
-                  void (async () => {
-                    if (
-                      !(await confirm(
-                        "Xóa khoảnh khắc?",
-                        "Ảnh sẽ bị xóa khỏi máy này. Người thương vẫn giữ bản của họ.",
-                      ))
-                    )
-                      return;
-                    update({ type: "moment.remove", id: viewingMoment.id });
-                    setViewing(null);
-                  })()
-                }
-              />
+              </Text>
+              <View className="w-full mt-2">
+                <Button
+                  label="Đóng"
+                  secondary
+                  onPress={() => setViewing(null)}
+                />
+                <Button
+                  label="Xóa khoảnh khắc này"
+                  secondary
+                  onPress={() =>
+                    void (async () => {
+                      if (
+                        !(await confirm(
+                          "Xóa khoảnh khắc?",
+                          "Ảnh sẽ bị xóa khỏi máy này. Người thương vẫn giữ bản của họ.",
+                        ))
+                      )
+                        return;
+                      update({ type: "moment.remove", id: viewingMoment.id });
+                      setViewing(null);
+                    })()
+                  }
+                />
+              </View>
             </>
           ) : null}
         </View>

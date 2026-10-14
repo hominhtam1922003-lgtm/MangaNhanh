@@ -247,6 +247,19 @@ export function buildRelayPayload(state, limit = 60000, deviceId = "me") {
     },
     anniversary: state.anniversary,
     anniversaryAt: state.anniversaryAt ?? state.anniversary,
+    // Giao diện dùng chung: chủ đề + ảnh nền; máy nhận so mốc thời gian để biết
+    // bản nào mới hơn nên hai máy luôn giống nhau, không cãi nhau vô tận.
+    appearance: {
+      theme: String(state.appearance?.theme ?? ""),
+      wallpaperId: state.appearance?.wallpaperId
+        ? String(state.appearance.wallpaperId).slice(0, 60)
+        : null,
+      updatedAt: String(
+        state.appearance?.updatedAt ??
+          state.me?.updatedAt ??
+          new Date().toISOString(),
+      ),
+    },
     cycle: state.cycle ?? null,
     diary: [],
     alerts: (Array.isArray(state.alerts) ? state.alerts : []).slice(0, 60),

@@ -1,8 +1,11 @@
 import React, { useState } from "react";
-import { Alert, Pressable, Switch, Text, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { Alert, Image, Pressable, Switch, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import * as Manipulator from "expo-image-manipulator";
+import {
+  ImageManipulator as ImageTool,
+  SaveFormat,
+} from "expo-image-manipulator";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   Button,
   Card,
@@ -13,7 +16,7 @@ import {
   confirm,
   GradientCard,
 } from "../../components/UI";
-import { deleteImage, saveImage } from "../../services/localdb";
+import { deleteImage, imageUri, saveImage } from "../../services/localdb";
 import type { State } from "../../services/localdb";
 import {
   importPayload,
@@ -24,6 +27,7 @@ import {
 import { requestNotifications } from "../../services/localnotify";
 import { restoreFromPayload } from "../../logic/localState.mjs";
 import { THEMES } from "../../logic/themes.mjs";
+import { useTheme } from "../../theme/ThemeContext";
 import Constants from "expo-constants";
 export default function SettingsLocal({
   state,
@@ -52,6 +56,7 @@ export default function SettingsLocal({
 }) {
   const [name, setName] = useState(state.me.nickname);
   const [busy, setBusy] = useState(false);
+  const { theme } = useTheme();
   async function run(task: () => Promise<void> | void) {
     setBusy(true);
     try {
@@ -78,14 +83,12 @@ export default function SettingsLocal({
         quality: 0.8,
       });
       if (result.canceled || !result.assets?.length) return;
-      const context = Manipulator.ImageManipulator.manipulate(
-        result.assets[0].uri,
-      );
+      const context = ImageTool.manipulate(result.assets[0].uri);
       context.resize({ width: 480 });
       const rendered = await context.renderAsync();
       const processed = await rendered.saveAsync({
         compress: 0.8,
-        format: Manipulator.SaveFormat.JPEG,
+        format: SaveFormat.JPEG,
       });
       const previous = state.me.avatar;
       // Tên tệp mới mỗi lần đổi để máy không hiện lại ảnh cũ đã nhớ trong bộ đệm.
@@ -266,43 +269,182 @@ export default function SettingsLocal({
       <Card>
         <Title small>Hình nền &amp; chủ đề</Title>
         <Note>
-          Chọn chủ đề cho trang chủ và cả ứng dụng — giống đổi chủ đề trong tin
-          nhắn. Chủ đề chỉ đổi trên máy bạn.
+          Chọn chủ đề cho cả app — thẻ, nút, thanh dưới đều đổi theo nên giao
+          diện hài hoà với nhau. Hai máy đang ghép nối sẽ dùng chung một giao
+          diện: ai đổi sau thì cả hai cùng đổi.
         </Note>
-        <View className="flex-row flex-wrap">
-          {THEMES.map((item) => (
-            <Pressable
-              key={item.id}
-              accessibilityRole="radio"
-              accessibilityState={{
-                selected: state.settings.theme === item.id,
-              }}
-              accessibilityLabel={`Chủ đề ${item.name}`}
-              onPress={() =>
-                update({
-                  type: "settings.set",
-                  notify: state.settings.notify,
-                  relay: state.settings.relay,
-                  loveNotes: state.settings.loveNotes,
-                  theme: item.id,
-                })
-              }
-              className="items-center m-1"
-            >
-              <LinearGradient
-                colors={[item.colors[0], item.deep[0]]}
-                className={`w-16 h-16 rounded-2xl items-center justify-center ${
-                  state.settings.theme === item.id
-                    ? "border-2 border-ink"
-                    : "border border-pink-100"
-                }`}
+        <View className="flex-row flex-wrap mt-2">
+          {THEMES.map((item) => {
+            const active =
+              (state.appearance?.theme ?? state.settings.theme) === item.id;
+            return (
+              <Pressable
+                key={item.id}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`Chủ đề ${item.name}`}
+                onPress={() =>
+                  update({
+                    type: "appearance.set",
+                    theme: item.id,
+                    wallpaperId: state.appearance?.wallpaperId ?? null,
+                    wallpaper: state.appearance?.wallpaper ?? null,
+                  })
+                }
+                className="items-center mr-2 mb-3"
               >
-                <Text className="text-xl">{item.emoji[0]}</Text>
-              </LinearGradient>
-              <Text className="text-xs text-stone-600 mt-1">{item.name}</Text>
-            </Pressable>
-          ))}
+                <LinearGradient
+                  colors={item.hero as [string, string]}
+                  style={{
+                    borderRadius: 20,
+                    padding: 3,
+                    borderWidth: active ? 3 : 1,
+                    borderColor: active ? item.deep[1] : item.border,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 74,
+                      height: 74,
+                      borderRadius: 16,
+                      backgroundColor: item.surface,
+                      justifyContent: "space-between",
+                      padding: 7,
+                    }}
+                  >
+                    <View className="flex-row justify-between">
+                      <View
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 11,
+                          backgroundColor: item.deep[0],
+                        }}
+                      />
+                      <Text className="text-base">{item.emoji[0]}</Text>
+                    </View>
+                    <View>
+                      <View
+                        style={{
+                          height: 7,
+                          borderRadius: 4,
+                          backgroundColor: item.ink,
+                          opacity: 0.75,
+                          marginBottom: 5,
+                        }}
+                      />
+                      <View
+                        style={{
+                          height: 7,
+                          width: "62%",
+                          borderRadius: 4,
+                          backgroundColor: item.soft,
+                        }}
+                      />
+                    </View>
+                    <View
+                      style={{
+                        height: 9,
+                        borderRadius: 5,
+                        backgroundColor: item.deep[1],
+                        opacity: 0.85,
+                      }}
+                    />
+                  </View>
+                </LinearGradient>
+                <Text
+                  className="text-xs mt-1"
+                  style={{
+                    color: active ? item.deep[1] : "#8a7784",
+                    fontWeight: active ? "700" : "400",
+                  }}
+                >
+                  {item.name}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
+        <Note>
+          Ảnh nền: chọn một tấm trong thư viện để làm nền trang chủ. Ảnh được
+          nén nhỏ rồi gửi sang máy người thương để hai máy nhìn giống nhau; chưa
+          kết nối thì máy kia nhận khi mở app.
+        </Note>
+        {state.appearance?.wallpaper ? (
+          <View className="flex-row items-center mb-1">
+            <Image
+              source={{ uri: imageUri(state.appearance.wallpaper) ?? "" }}
+              style={{ width: 64, height: 96, borderRadius: 14 }}
+            />
+            <View className="flex-1 ml-3">
+              <Text className="font-semibold" style={{ color: theme.ink }}>
+                Đang dùng ảnh nền này
+              </Text>
+              <Note>
+                Bấm “Bỏ ảnh nền” nếu muốn quay lại nền chuyển sắc của chủ đề.
+              </Note>
+            </View>
+          </View>
+        ) : (
+          <Note>
+            Hiện chưa đặt ảnh nền, app đang dùng nền chuyển sắc của chủ đề.
+          </Note>
+        )}
+        <Button
+          label="Chọn ảnh từ thư viện làm nền"
+          busy={busy}
+          onPress={() =>
+            void run(async () => {
+              const allowed =
+                await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (!allowed.granted)
+                throw new Error("Cần quyền chọn ảnh từ thư viện.");
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ["images"],
+                allowsEditing: false,
+                quality: 0.9,
+              });
+              if (result.canceled || !result.assets?.length) return;
+              const context = ImageTool.manipulate(result.assets[0].uri);
+              context.resize({ width: 1080 });
+              const rendered = await context.renderAsync();
+              const saved = await rendered.saveAsync({
+                compress: 0.72,
+                format: SaveFormat.JPEG,
+              });
+              const id = "w" + Date.now().toString(36);
+              const previous = state.appearance?.wallpaper;
+              const file = saveImage(saved.uri, `wallpaper-${id}.jpg`);
+              update({
+                type: "appearance.set",
+                theme: state.appearance?.theme ?? state.settings.theme,
+                wallpaperId: id,
+                wallpaper: file,
+              });
+              if (previous && previous !== file) deleteImage(previous);
+              Alert.alert(
+                "Đã đặt ảnh nền",
+                "Ảnh nền sẽ sang máy người thương ở lần kết nối kế tiếp.",
+              );
+            })
+          }
+        />
+        {state.appearance?.wallpaper ? (
+          <Button
+            label="Bỏ ảnh nền"
+            secondary
+            onPress={() => {
+              const previous = state.appearance?.wallpaper;
+              update({
+                type: "appearance.set",
+                theme: state.appearance?.theme ?? state.settings.theme,
+                wallpaperId: null,
+                wallpaper: null,
+              });
+              if (previous) deleteImage(previous);
+            }}
+          />
+        ) : null}
       </Card>
       <Card>
         <View className="flex-row justify-between items-center my-3">
@@ -380,8 +522,8 @@ export default function SettingsLocal({
         </Card>
       ) : null}
       <Note>
-        Hai Trái Tim {Constants.expoConfig?.version ?? "1.6.0"} (chế độ trên
-        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 7}) — ghi
+        Hai Trái Tim {Constants.expoConfig?.version ?? "1.7.0"} (chế độ trên
+        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 8}) — ghi
         lại số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục
         riêng của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ
         liệu, nên hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch,

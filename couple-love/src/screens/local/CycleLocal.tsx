@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Alert, Platform, Pressable, Switch, Text, View } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DatePicker from "../../components/DatePicker";
+import { useTheme } from "../../theme/ThemeContext";
 import {
   Button,
   Card,
@@ -25,6 +26,7 @@ function Calendar({
   today: string;
 }) {
   const [offset, setOffset] = useState(0);
+  const { theme } = useTheme();
   const base = new Date(today + "T00:00:00Z");
   const first = new Date(
     Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + offset, 1),
@@ -41,9 +43,11 @@ function Calendar({
           onPress={() => setOffset(offset - 1)}
           className="p-3"
         >
-          <Text className="text-love text-xl">‹</Text>
+          <Text className="text-xl" style={{ color: theme.text }}>
+            ‹
+          </Text>
         </Pressable>
-        <Text className="font-bold text-ink">
+        <Text className="font-bold" style={{ color: theme.ink }}>
           Tháng {month + 1} · {year}
         </Text>
         <Pressable
@@ -51,15 +55,21 @@ function Calendar({
           onPress={() => setOffset(offset + 1)}
           className="p-3"
         >
-          <Text className="text-love text-xl">›</Text>
+          <Text className="text-xl" style={{ color: theme.text }}>
+            ›
+          </Text>
         </Pressable>
       </View>
       <View className="flex-row">
         {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((label) => (
           <Text
             key={label}
-            style={{ width: "14.2857%", textAlign: "center" }}
-            className="text-stone-400 py-2"
+            style={{
+              width: "14.2857%",
+              textAlign: "center",
+              color: theme.sub,
+            }}
+            className="py-2"
           >
             {label}
           </Text>
@@ -82,7 +92,8 @@ function Calendar({
                 className={`flex-1 rounded-full items-center justify-center ${forecast?.inPeriod ? "bg-pink-200" : forecast?.fertile ? "bg-violet-100" : date === today ? "bg-stone-100" : ""}`}
               >
                 <Text
-                  className={`text-sm ${date === today ? "font-bold text-love" : "text-ink"}`}
+                  className={`text-sm ${date === today ? "font-bold" : ""}`}
+                  style={{ color: date === today ? theme.text : theme.ink }}
                 >
                   {day > 0 ? day : ""}
                 </Text>
@@ -112,6 +123,7 @@ export default function CycleLocal({
   const [duration, setDuration] = useState(String(cycle?.periodLength || 5));
   const [reminders, setReminders] = useState(cycle?.reminders ?? true);
   const [picker, setPicker] = useState(false);
+  const { theme } = useTheme();
   useEffect(() => {
     setLast(cycle?.lastPeriod || today);
     setLength(String(cycle?.cycleLength || 28));
@@ -163,14 +175,13 @@ export default function CycleLocal({
         />
         {picker && (
           <>
-            <DateTimePicker
-              value={new Date(last + "T12:00:00")}
-              maximumDate={new Date()}
-              mode="date"
-              onChange={(event, date) => {
-                if (Platform.OS === "android") setPicker(false);
-                if (event.type === "set" && date) setLast(dateOnly(date));
+            <DatePicker
+              valueMs={new Date(last + "T12:00:00").getTime()}
+              onPick={(date: Date) => {
+                setLast(dateOnly(date));
+                setPicker(false);
               }}
+              onClose={() => setPicker(false)}
             />
             {Platform.OS === "ios" && (
               <Button
@@ -194,7 +205,9 @@ export default function CycleLocal({
           keyboardType="number-pad"
         />
         <View className="flex-row justify-between items-center my-2">
-          <Text className="text-ink flex-1">Lời nhắc chăm sóc theo lịch</Text>
+          <Text className="flex-1" style={{ color: theme.ink }}>
+            Lời nhắc chăm sóc theo lịch
+          </Text>
           <Switch
             accessibilityLabel="Lời nhắc chăm sóc"
             value={reminders}

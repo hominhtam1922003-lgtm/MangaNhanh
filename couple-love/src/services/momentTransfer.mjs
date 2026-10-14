@@ -4,6 +4,8 @@
 export const CHUNK_SIZE = 3500;
 export const MAX_PHOTO_CHUNKS = 200;
 export const PHOTO_LIMIT_BYTES = 120 * 1024;
+/** Ảnh nền cần rộng hơn ảnh khoảnh khắc nên cho phép gói lớn hơn một chút. */
+export const WALLPAPER_LIMIT_BYTES = 420 * 1024;
 /** Cắt ảnh base64 thành các gói tin gửi qua kênh kết nối. */
 export function photoMessages(photo, chunkSize = CHUNK_SIZE) {
   const base64 = String(photo?.base64 ?? "").replace(/\s+/g, "");
@@ -26,6 +28,10 @@ export function photoMessages(photo, chunkSize = CHUNK_SIZE) {
         nickname: String(photo.nickname ?? "").slice(0, 40),
         width: Number(photo.width) || 0,
         height: Number(photo.height) || 0,
+        // Ảnh nền dùng chung thì gửi kèm role + mã bản giao diện để máy kia
+        // biết ảnh này thuộc bản nào (ảnh khoảnh khắc để trống).
+        role: photo.role === "wallpaper" ? "wallpaper" : "moment",
+        wallpaperId: String(photo.wallpaperId ?? "").slice(0, 60),
       },
     });
   }

@@ -8,8 +8,10 @@ import {
   ActivityIndicator,
   AppState,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
+  StyleSheet,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -54,9 +56,16 @@ import {
   PhotoAssembler,
   missingPhotoIds,
   photoMessages,
+  WALLPAPER_LIMIT_BYTES,
 } from "./src/services/momentTransfer.mjs";
-import { themeById } from "./src/logic/themes.mjs";
-import { imageBase64, imageUri, writeBase64 } from "./src/services/localdb";
+import { wallpaperFile } from "./src/logic/localState.mjs";
+import { ThemeProvider, useTheme } from "./src/theme/ThemeContext";
+import {
+  imageBase64,
+  imageExists,
+  imageUri,
+  writeBase64,
+} from "./src/services/localdb";
 import HomeLocal from "./src/screens/local/HomeLocal";
 import CycleLocal from "./src/screens/local/CycleLocal";
 import DiaryLocal from "./src/screens/local/DiaryLocal";
@@ -643,7 +652,31 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       }
     })();
   }
-  // Xin gửi lại những ảnh của người thương mà máy này chưa có.
+  // Ảnh nền dùng chung: máy đang có ảnh gửi lại khi máy kia xin.
+  function sendWallpaper(id: string) {
+    const client = relayRef.current;
+    const current = stateRef.current;
+    if (!client || !current) return;
+    const file = current.appearance?.wallpaper;
+    if (!file || current.appearance?.wallpaperId !== id) return;
+    const base64 = imageBase64(file, WALLPAPER_LIMIT_BYTES);
+    if (!base64) return;
+    void (async () => {
+      try {
+        for (const message of photoMessages({
+          id,
+          base64,
+          nickname: current.me.nickname,
+          role: "wallpaper",
+          wallpaperId: id,
+        })) {
+          client.publish(message);
+          await new Promise((resolve) => setTimeout(resolve, 60));
+        }
+      } catch {}
+    })();
+  }
+  // Xin gửi lại những ảnh của người thương mà máy này chưa có (kể cả ảnh nền).
   function askMissingPhotos() {
     const client = relayRef.current;
     const current = stateRef.current;
@@ -651,8 +684,17 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     const ids = missingPhotoIds(
       current.moments ?? [],
       (moment: State["moments"][number]) =>
-        Boolean(moment.file && imageUri(moment.file)),
+        Boolean(moment.file && imageExists(moment.file)),
     ).filter((id: string) => !askedPhotosRef.current.has(id));
+    const wallpaperId = current.appearance?.wallpaperId;
+    if (
+      wallpaperId &&
+      !imageExists(wallpaperFile(wallpaperId)) &&
+      !askedPhotosRef.current.has(wallpaperId)
+    ) {
+      askedPhotosRef.current.add(wallpaperId);
+      ids.push(wallpaperId);
+    }
     if (!ids.length) return;
     for (const id of ids) askedPhotosRef.current.add(id);
     client.publish({ kind: "photoRequest", ids });
@@ -674,6 +716,17 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         try {
           update({ type: "partner.merge", state: payload });
           setError("");
+          const incoming = payload?.appearance as
+            { wallpaperId?: string | null; updatedAt?: string } | undefined;
+          const wanted = incoming?.wallpaperId;
+          if (
+            wanted &&
+            !imageExists(wallpaperFile(wanted)) &&
+            !askedPhotosRef.current.has(wanted)
+          ) {
+            askedPhotosRef.current.add(wanted);
+            relayRef.current?.publish({ kind: "photoRequest", ids: [wanted] });
+          }
         } catch (mergeError) {
           setError(
             mergeError instanceof Error
@@ -686,6 +739,27 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         const kind = String(message.kind ?? "");
         if (kind === "photo") {
           const photo = assemblerRef.current.add(message);
+          if (photo && photo.meta?.role === "wallpaper") {
+            try {
+              const id = String(photo.meta?.wallpaperId || photo.id);
+              const name = wallpaperFile(id) ?? `wallpaper-${id}.jpg`;
+              writeBase64(name, photo.base64);
+              update({ type: "appearance.wallpaper", id, file: name });
+              setRelayLog((lines) =>
+                [...lines, "Đã nhận ảnh nền dùng chung"].slice(-12),
+              );
+            } catch (error) {
+              setRelayLog((lines) =>
+                [
+                  ...lines,
+                  `Nhận ảnh nền nhưng chưa lưu được: ${
+                    error instanceof Error ? error.message : "lỗi không rõ"
+                  }`,
+                ].slice(-12),
+              );
+            }
+            return;
+          }
           if (photo) {
             try {
               const name = `moment-${photo.id}.jpg`;
@@ -721,6 +795,10 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           const client = relayRef.current;
           if (!current || !client) return;
           for (const id of ids) {
+            if (current.appearance?.wallpaperId === String(id)) {
+              sendWallpaper(String(id));
+              continue;
+            }
             const moment = (current.moments ?? []).find(
               (item: State["moments"][number]) =>
                 item.id === String(id) && item.authorId !== "partner",
@@ -814,28 +892,26 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
 
   if (!state) {
     return (
-      <View className="flex-1 bg-pink-50 items-center justify-center">
-        {error ? (
-          <Text className="text-ink px-8 text-center">{error}</Text>
-        ) : (
-          <>
-            <ActivityIndicator color="#e64980" />
-            <Text className="text-love mt-4">Đang mở góc yêu thương…</Text>
-          </>
-        )}
-      </View>
+      <ThemeProvider themeId="hong">
+        <View className="flex-1 bg-pink-50 items-center justify-center">
+          {error ? (
+            <Text className="text-ink px-8 text-center">{error}</Text>
+          ) : (
+            <>
+              <ActivityIndicator color="#e64980" />
+              <Text className="text-love mt-4">Đang mở góc yêu thương…</Text>
+            </>
+          )}
+        </View>
+      </ThemeProvider>
     );
   }
   if (lockEnabled && locked) {
     return (
-      <View className="flex-1 bg-pink-50 justify-center px-8">
-        <Text className="text-7xl text-center mb-7">🔐</Text>
-        <Title>Không gian riêng của bạn</Title>
-        <Note>Xác thực Face ID hoặc vân tay để xem dữ liệu trên máy này.</Note>
-        <Button
-          label="Mở bằng sinh trắc học"
-          busy={unlocking}
-          onPress={() =>
+      <ThemeProvider themeId={state.appearance?.theme ?? "hong"}>
+        <LockScreen
+          unlocking={unlocking}
+          onUnlock={() =>
             void authenticate()
               .then((ok) => {
                 if (ok) setLocked(false);
@@ -853,26 +929,169 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               )
           }
         />
-      </View>
+      </ThemeProvider>
     );
   }
   const unread = state.alerts.filter((alert) => !alert.readAt).length;
   const props = { state, update };
-  const theme = themeById(state.settings.theme);
+  const storedWallpaper =
+    state.appearance?.wallpaper ??
+    wallpaperFile(state.appearance?.wallpaperId ?? null);
+  const hasWallpaper = Boolean(storedWallpaper && imageExists(storedWallpaper));
   return (
-    <LinearGradient
-      colors={[theme.colors[0], theme.colors[1], theme.colors[0]]}
-      className="flex-1"
+    // Mọi màn hình lấy màu từ một chủ đề duy nhất, nên thẻ, nút và nền luôn
+    // hài hoà với nhau; hai máy đang ghép nối thì dùng chung chủ đề đó.
+    <ThemeProvider
+      themeId={state.appearance?.theme ?? state.settings.theme ?? "hong"}
+      wallpaper={hasWallpaper}
     >
+      <LocalShell
+        state={state}
+        update={update}
+        props={props}
+        unread={unread}
+        alertPage={alertPage}
+        setAlertPage={setAlertPage}
+        relayStatus={relayStatus}
+        relayLog={relayLog}
+        selfTest={selfTest}
+        setSelfTest={setSelfTest}
+        lastError={lastError}
+        setLastError={setLastError}
+        clearCrash={clearCrash}
+        error={error}
+        setError={setError}
+        lockEnabled={lockEnabled}
+        toggleLock={toggleLock}
+        onSwitchMode={onSwitchMode}
+        replaceState={replaceState}
+        clearAll={clearAll}
+        flushMoments={flushMoments}
+        publishCurrent={publishCurrent}
+        relayRef={relayRef}
+        tab={tab}
+        setTab={setTab}
+        wallpaperUri={hasWallpaper ? imageUri(storedWallpaper) : null}
+      />
+    </ThemeProvider>
+  );
+}
+function LockScreen({
+  unlocking,
+  onUnlock,
+}: {
+  unlocking: boolean;
+  onUnlock: () => void;
+}) {
+  const { theme } = useTheme();
+  return (
+    <View className="flex-1 justify-center px-8">
+      <LinearGradient colors={theme.bg} style={StyleSheet.absoluteFill} />
+      <Text className="text-7xl text-center mb-7">🔐</Text>
+      <Title>Không gian riêng của bạn</Title>
+      <Note>Xác thực Face ID hoặc vân tay để xem dữ liệu trên máy này.</Note>
+      <Button
+        label="Mở bằng sinh trắc học"
+        busy={unlocking}
+        onPress={onUnlock}
+      />
+    </View>
+  );
+}
+function LocalShell({
+  state,
+  update,
+  props,
+  unread,
+  alertPage,
+  setAlertPage,
+  relayStatus,
+  relayLog,
+  selfTest,
+  setSelfTest,
+  lastError,
+  setLastError,
+  clearCrash,
+  error,
+  setError,
+  lockEnabled,
+  toggleLock,
+  onSwitchMode,
+  replaceState,
+  clearAll,
+  flushMoments,
+  publishCurrent,
+  relayRef,
+  tab,
+  setTab,
+  wallpaperUri,
+}: {
+  state: State;
+  update: (action: Record<string, unknown>) => void;
+  props: { state: State; update: (action: Record<string, unknown>) => void };
+  unread: number;
+  alertPage: boolean;
+  setAlertPage: (value: boolean) => void;
+  relayStatus: {
+    state: string;
+    broker: string | null;
+    partnerOnline: boolean;
+    partnerName?: string | null;
+    readyCount?: number;
+    summary?: { host: string; state: string }[];
+  };
+  relayLog: string[];
+  selfTest: { name: string; ok: boolean; detail: string }[];
+  setSelfTest: (value: { name: string; ok: boolean; detail: string }[]) => void;
+  lastError: string;
+  setLastError: (value: string) => void;
+  clearCrash: () => Promise<void>;
+  error: string;
+  setError: (value: string) => void;
+  lockEnabled: boolean;
+  toggleLock: (value: boolean) => Promise<void>;
+  onSwitchMode: () => void;
+  replaceState: (next: State) => void;
+  clearAll: () => Promise<void>;
+  flushMoments: () => void;
+  publishCurrent: (force?: boolean) => void;
+  relayRef: React.MutableRefObject<RelayClient | null>;
+  tab: string;
+  setTab: (value: string) => void;
+  wallpaperUri: string | null;
+}) {
+  const { theme } = useTheme();
+  return (
+    <View className="flex-1">
+      <LinearGradient colors={theme.bg} style={StyleSheet.absoluteFill} />
+      {wallpaperUri ? (
+        <>
+          <Image
+            source={{ uri: wallpaperUri }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
+          <View
+            style={[StyleSheet.absoluteFill, { backgroundColor: theme.veil }]}
+          />
+        </>
+      ) : null}
       <KeyboardAvoidingView
         className="flex-1"
         style={{ backgroundColor: "transparent" }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View className="flex-row px-5 py-4 items-center justify-between">
+        <View
+          className="flex-row px-5 py-4 items-center justify-between"
+          style={{
+            borderBottomWidth: 1,
+            borderBottomColor: theme.border,
+            backgroundColor: theme.glass,
+          }}
+        >
           <View>
-            <Text className="text-xl font-bold text-ink">
-              Hai Trái Tim <Text className="text-love">♡</Text>
+            <Text className="text-xl font-bold" style={{ color: theme.ink }}>
+              Hai Trái Tim <Text style={{ color: theme.deep[0] }}>♡</Text>
             </Text>
             <View className="flex-row items-center mt-1">
               <View
@@ -886,7 +1105,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
                         : "bg-stone-300"
                 }`}
               />
-              <Text className="text-xs text-stone-500">
+              <Text className="text-xs" style={{ color: theme.sub }}>
                 {relayStatus.state === "online"
                   ? `Đã kết nối · ${relayStatus.partnerName ?? "người thương"} đang trực tuyến`
                   : relayStatus.state === "alone"
@@ -909,19 +1128,38 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           <Pressable
             accessibilityLabel="Lời nhắc"
             onPress={() => setAlertPage(!alertPage)}
-            className="px-3 py-2 rounded-full bg-white border border-pink-100"
+            className="px-3 py-2 rounded-full"
+            style={{
+              backgroundColor: theme.glass,
+              borderWidth: 1,
+              borderColor: theme.border,
+            }}
           >
-            <Text className="text-love">
+            <Text style={{ color: theme.text }}>
               {alertPage ? "Đóng" : "Lời nhắc"}
               {unread ? " · " + unread : ""}
             </Text>
           </Pressable>
         </View>
         {error !== "" && (
-          <View className="mx-4 mb-2 p-3 rounded-xl bg-amber-50">
-            <Text className="text-xs text-amber-900">{error}</Text>
+          <View
+            className="mx-4 mb-2 p-3 rounded-xl"
+            style={{
+              backgroundColor: theme.soft,
+              borderWidth: 1,
+              borderColor: theme.border,
+            }}
+          >
+            <Text className="text-xs" style={{ color: theme.ink }}>
+              {error}
+            </Text>
             <Pressable onPress={() => setError("")}>
-              <Text className="text-sm text-love mt-1">Đã hiểu</Text>
+              <Text
+                className="text-sm mt-1 font-semibold"
+                style={{ color: theme.text }}
+              >
+                Đã hiểu
+              </Text>
             </Pressable>
           </View>
         )}
@@ -1030,7 +1268,14 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             />
           )}
         </ScrollView>
-        <View className="flex-row bg-white border-t border-pink-100 pt-2 pb-3">
+        <View
+          className="flex-row pt-2 pb-3"
+          style={{
+            backgroundColor: theme.glass,
+            borderTopWidth: 1,
+            borderTopColor: theme.border,
+          }}
+        >
           {localTabs.map((item) => (
             <Pressable
               key={item.id}
@@ -1045,13 +1290,13 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             >
               <Text
                 className="text-2xl"
-                style={{ color: tab === item.id ? theme.deep[1] : "#a8a29e" }}
+                style={{ color: tab === item.id ? theme.deep[0] : theme.sub }}
               >
                 {item.icon}
               </Text>
               <Text
                 className={`text-xs mt-1 ${tab === item.id ? "font-bold" : ""}`}
-                style={{ color: tab === item.id ? theme.deep[1] : "#78716c" }}
+                style={{ color: tab === item.id ? theme.deep[0] : theme.sub }}
               >
                 {item.label}
               </Text>
@@ -1059,7 +1304,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           ))}
         </View>
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </View>
   );
 }
 function ModeChooser({

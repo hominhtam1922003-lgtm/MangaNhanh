@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTheme } from "../../theme/ThemeContext";
 import { Alert, Image, Text } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Manipulator from "expo-image-manipulator";
@@ -25,6 +26,7 @@ export default function DiaryLocal({
   const [body, setBody] = useState("");
   const [image, setImage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const { theme } = useTheme();
   async function pickPhoto() {
     setBusy(true);
     try {
@@ -140,7 +142,7 @@ export default function DiaryLocal({
             )}
             <Title small>{item.title}</Title>
             <Note>{item.body}</Note>
-            <Text className="text-xs text-stone-400 mt-3">
+            <Text className="text-xs mt-3" style={{ color: theme.sub }}>
               {item.authorId === "me"
                 ? state.me.nickname
                 : state.partner?.nickname || "Người thương"}{" "}

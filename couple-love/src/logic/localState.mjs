@@ -57,8 +57,19 @@ export function emptyState(now = new Date().toISOString()) {
     relay: null,
     links: [],
     moments: [],
+    // Giao diện dùng chung cho cả hai máy: ai đổi sau thì cả hai cùng đổi,
+    // ảnh nền cũng đi theo (ảnh gửi qua kênh kết nối như ảnh khoảnh khắc).
+    appearance: {
+      theme: DEFAULT_THEME,
+      wallpaper: null,
+      wallpaperId: null,
+      updatedAt: now,
+      by: "me",
+    },
   };
 }
+export const wallpaperFile = (id) =>
+  typeof id === "string" && id ? `wallpaper-${id}.jpg` : null;
 export function migrate(raw, now = new Date().toISOString()) {
   const state = emptyState(now);
   if (!raw || typeof raw !== "object") return state;
@@ -107,12 +118,27 @@ export function migrate(raw, now = new Date().toISOString()) {
       createdAt: iso(a.createdAt, now),
       readAt: a.readAt ? iso(a.readAt, now) : null,
     }));
+  const rawAppearance =
+    raw.appearance && typeof raw.appearance === "object" ? raw.appearance : {};
+  const fallbackTheme = isTheme(raw.settings?.theme)
+    ? raw.settings.theme
+    : DEFAULT_THEME;
+  const wallpaperId = text(rawAppearance.wallpaperId, 60);
+  state.appearance = {
+    theme: isTheme(rawAppearance.theme) ? rawAppearance.theme : fallbackTheme,
+    wallpaper: wallpaperId
+      ? text(rawAppearance.wallpaper, 90) || wallpaperFile(wallpaperId)
+      : null,
+    wallpaperId: wallpaperId || null,
+    updatedAt: iso(rawAppearance.updatedAt, now),
+    by: rawAppearance.by === "partner" ? "partner" : "me",
+  };
   state.settings = {
     biometric: raw.settings?.biometric === true,
     notify: raw.settings?.notify === true,
     relay: raw.settings?.relay !== false,
     loveNotes: raw.settings?.loveNotes !== false,
-    theme: isTheme(raw.settings?.theme) ? raw.settings.theme : DEFAULT_THEME,
+    theme: state.appearance.theme,
   };
   state.moments = Array.isArray(raw.moments)
     ? raw.moments
@@ -373,6 +399,41 @@ export function reduce(state, action) {
           : action.loveNotes === true,
       theme: isTheme(action.theme) ? action.theme : next.settings.theme,
     };
+    if (isTheme(action.theme) && action.theme !== next.appearance.theme) {
+      next.appearance = {
+        ...next.appearance,
+        theme: action.theme,
+        updatedAt: new Date().toISOString(),
+        by: "me",
+      };
+    }
+  } else if (type === "appearance.set") {
+    // Đổi chủ đề hoặc đặt ảnh nền mới: ghi mốc thời gian để máy kia biết bản nào mới hơn.
+    const wallpaperId =
+      action.wallpaperId === null
+        ? null
+        : text(action.wallpaperId, 60) || next.appearance.wallpaperId;
+    next.appearance = {
+      theme: isTheme(action.theme) ? action.theme : next.appearance.theme,
+      wallpaper: wallpaperId
+        ? text(action.wallpaper, 90) || wallpaperFile(wallpaperId)
+        : null,
+      wallpaperId: wallpaperId || null,
+      updatedAt: new Date().toISOString(),
+      by: "me",
+    };
+    next.settings = { ...next.settings, theme: next.appearance.theme };
+  } else if (type === "appearance.wallpaper") {
+    // Ảnh nền vừa nhận xong từ máy kia: gắn tệp vào đúng bản giao diện đang dùng.
+    const id = text(action.id, 60);
+    const file = text(action.file, 90);
+    if (!id || !file) throw new Error("Ảnh nền nhận được thiếu tệp.");
+    if (next.appearance.wallpaperId === id || !next.appearance.wallpaperId)
+      next.appearance = {
+        ...next.appearance,
+        wallpaperId: id,
+        wallpaper: file,
+      };
   } else if (type === "partner.merge") {
     const raw =
       action.state && typeof action.state === "object" ? action.state : {};
@@ -397,6 +458,30 @@ export function reduce(state, action) {
     ) {
       next.anniversary = incoming.anniversary;
       next.anniversaryAt = incoming.anniversaryAt;
+    }
+    if (
+      incoming.appearance &&
+      Date.parse(incoming.appearance.updatedAt) >
+        Date.parse(next.appearance.updatedAt)
+    ) {
+      // Người thương đổi giao diện sau mình: cả hai máy dùng chung một giao diện.
+      const keepFile =
+        incoming.appearance.wallpaperId &&
+        incoming.appearance.wallpaperId === next.appearance.wallpaperId
+          ? next.appearance.wallpaper
+          : null;
+      next.appearance = {
+        theme: incoming.appearance.theme,
+        wallpaperId: incoming.appearance.wallpaperId,
+        wallpaper:
+          keepFile ||
+          (incoming.appearance.wallpaperId
+            ? wallpaperFile(incoming.appearance.wallpaperId)
+            : null),
+        updatedAt: incoming.appearance.updatedAt,
+        by: "partner",
+      };
+      next.settings = { ...next.settings, theme: next.appearance.theme };
     }
     next.links = [
       ...next.links.filter((link) => link.id !== incomingId),

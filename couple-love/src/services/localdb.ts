@@ -66,6 +66,13 @@ export type State = {
     role: string;
   } | null;
   links: { id: string; name: string; linkedAt: string }[];
+  appearance: {
+    theme: string;
+    wallpaper: string | null;
+    wallpaperId: string | null;
+    updatedAt: string;
+    by: string;
+  };
 };
 const stateFile = () => new File(Paths.document, "love-state.json");
 const backupKey = "love-state-backup";
@@ -77,6 +84,15 @@ export function imagesDirectory() {
 }
 export function imageUri(name: string | null | undefined) {
   return name ? new File(imagesDirectory(), name).uri : null;
+}
+/** Ảnh đã có thật trên máy chưa (dùng để biết còn phải xin máy kia gửi không). */
+export function imageExists(name: string | null | undefined) {
+  if (!name) return false;
+  try {
+    return new File(imagesDirectory(), name).exists;
+  } catch {
+    return false;
+  }
 }
 export function saveImage(sourceUri: string, name: string) {
   const destination = new File(imagesDirectory(), name);

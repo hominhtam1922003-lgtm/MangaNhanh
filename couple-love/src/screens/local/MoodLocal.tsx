@@ -1,4 +1,5 @@
 import React from "react";
+import { useTheme } from "../../theme/ThemeContext";
 import { Alert, Pressable, Text, View } from "react-native";
 import {
   Button,
@@ -21,6 +22,7 @@ export default function MoodLocal({
 }) {
   const [mood, setMood] = useState(state.me.mood);
   const [note, setNote] = useState(state.me.moodNote);
+  const { theme } = useTheme();
   const partnerMood = MOODS.find((item) => item.id === state.partner?.mood);
   function save() {
     try {
@@ -56,7 +58,9 @@ export default function MoodLocal({
               className={`w-1/3 p-3 items-center rounded-2xl ${mood === item.id ? "bg-pink-100" : ""}`}
             >
               <Text className="text-3xl">{item.emoji}</Text>
-              <Text className="text-ink text-sm mt-2">{item.name}</Text>
+              <Text className="text-sm mt-2" style={{ color: theme.ink }}>
+                {item.name}
+              </Text>
             </Pressable>
           ))}
         </View>
@@ -78,7 +82,7 @@ export default function MoodLocal({
             />
             <View className="ml-4 flex-1">
               <Title small>{state.partner.nickname}</Title>
-              <Text className="text-love">
+              <Text style={{ color: theme.text }}>
                 {partnerMood?.emoji} {partnerMood?.name}
               </Text>
             </View>

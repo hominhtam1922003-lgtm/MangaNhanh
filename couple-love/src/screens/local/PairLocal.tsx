@@ -21,6 +21,7 @@ import {
   roomToQr,
 } from "../../services/relay";
 import { joinCodes } from "../../logic/localState.mjs";
+import { useTheme } from "../../theme/ThemeContext";
 import type { State } from "../../services/localdb";
 type Room = {
   id: string;
@@ -63,6 +64,7 @@ export default function PairLocal({
   onRetryRelay: () => void;
 }) {
   const [mode, setMode] = useState<"code" | "manual">("code");
+  const { theme } = useTheme();
   const [extra, setExtra] = useState(false);
   const [joinValue, setJoinValue] = useState("");
   const [scanner, setScanner] = useState(false);
@@ -210,11 +212,8 @@ export default function PairLocal({
               className="rounded-2xl py-3 items-center"
             >
               <Text
-                className={
-                  mode === id
-                    ? "text-white font-bold"
-                    : "text-love font-semibold"
-                }
+                className={mode === id ? "font-bold" : "font-semibold"}
+                style={{ color: mode === id ? "#ffffff" : theme.text }}
               >
                 {label}
               </Text>
@@ -227,7 +226,10 @@ export default function PairLocal({
           <Card>
             <View className="flex-row items-center mb-2">
               <View className={`w-3 h-3 rounded-full mr-3 ${statusDot}`} />
-              <Text className="text-ink font-semibold flex-1">
+              <Text
+                className="font-semibold flex-1"
+                style={{ color: theme.ink }}
+              >
                 {statusLine}
               </Text>
             </View>
@@ -239,10 +241,10 @@ export default function PairLocal({
                   size={48}
                 />
                 <View className="ml-4 flex-1">
-                  <Text className="text-ink font-bold">
+                  <Text className="font-bold" style={{ color: theme.ink }}>
                     {state.partner.nickname}
                   </Text>
-                  <Text className="text-sm text-stone-500">
+                  <Text className="text-sm" style={{ color: theme.sub }}>
                     Cảm xúc: {state.partner.moodNote || "chưa có ghi chú"} ·{" "}
                     {partnerDiary} kỷ niệm nhận được
                   </Text>
@@ -269,7 +271,10 @@ export default function PairLocal({
                 accessibilityLabel="Chi tiết kết nối"
                 onPress={() => setDetails(!details)}
               >
-                <Text className="text-love font-semibold mt-3">
+                <Text
+                  className="font-semibold mt-3"
+                  style={{ color: theme.text }}
+                >
                   {details
                     ? "▲ Ẩn chi tiết kết nối"
                     : `▼ Chi tiết kết nối (${relayStatus.readyCount ?? 0}/${relayStatus.summary?.length ?? 0} trạm sẵn sàng)`}
@@ -279,13 +284,21 @@ export default function PairLocal({
             {details && room ? (
               <View className="mt-2">
                 {(relayStatus.summary ?? []).map((item) => (
-                  <Text key={item.host} className="text-xs text-stone-600">
+                  <Text
+                    key={item.host}
+                    className="text-xs"
+                    style={{ color: theme.sub }}
+                  >
                     {item.state === "sẵn sàng" ? "● " : "○ "}
                     {item.host}: {item.state}
                   </Text>
                 ))}
                 {selfTest.map((item) => (
-                  <Text key={item.name} className="text-xs text-stone-600">
+                  <Text
+                    key={item.name}
+                    className="text-xs"
+                    style={{ color: theme.sub }}
+                  >
                     {item.ok ? "✓ " : "✗ "}
                     {item.name}: {item.detail}
                   </Text>
@@ -296,7 +309,11 @@ export default function PairLocal({
                   onPress={onRunSelfTest}
                 />
                 {relayLog.slice(-6).map((line) => (
-                  <Text key={line} className="text-xs text-stone-400 mt-1">
+                  <Text
+                    key={line}
+                    className="text-xs mt-1"
+                    style={{ color: theme.sub }}
+                  >
                     {line}
                   </Text>
                 ))}
@@ -335,11 +352,12 @@ export default function PairLocal({
                 <Text
                   selectable
                   accessibilityLabel={`Mã kết nối ${room.code}`}
-                  className="text-6xl font-bold tracking-widest text-love"
+                  className="text-6xl font-bold tracking-widest"
+                  style={{ color: theme.text }}
                 >
                   {prettyCode(room.code)}
                 </Text>
-                <Text className="text-sm text-stone-500 mt-2">
+                <Text className="text-sm mt-2" style={{ color: theme.sub }}>
                   {online
                     ? `Đã ghép nối với ${partnerName ?? "người thương"}.`
                     : guest
@@ -432,7 +450,7 @@ export default function PairLocal({
               accessibilityLabel="Cách khác: quét mã QR hoặc dán mã"
               onPress={() => setExtra(!extra)}
             >
-              <Text className="text-love font-semibold">
+              <Text className="font-semibold" style={{ color: theme.text }}>
                 {extra ? "▲ Ẩn cách khác" : "▼ Cách khác: quét mã QR / dán mã"}
               </Text>
             </Pressable>
@@ -470,11 +488,19 @@ export default function PairLocal({
                 </View>
                 {room && room.mode === "qr" ? (
                   <LinearGradient
-                    colors={["#ffffff", "#fff1f5"]}
+                    colors={[theme.surface, theme.soft]}
                     className="items-center rounded-3xl py-5 my-3"
                   >
-                    <QRCode value={roomToQr(room)} size={220} color="#d61f69" />
-                    <Text selectable className="text-xs text-stone-500 mt-3">
+                    <QRCode
+                      value={roomToQr(room)}
+                      size={220}
+                      color={theme.text}
+                    />
+                    <Text
+                      selectable
+                      className="text-xs mt-3"
+                      style={{ color: theme.sub }}
+                    >
                       {roomToQr(room)}
                     </Text>
                   </LinearGradient>

@@ -169,13 +169,13 @@ test("Khoảnh khắc: hai máy gộp khoảnh khắc của nhau, không nhân �
     ["b1"],
   );
 });
-test("Chủ đề: tám chủ đề hợp lệ, lưu vào cài đặt và tự bỏ giá trị lạ", () => {
+test("Chủ đề: nhiều bảng màu hợp lệ, lưu vào cài đặt và tự bỏ giá trị lạ", () => {
   assert.equal(THEMES.length >= 8, true);
   assert.equal(isTheme(DEFAULT_THEME), true);
   assert.equal(isTheme("khong-co"), false);
   assert.equal(themeById("khong-co").id, DEFAULT_THEME);
   for (const theme of THEMES) {
-    assert.match(theme.colors[0], /^#[0-9a-f]{6}$/i);
+    assert.match(theme.hero[0], /^#[0-9a-f]{6}$/i);
     assert.match(theme.deep[1], /^#[0-9a-f]{6}$/i);
     assert.equal(theme.emoji.length >= 1, true);
   }
@@ -197,6 +197,11 @@ test("Chủ đề: tám chủ đề hợp lệ, lưu vào cài đặt và tự b
     loveNotes: false,
   });
   assert.equal(saved.settings.theme, "dem", "chủ đề lạ thì giữ chủ đề cũ");
+  assert.equal(
+    saved.appearance.theme,
+    "dem",
+    "chủ đề lạ cũng không ghi vào giao diện dùng chung",
+  );
   const kept = reduce(state, {
     type: "settings.set",
     notify: true,

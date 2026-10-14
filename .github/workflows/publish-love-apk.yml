@@ -106,8 +106,9 @@ jobs:
             gh release upload "$RELEASE_TAG" "release-apk/$APK_FILE" "release-apk/$APK_FILE.sha256" --clobber --repo "$GITHUB_REPOSITORY"
             # Bản nhẹ (chỉ arm64-v8a) cho máy/mạng yếu — tải nhanh hơn khoảng một phần tư.
             thin="release-apk/${APK_FILE%.apk}-arm64.apk"
+            thin_sum="release-apk/${APK_FILE%.apk}-arm64.sha256"
             if [ -f "$thin" ]; then
-              gh release upload "$RELEASE_TAG" "$thin" "$thin.sha256" --clobber --repo "$GITHUB_REPOSITORY"
+              gh release upload "$RELEASE_TAG" "$thin" "$thin_sum" --clobber --repo "$GITHUB_REPOSITORY"
             fi
           else
             cat > /tmp/love-notes.md <<EOF

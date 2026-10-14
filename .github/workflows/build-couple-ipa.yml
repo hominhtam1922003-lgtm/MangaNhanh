@@ -78,8 +78,10 @@ jobs:
         run: |
           exec > >(tee ../ipa-package.log) 2>&1
           VERSION=$(node -p "require('./app.config.js').expo.version")
+          echo "Phiên bản: $VERSION"
+          find ios/build/Build/Products -maxdepth 2 -name "*.app" -print || true
           APP=$(ls -d ios/build/Build/Products/Release-iphoneos/*.app | head -1)
-          echo "Ứng dụng: $APP · Phiên bản: $VERSION"
+          echo "Ứng dụng: $APP"
           test -d "$APP"
           rm -rf ios/Payload
           mkdir -p ios/Payload
@@ -89,8 +91,12 @@ jobs:
           cd ..
           ls -l "HaiTraiTim-$VERSION-unsigned.ipa"
           unzip -l "HaiTraiTim-$VERSION-unsigned.ipa" | head -12
-          sha256sum "HaiTraiTim-$VERSION-unsigned.ipa" > "HaiTraiTim-$VERSION-unsigned.ipa.sha256"
-          cat "HaiTraiTim-$VERSION-unsigned.ipa.sha256"
+          # macOS không có sha256sum, dùng shasum -a 256 cho chắc.
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "HaiTraiTim-$VERSION-unsigned.ipa"
+          else
+            shasum -a 256 "HaiTraiTim-$VERSION-unsigned.ipa"
+          fi | tee "HaiTraiTim-$VERSION-unsigned.ipa.sha256"
       - name: Tải .ipa lên Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -102,34 +108,36 @@ jobs:
           retention-days: 14
       - name: Đính kèm lỗi build iOS vào GitHub Checks
         if: failure() && github.event_name != 'pull_request'
-        working-directory: ${{ env.PROJECT_DIR }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          node -e '
-          const fs = require("fs");
-          const parts = [];
-          for (const file of ["/tmp/check.log", "ios-build.log", "ipa-package.log"]) {
-            if (!fs.existsSync(file)) continue;
-            let text = fs.readFileSync(file, "utf8").replace(/\x1b\[[0-9;]*m/g, "");
-            for (const [key, value] of Object.entries(process.env))
-              if (/TOKEN|PASSWORD|SECRET|KEYSTORE|SUPABASE/.test(key) && typeof value === "string" && value.length > 5)
-                text = text.split(value).join("[ĐÃ CHE]");
-            parts.push("## " + file + "\n\n```text\n" + text.split("\n").slice(-150).join("\n").slice(-50000) + "\n```");
-          }
-          if (!parts.length) process.exit(0);
-          fs.writeFileSync("/tmp/love-ipa-check.json", JSON.stringify({
-            name: "Chẩn đoán build iOS Hai Trái Tim",
-            head_sha: process.env.GITHUB_SHA,
-            status: "completed",
-            conclusion: "failure",
-            output: {
-              title: "Nhật ký build iOS đã che bí mật",
-              summary: "IPA chưa dựng xong. Xem nhật ký để sửa cấu hình.",
-              text: parts.join("\n\n"),
-            },
-          }));
-          '
-          if [ -f /tmp/love-ipa-check.json ]; then
-            gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" --input /tmp/love-ipa-check.json
-          fi
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const limit = 60000;
+            const clean = (text) => {
+              let safe = text.replace(/\x1b\[[0-9;]*m/g, '');
+              for (const [key, value] of Object.entries(process.env))
+                if (/TOKEN|PASSWORD|SECRET|KEYSTORE|SUPABASE/.test(key) && typeof value === 'string' && value.length > 5)
+                  safe = safe.split(value).join('[ĐÃ CHE]');
+              return safe;
+            };
+            const sections = [];
+            for (const file of ['/tmp/check.log', 'ios-build.log', 'ipa-package.log']) {
+              if (!fs.existsSync(file)) continue;
+              const lines = fs.readFileSync(file, 'utf8').split('\n').slice(-150).join('\n');
+              sections.push(`## ${file}\n\n\`\`\`text\n${clean(lines).slice(-limit)}\n\`\`\``);
+            }
+            if (!sections.length) return;
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Chẩn đoán build iOS Hai Trái Tim',
+              head_sha: context.sha,
+              status: 'completed',
+              conclusion: 'failure',
+              output: {
+                title: 'Nhật ký build iOS đã che bí mật',
+                summary: 'IPA chưa dựng xong. Xem nhật ký để sửa cấu hình.',
+                text: sections.join('\n\n').slice(0, 65000),
+              },
+            });

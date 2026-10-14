@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Alert, Switch, Text, View } from "react-native";
+import { Alert, Pressable, Switch, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import * as Manipulator from "expo-image-manipulator";
 import {
@@ -22,6 +23,7 @@ import {
 } from "../../services/localsync";
 import { requestNotifications } from "../../services/localnotify";
 import { restoreFromPayload } from "../../logic/localState.mjs";
+import { THEMES } from "../../logic/themes.mjs";
 import Constants from "expo-constants";
 export default function SettingsLocal({
   state,
@@ -34,6 +36,7 @@ export default function SettingsLocal({
   onOpenPair,
   lastError,
   onClearError,
+  onOpenHome,
 }: {
   state: State;
   update: (action: Record<string, unknown>) => void;
@@ -45,6 +48,7 @@ export default function SettingsLocal({
   onOpenPair: () => void;
   lastError: string;
   onClearError: () => void;
+  onOpenHome: () => void;
 }) {
   const [name, setName] = useState(state.me.nickname);
   const [busy, setBusy] = useState(false);
@@ -74,15 +78,27 @@ export default function SettingsLocal({
         quality: 0.8,
       });
       if (result.canceled || !result.assets?.length) return;
-      const processed = await Manipulator.manipulateAsync(
+      const context = Manipulator.ImageManipulator.manipulate(
         result.assets[0].uri,
-        [{ resize: { width: 480 } }],
-        { compress: 0.8, format: Manipulator.SaveFormat.JPEG },
       );
+      context.resize({ width: 480 });
+      const rendered = await context.renderAsync();
+      const processed = await rendered.saveAsync({
+        compress: 0.8,
+        format: Manipulator.SaveFormat.JPEG,
+      });
       const previous = state.me.avatar;
-      const saved = saveImage(processed.uri, "me-avatar.jpg");
+      // Tên tệp mới mỗi lần đổi để máy không hiện lại ảnh cũ đã nhớ trong bộ đệm.
+      const saved = saveImage(
+        processed.uri,
+        `avatar-${Date.now().toString(36)}.jpg`,
+      );
       update({ type: "profile.avatar", file: saved });
       if (previous && previous !== saved) deleteImage(previous);
+      Alert.alert(
+        "Đã đổi ảnh đại diện",
+        "Ảnh mới sẽ tự sang máy người thương ở lần ghép nối tiếp theo.",
+      );
     });
   }
   return (
@@ -164,6 +180,8 @@ export default function SettingsLocal({
                   type: "settings.set",
                   notify: value,
                   relay: state.settings.relay,
+                  loveNotes: state.settings.loveNotes,
+                  theme: state.settings.theme,
                 });
               })
             }
@@ -187,6 +205,8 @@ export default function SettingsLocal({
                 type: "settings.set",
                 notify: state.settings.notify,
                 relay: value,
+                loveNotes: state.settings.loveNotes,
+                theme: state.settings.theme,
               })
             }
             trackColor={{ true: "#e64980" }}
@@ -199,13 +219,16 @@ export default function SettingsLocal({
         </Note>
       </Card>
       <Card>
-        <Title small>Gửi và nhận dữ liệu</Title>
+        <Title small>Khoảnh khắc — chụp là hai máy cùng xem</Title>
         <Note>
-          Tệp dữ liệu là văn bản chứa hồ sơ, ngày bắt đầu, chu kỳ, nhật ký và
-          tối đa vài ảnh nhỏ. Chỉ gửi cho người bạn tin tưởng.
+          Thay cho cách gửi/nhận tệp thủ công trước đây: giờ bạn chỉ cần chụp
+          ảnh ở trang chủ (mục “Gửi khoảnh khắc cho người thương”). Ảnh được nén
+          nhỏ, gửi qua kết nối tức thời và lưu kèm ngày tháng trên cả hai máy.
         </Note>
+        <Button label="Mở trang chủ để chụp" onPress={onOpenHome} />
         <Button
-          label="Xuất và chia sẻ tệp dữ liệu"
+          label="Xuất tệp dự phòng (sao lưu)"
+          secondary
           busy={busy}
           onPress={() =>
             void run(async () => {
@@ -220,24 +243,7 @@ export default function SettingsLocal({
           }
         />
         <Button
-          label="Nhận dữ liệu người thương từ tệp"
-          secondary
-          busy={busy}
-          onPress={() =>
-            void run(async () => {
-              const text = await pickBackupFile();
-              if (!text) return;
-              const { payload, diaryCount, images } = importPayload(text);
-              update({ type: "partner.merge", state: payload });
-              Alert.alert(
-                "Đã nhận",
-                `Từ ${payload.from.nickname}: ${diaryCount} kỷ niệm${images ? `, ${images} ảnh` : ""}.`,
-              );
-            })
-          }
-        />
-        <Button
-          label="Khôi phục từ tệp của chính bạn"
+          label="Phục hồi từ tệp dự phòng của chính bạn"
           secondary
           busy={busy}
           onPress={() =>
@@ -256,6 +262,74 @@ export default function SettingsLocal({
             })
           }
         />
+      </Card>
+      <Card>
+        <Title small>Hình nền &amp; chủ đề</Title>
+        <Note>
+          Chọn chủ đề cho trang chủ và cả ứng dụng — giống đổi chủ đề trong tin
+          nhắn. Chủ đề chỉ đổi trên máy bạn.
+        </Note>
+        <View className="flex-row flex-wrap">
+          {THEMES.map((item) => (
+            <Pressable
+              key={item.id}
+              accessibilityRole="radio"
+              accessibilityState={{
+                selected: state.settings.theme === item.id,
+              }}
+              accessibilityLabel={`Chủ đề ${item.name}`}
+              onPress={() =>
+                update({
+                  type: "settings.set",
+                  notify: state.settings.notify,
+                  relay: state.settings.relay,
+                  loveNotes: state.settings.loveNotes,
+                  theme: item.id,
+                })
+              }
+              className="items-center m-1"
+            >
+              <LinearGradient
+                colors={[item.colors[0], item.deep[0]]}
+                className={`w-16 h-16 rounded-2xl items-center justify-center ${
+                  state.settings.theme === item.id
+                    ? "border-2 border-ink"
+                    : "border border-pink-100"
+                }`}
+              >
+                <Text className="text-xl">{item.emoji[0]}</Text>
+              </LinearGradient>
+              <Text className="text-xs text-stone-600 mt-1">{item.name}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </Card>
+      <Card>
+        <View className="flex-row justify-between items-center my-3">
+          <Text className="text-ink flex-1">
+            Lời yêu thương mỗi ngày (09:00 và 21:00)
+          </Text>
+          <Switch
+            accessibilityLabel="Lời yêu thương mỗi ngày"
+            value={state.settings.loveNotes}
+            onValueChange={(value) =>
+              update({
+                type: "settings.set",
+                notify: state.settings.notify,
+                relay: state.settings.relay,
+                theme: state.settings.theme,
+                loveNotes: value,
+              })
+            }
+            trackColor={{ true: "#e64980" }}
+          />
+        </View>
+        <Note>
+          Mỗi ngày hai máy nhận cùng một câu yêu thương hoặc thơ ngắn (câu chọn
+          theo ngày nên không cần mạng). Cần bật quyền thông báo của máy. Nhắc
+          lời nhắc kia (chu kỳ, ngày kỷ niệm) vẫn nằm ở mục “Lời nhắc trên máy
+          này”.
+        </Note>
       </Card>
       <Card>
         <Title small>Không gian riêng</Title>
@@ -306,8 +380,8 @@ export default function SettingsLocal({
         </Card>
       ) : null}
       <Note>
-        Hai Trái Tim {Constants.expoConfig?.version ?? "1.5.0"} (chế độ trên
-        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 6}) — ghi
+        Hai Trái Tim {Constants.expoConfig?.version ?? "1.6.0"} (chế độ trên
+        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 7}) — ghi
         lại số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục
         riêng của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ
         liệu, nên hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch,

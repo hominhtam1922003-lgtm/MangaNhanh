@@ -42,7 +42,22 @@ export type State = {
   cycle: CycleRecord | null;
   diary: DiaryEntry[];
   alerts: AlertRecord[];
-  settings: { biometric: boolean; notify: boolean; relay: boolean };
+  settings: {
+    biometric: boolean;
+    notify: boolean;
+    relay: boolean;
+    loveNotes: boolean;
+    theme: string;
+  };
+  moments: {
+    id: string;
+    authorId: string;
+    caption: string;
+    file: string | null;
+    createdAt: string;
+    sentAt: string | null;
+    receivedAt: string | null;
+  }[];
   relay: {
     id: string;
     key: string;

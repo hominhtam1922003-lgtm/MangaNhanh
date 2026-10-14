@@ -1,3 +1,4 @@
+import { DEFAULT_THEME, isTheme } from "./themes.mjs";
 export const STATE_VERSION = 1;
 export const makeId = () =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -46,9 +47,16 @@ export function emptyState(now = new Date().toISOString()) {
     cycle: null,
     diary: [],
     alerts: [],
-    settings: { biometric: false, notify: false, relay: true },
+    settings: {
+      biometric: false,
+      notify: false,
+      relay: true,
+      loveNotes: true,
+      theme: DEFAULT_THEME,
+    },
     relay: null,
     links: [],
+    moments: [],
   };
 }
 export function migrate(raw, now = new Date().toISOString()) {
@@ -103,7 +111,27 @@ export function migrate(raw, now = new Date().toISOString()) {
     biometric: raw.settings?.biometric === true,
     notify: raw.settings?.notify === true,
     relay: raw.settings?.relay !== false,
+    loveNotes: raw.settings?.loveNotes !== false,
+    theme: isTheme(raw.settings?.theme) ? raw.settings.theme : DEFAULT_THEME,
   };
+  state.moments = Array.isArray(raw.moments)
+    ? raw.moments
+        .filter((moment) => moment && typeof moment === "object")
+        .map((moment) => ({
+          id: text(moment.id, 40) || uid(),
+          authorId: moment.authorId === "partner" ? "partner" : "me",
+          caption: text(moment.caption, 120),
+          file:
+            typeof moment.file === "string" && moment.file
+              ? text(moment.file, 90)
+              : null,
+          createdAt: iso(moment.createdAt, now),
+          sentAt: moment.sentAt ? iso(moment.sentAt, now) : null,
+          receivedAt: moment.receivedAt ? iso(moment.receivedAt, now) : null,
+        }))
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+        .slice(0, 200)
+    : [];
   const relay = raw.relay;
   state.relay =
     relay &&
@@ -267,11 +295,83 @@ export function reduce(state, action) {
         role: action.room.role === "guest" ? "guest" : "host",
       };
     }
+  } else if (type === "moment.add") {
+    const file = typeof action.file === "string" ? text(action.file, 90) : "";
+    if (!file) throw new Error("Khoảnh khắc cần có ảnh.");
+    next.moments = [
+      {
+        id: text(action.id, 40) || uid(),
+        authorId: "me",
+        caption: text(action.caption, 120),
+        file,
+        createdAt: new Date().toISOString(),
+        sentAt: null,
+        receivedAt: null,
+      },
+      ...next.moments,
+    ].slice(0, 200);
+  } else if (type === "moment.received") {
+    const id = text(action.id, 40);
+    if (!id) throw new Error("Khoảnh khắc nhận được thiếu mã.");
+    const file = typeof action.file === "string" ? text(action.file, 90) : "";
+    const current = next.moments.find((moment) => moment.id === id);
+    if (current) {
+      next.moments = next.moments.map((moment) =>
+        moment.id === id
+          ? {
+              ...moment,
+              file: file || moment.file,
+              caption: moment.caption || text(action.caption, 120),
+              receivedAt: new Date().toISOString(),
+            }
+          : moment,
+      );
+    } else {
+      next.moments = [
+        {
+          id,
+          authorId: action.authorId === "me" ? "me" : "partner",
+          caption: text(action.caption, 120),
+          file: file || null,
+          createdAt: iso(action.createdAt, new Date().toISOString()),
+          sentAt: null,
+          receivedAt: new Date().toISOString(),
+        },
+        ...next.moments,
+      ]
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+        .slice(0, 200);
+    }
+  } else if (type === "moment.file") {
+    const id = text(action.id, 40);
+    const file = typeof action.file === "string" ? text(action.file, 90) : "";
+    if (!id || !file) throw new Error("Khoảnh khắc nhận được thiếu ảnh.");
+    next.moments = next.moments.map((moment) =>
+      moment.id === id
+        ? { ...moment, file, receivedAt: new Date().toISOString() }
+        : moment,
+    );
+  } else if (type === "moment.sent") {
+    const id = text(action.id, 40);
+    next.moments = next.moments.map((moment) =>
+      moment.id === id
+        ? { ...moment, sentAt: new Date().toISOString() }
+        : moment,
+    );
+  } else if (type === "moment.remove") {
+    next.moments = next.moments.filter(
+      (moment) => moment.id !== text(action.id, 40),
+    );
   } else if (type === "settings.set") {
     next.settings = {
       ...next.settings,
       notify: action.notify === true,
       relay: action.relay !== false,
+      loveNotes:
+        action.loveNotes === undefined
+          ? next.settings.loveNotes
+          : action.loveNotes === true,
+      theme: isTheme(action.theme) ? action.theme : next.settings.theme,
     };
   } else if (type === "partner.merge") {
     const raw =
@@ -282,6 +382,7 @@ export function reduce(state, action) {
     next.diary = mergeDiary(next.diary, incoming.diary);
     if (incoming.me?.nickname) next.partner = { ...incoming.me, id: "partner" };
     next.alerts = mergeAlerts(next.alerts, incoming.alerts);
+    next.moments = mergeMoments(next.moments, incoming.moments);
     if (
       incoming.cycle &&
       (!next.cycle ||
@@ -306,6 +407,9 @@ export function reduce(state, action) {
       },
     ].slice(-20);
   } else if (type === "partner.unlink") {
+    next.moments = next.moments.filter(
+      (moment) => moment.authorId !== "partner",
+    );
     next.partner = null;
   } else if (type === "state.replace") {
     return migrate(action.state);
@@ -590,6 +694,41 @@ function mergeAlerts(local, remote) {
     }
     seen.add(mark);
     merged.push(alert);
+  }
+  return merged
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .slice(0, 200);
+}
+function mergeMoments(local, remote) {
+  const mine = new Map(local.map((moment) => [moment.id, moment]));
+  let merged = [...local];
+  for (const moment of Array.isArray(remote) ? remote : []) {
+    const id = text(moment?.id, 40);
+    if (!id) continue;
+    const existing = mine.get(id);
+    if (existing) {
+      // Đã có: giữ ảnh đang có trên máy này, chỉ bổ sung phần còn thiếu.
+      merged = merged.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              file: item.file ?? moment.file ?? null,
+              caption: item.caption || text(moment.caption, 120),
+              receivedAt: item.receivedAt ?? new Date().toISOString(),
+            }
+          : item,
+      );
+      continue;
+    }
+    merged.push({
+      id,
+      authorId: "partner",
+      caption: text(moment.caption, 120),
+      file: null,
+      createdAt: iso(moment.createdAt, new Date().toISOString()),
+      sentAt: null,
+      receivedAt: new Date().toISOString(),
+    });
   }
   return merged
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))

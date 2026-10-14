@@ -12,6 +12,11 @@ import {
   buildRelayPayload,
   roomFromCode,
 } from "../src/services/relayProtocol.mjs";
+import {
+  PhotoAssembler,
+  photoMessages,
+} from "../src/services/momentTransfer.mjs";
+import { dateOnly } from "../src/logic/time.mjs";
 import { emptyState, reduce } from "../src/logic/localState.mjs";
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -159,6 +164,111 @@ test("Broker MQTT thật: hai máy nhập cùng mã 6 số thì cả hai cùng n
       true,
       "hai bạn vẫn đang trực tuyến với nhau",
     );
+  } finally {
+    for (const client of clients) client.stop();
+    globalThis.WebSocket = realWebSocket;
+    await new Promise((resolve) => sockets.close(resolve));
+    await new Promise((resolve) => http.close(resolve));
+    broker.close();
+  }
+});
+
+test("Broker MQTT thật: gửi ảnh khoảnh khắc từ máy A sang máy B rồi lưu lại", async () => {
+  const broker = await Aedes.createBroker();
+  const http = createServer();
+  const sockets = new WebSocketServer({ server: http });
+  sockets.on("connection", (socket) =>
+    broker.handle(createWebSocketStream(socket)),
+  );
+  await new Promise((resolve) => http.listen(0, "127.0.0.1", resolve));
+  const port = http.address().port;
+  const realWebSocket = globalThis.WebSocket;
+  globalThis.WebSocket = WebSocket;
+  const clients = [];
+  try {
+    const room = roomFromCode("778811");
+    const assembler = new PhotoAssembler();
+    let received = null;
+    const mayA = new RelayClient({
+      room,
+      brokers: [`ws://127.0.0.1:${port}/`],
+      deviceId: "may-A",
+      onPayload: () => {},
+      onStatus: () => {},
+      onLog: () => {},
+    });
+    const mayB = new RelayClient({
+      room,
+      brokers: [`ws://127.0.0.1:${port}/`],
+      deviceId: "may-B",
+      onPayload: () => {},
+      onStatus: () => {},
+      onLog: () => {},
+      onMessage: (message) => {
+        const done = assembler.add(message);
+        if (done) received = done;
+      },
+    });
+    clients.push(mayA, mayB);
+    mayA.start();
+    await wait(120);
+    mayB.start();
+    await wait(250);
+    assert.equal(mayA.connected && mayB.connected, true);
+    // Ảnh giả 12.000 ký tự base64 ≈ ảnh nén nhỏ thật.
+    const base64 = Buffer.from("anh khoanh khac ".repeat(700), "utf8").toString(
+      "base64",
+    );
+    const messages = photoMessages(
+      {
+        id: "moment-that-1",
+        base64,
+        caption: "Đà Lạt chiều mưa",
+        createdAt: "2026-10-14T09:30:00.000Z",
+        nickname: "Minh",
+      },
+      3500,
+    );
+    assert.equal(messages.length > 1, true, "ảnh phải bị cắt thành nhiều gói");
+    for (const message of messages) {
+      assert.equal(mayA.publish(message), true, "máy A gửi được từng gói ảnh");
+      await wait(20);
+    }
+    for (let attempt = 0; attempt < 60 && !received; attempt++) await wait(100);
+    assert.ok(received, "máy B phải ghép xong ảnh");
+    assert.equal(received.id, "moment-that-1");
+    assert.equal(received.base64, base64, "ảnh nhận được giống hệt ảnh gửi đi");
+    assert.equal(received.meta.caption, "Đà Lạt chiều mưa");
+    assert.equal(received.meta.nickname, "Minh");
+    // Máy B xin lại ảnh còn thiếu thì lời xin phải tới được máy A, và khi app
+    // gửi lại (đúng như App.tsx làm) thì máy B nhận đủ ảnh lần nữa.
+    let asked = null;
+    mayA.onMessage = (message) => {
+      if (message.kind === "photoRequest") asked = message.ids;
+    };
+    assert.equal(
+      mayB.publish({ kind: "photoRequest", ids: ["moment-that-1"] }),
+      true,
+    );
+    for (let attempt = 0; attempt < 40 && !asked; attempt++) await wait(100);
+    assert.deepEqual(
+      asked,
+      ["moment-that-1"],
+      "máy A nhận được lời xin gửi lại",
+    );
+    const second = new PhotoAssembler();
+    let again = null;
+    mayB.onMessage = (message) => {
+      const done = second.add(message);
+      if (done) again = done;
+    };
+    for (const message of messages) {
+      assert.equal(mayA.publish(message), true);
+      await wait(20);
+    }
+    for (let attempt = 0; attempt < 60 && !again; attempt++) await wait(100);
+    assert.ok(again, "máy B phải nhận lại được ảnh sau khi xin");
+    assert.equal(again.base64, base64, "ảnh gửi lại vẫn đúng từng ký tự");
   } finally {
     for (const client of clients) client.stop();
     globalThis.WebSocket = realWebSocket;

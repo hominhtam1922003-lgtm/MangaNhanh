@@ -250,10 +250,21 @@ export function buildRelayPayload(state, limit = 60000, deviceId = "me") {
     cycle: state.cycle ?? null,
     diary: [],
     alerts: (Array.isArray(state.alerts) ? state.alerts : []).slice(0, 60),
+    // Chỉ gửi phần mô tả khoảnh khắc; ảnh đi bằng gói riêng (mã hóa như nhau).
+    moments: (Array.isArray(state.moments) ? state.moments : [])
+      .filter((moment) => moment && moment.authorId !== "partner")
+      .slice(0, 40)
+      .map((moment) => ({
+        id: String(moment.id),
+        caption: String(moment.caption ?? "").slice(0, 120),
+        createdAt: String(moment.createdAt ?? ""),
+        hasFile: Boolean(moment.file),
+      })),
   };
   const trimmedDiary = ownDiary.map((entry) => ({ ...entry, image: null }));
   const attempts = [
     { ...base, diary: trimmedDiary },
+    { ...base, diary: trimmedDiary, moments: base.moments.slice(0, 12) },
     {
       ...base,
       diary: trimmedDiary.map((entry) => ({
@@ -400,6 +411,8 @@ export class RelayClient {
   constructor(options) {
     this.room = options.room;
     this.onPayload = options.onPayload ?? (() => {});
+    // Mọi bản tin đã giải mã (trạng thái, ảnh khoảnh khắc, xin gửi lại ảnh…).
+    this.onMessage = options.onMessage ?? (() => {});
     this.onStatus = options.onStatus ?? (() => {});
     this.onReady = options.onReady ?? (() => {});
     this.onLog = options.onLog ?? (() => {});
@@ -619,7 +632,9 @@ export class RelayClient {
           if (
             message?.kind === "ping" ||
             message?.kind === "hello" ||
-            message?.kind === "state"
+            message?.kind === "state" ||
+            message?.kind === "photo" ||
+            message?.kind === "photoRequest"
           ) {
             const firstContact = !this.partnerOnline;
             this.partnerSeen = Date.now();
@@ -631,6 +646,8 @@ export class RelayClient {
             if (name) this.partnerName = name;
             if (message.kind === "state" && message.payload)
               this.onPayload(message.payload, name);
+            if (message.kind !== "ping" && message.kind !== "hello")
+              this.onMessage(message, name);
             this.emitStatus();
             // Người thương vừa lộ diện: trả lời ngay một tiếng "hello" để máy kia
             // biết mình cũng đang trực tuyến, không phải chờ nhịp giữ kết nối.

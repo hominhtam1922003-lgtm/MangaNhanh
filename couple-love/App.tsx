@@ -35,7 +35,7 @@ import {
 import type { State } from "./src/services/localdb";
 import {
   dueAlertActions,
-  rescheduleReminders,
+  rescheduleEverything,
 } from "./src/services/localnotify";
 import {
   RelayClient,
@@ -50,6 +50,13 @@ import {
   readCrash,
   saveCrash,
 } from "./src/services/crashlog";
+import {
+  PhotoAssembler,
+  missingPhotoIds,
+  photoMessages,
+} from "./src/services/momentTransfer.mjs";
+import { themeById } from "./src/logic/themes.mjs";
+import { imageBase64, imageUri, writeBase64 } from "./src/services/localdb";
 import HomeLocal from "./src/screens/local/HomeLocal";
 import CycleLocal from "./src/screens/local/CycleLocal";
 import DiaryLocal from "./src/screens/local/DiaryLocal";
@@ -411,6 +418,9 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     summary?: { host: string; state: string }[];
   }>({ state: "off", broker: null, partnerOnline: false });
   const [relayLog, setRelayLog] = useState<string[]>([]);
+  const assemblerRef = useRef(new PhotoAssembler());
+  const askedPhotosRef = useRef<Set<string>>(new Set());
+  const momentQueueRef = useRef(false);
   const [lastError, setLastError] = useState("");
   const [selfTest, setSelfTest] = useState<
     { name: string; ok: boolean; detail: string }[]
@@ -463,7 +473,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       stateRef.current = next;
       setState(next);
       if (next !== loaded) void persistState(next);
-      void rescheduleReminders(next).catch(() => {});
+      void rescheduleEverything(next).catch(() => {});
       setSelfTest(relaySelfTest());
       const previous = await readCrash();
       if (previous) {
@@ -536,7 +546,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         "partner.merge",
       ].includes(String(action.type))
     ) {
-      void rescheduleReminders(next).catch(() => {});
+      void rescheduleEverything(next).catch(() => {});
     }
   }
   function replaceState(next: State) {
@@ -545,7 +555,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     void persistState(next).catch(() =>
       setError("Chưa ghi được dữ liệu vào bộ nhớ máy."),
     );
-    void rescheduleReminders(next).catch(() => {});
+    void rescheduleEverything(next).catch(() => {});
   }
   async function clearAll() {
     await clearLocalData();
@@ -581,6 +591,72 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     if (client.publishState(payload, current.me.nickname))
       lastSentRef.current = key;
   }
+  // Gửi ảnh khoảnh khắc của mình cho người thương, mỗi lần một ảnh để không
+  // làm nghẽn kênh; ảnh nào chưa gửi sẽ được gửi ở lần kết nối sau.
+  function flushMoments() {
+    const client = relayRef.current;
+    const current = stateRef.current;
+    if (!client || !current || momentQueueRef.current) return;
+    const pending = (current.moments ?? []).filter(
+      (moment: State["moments"][number]) =>
+        moment.authorId !== "partner" && moment.file && !moment.sentAt,
+    );
+    if (!pending.length) return;
+    const moment = pending[0];
+    const base64 = imageBase64(moment.file, 200 * 1024);
+    if (!base64) {
+      update({ type: "moment.sent", id: moment.id });
+      return;
+    }
+    momentQueueRef.current = true;
+    void (async () => {
+      try {
+        const messages = photoMessages({
+          id: moment.id,
+          base64,
+          caption: moment.caption,
+          createdAt: moment.createdAt,
+          nickname: current.me.nickname,
+        });
+        for (const message of messages) {
+          client.publish(message);
+          await new Promise((resolve) => setTimeout(resolve, 60));
+        }
+        update({ type: "moment.sent", id: moment.id });
+        setRelayLog((lines) =>
+          [...lines, `Đã gửi một khoảnh khắc (${messages.length} gói)`].slice(
+            -12,
+          ),
+        );
+      } catch (error) {
+        setRelayLog((lines) =>
+          [
+            ...lines,
+            `Chưa gửi được khoảnh khắc: ${
+              error instanceof Error ? error.message : "lỗi không rõ"
+            }`,
+          ].slice(-12),
+        );
+      } finally {
+        momentQueueRef.current = false;
+        setTimeout(() => flushMoments(), 400);
+      }
+    })();
+  }
+  // Xin gửi lại những ảnh của người thương mà máy này chưa có.
+  function askMissingPhotos() {
+    const client = relayRef.current;
+    const current = stateRef.current;
+    if (!client || !current) return;
+    const ids = missingPhotoIds(
+      current.moments ?? [],
+      (moment: State["moments"][number]) =>
+        Boolean(moment.file && imageUri(moment.file)),
+    ).filter((id: string) => !askedPhotosRef.current.has(id));
+    if (!ids.length) return;
+    for (const id of ids) askedPhotosRef.current.add(id);
+    client.publish({ kind: "photoRequest", ids });
+  }
   useEffect(() => {
     if (!relayRoom || !state?.settings.relay) {
       relayRef.current?.stop();
@@ -606,6 +682,69 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           );
         }
       },
+      onMessage: (message: Record<string, unknown>) => {
+        const kind = String(message.kind ?? "");
+        if (kind === "photo") {
+          const photo = assemblerRef.current.add(message);
+          if (photo) {
+            try {
+              const name = `moment-${photo.id}.jpg`;
+              writeBase64(name, photo.base64);
+              update({
+                type: "moment.received",
+                id: photo.id,
+                file: name,
+                caption: photo.meta?.caption ?? "",
+                createdAt: photo.meta?.createdAt ?? new Date().toISOString(),
+              });
+              setRelayLog((lines) =>
+                [...lines, "Đã nhận một khoảnh khắc mới"].slice(-12),
+              );
+            } catch (error) {
+              setRelayLog((lines) =>
+                [
+                  ...lines,
+                  `Nhận ảnh nhưng chưa lưu được: ${
+                    error instanceof Error ? error.message : "lỗi không rõ"
+                  }`,
+                ].slice(-12),
+              );
+            }
+          }
+          return;
+        }
+        if (kind === "photoRequest") {
+          const ids = Array.isArray(message.ids)
+            ? (message.ids as string[])
+            : [];
+          const current = stateRef.current;
+          const client = relayRef.current;
+          if (!current || !client) return;
+          for (const id of ids) {
+            const moment = (current.moments ?? []).find(
+              (item: State["moments"][number]) =>
+                item.id === String(id) && item.authorId !== "partner",
+            );
+            if (!moment?.file) continue;
+            const base64 = imageBase64(moment.file, 200 * 1024);
+            if (!base64) continue;
+            void (async () => {
+              try {
+                for (const message of photoMessages({
+                  id: moment.id,
+                  base64,
+                  caption: moment.caption,
+                  createdAt: moment.createdAt,
+                  nickname: current.me.nickname,
+                })) {
+                  client.publish(message);
+                  await new Promise((resolve) => setTimeout(resolve, 60));
+                }
+              } catch {}
+            })();
+          }
+        }
+      },
       onStatus: (status: {
         state: string;
         broker: string | null;
@@ -622,6 +761,8 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       onReady: () => {
         readyRef.current = true;
         publishCurrent(true);
+        flushMoments();
+        askMissingPhotos();
       },
     });
     relayRef.current = client;
@@ -632,6 +773,15 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relayRoom?.id, relayRoom?.key, state?.settings.relay]);
+  useEffect(() => {
+    if (
+      state?.moments?.some(
+        (moment) => moment.authorId !== "partner" && !moment.sentAt,
+      )
+    )
+      flushMoments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.moments]);
   useEffect(() => {
     if (!state || !relayRef.current) return;
     if (sentRoomRef.current !== (relayRoom?.id ?? "")) {
@@ -650,6 +800,8 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   useEffect(() => {
     if (!relayStatus.partnerOnline) return;
     publishCurrent(true);
+    flushMoments();
+    askMissingPhotos();
     const name = relayStatus.partnerName || stateRef.current?.partner?.nickname;
     if (!name || joinedRef.current === name) return;
     joinedRef.current = name;
@@ -706,13 +858,15 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   }
   const unread = state.alerts.filter((alert) => !alert.readAt).length;
   const props = { state, update };
+  const theme = themeById(state.settings.theme);
   return (
     <LinearGradient
-      colors={["#fff5f8", "#ffe8f0", "#fff5f8"]}
+      colors={[theme.colors[0], theme.colors[1], theme.colors[0]]}
       className="flex-1"
     >
       <KeyboardAvoidingView
-        className="flex-1 bg-pink-50"
+        className="flex-1"
+        style={{ backgroundColor: "transparent" }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View className="flex-row px-5 py-4 items-center justify-between">
@@ -825,7 +979,12 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               )}
             </>
           ) : tab === "home" ? (
-            <HomeLocal {...props} openPair={() => setTab("pair")} />
+            <HomeLocal
+              {...props}
+              openPair={() => setTab("pair")}
+              relayStatus={relayStatus}
+              onSendMoment={flushMoments}
+            />
           ) : tab === "pair" ? (
             <PairLocal
               {...props}
@@ -862,6 +1021,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               onToggleLock={toggleLock}
               onSwitchMode={onSwitchMode}
               onOpenPair={() => setTab("pair")}
+              onOpenHome={() => setTab("home")}
               lastError={lastError}
               onClearError={() => {
                 setLastError("");
@@ -884,12 +1044,14 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               className="flex-1 items-center py-2"
             >
               <Text
-                className={`text-2xl ${tab === item.id ? "text-love" : "text-stone-400"}`}
+                className="text-2xl"
+                style={{ color: tab === item.id ? theme.deep[1] : "#a8a29e" }}
               >
                 {item.icon}
               </Text>
               <Text
-                className={`text-xs mt-1 ${tab === item.id ? "text-love font-bold" : "text-stone-500"}`}
+                className={`text-xs mt-1 ${tab === item.id ? "font-bold" : ""}`}
+                style={{ color: tab === item.id ? theme.deep[1] : "#78716c" }}
               >
                 {item.label}
               </Text>

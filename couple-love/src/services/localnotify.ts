@@ -6,6 +6,7 @@ import {
   dueAlerts,
 } from "../logic/localState.mjs";
 import { dateOnly } from "../logic/time.mjs";
+import { loveLineFor, loveLineKey } from "../logic/lovelines.mjs";
 export async function ensureChannel() {
   if (Notifications.getPermissionsAsync === undefined) return false;
   await Notifications.setNotificationChannelAsync("love-reminders", {
@@ -61,6 +62,55 @@ export async function rescheduleReminders(
     scheduled += 1;
   }
   return scheduled;
+}
+/** Lời yêu thương định kỳ: 09:00 và 21:00 mỗi ngày, câu chọn theo NGÀY nên hai máy cùng câu. */
+export async function scheduleLoveNotes(
+  state: State,
+  today = dateOnly(new Date(), state.timezone),
+) {
+  if (!state.settings.loveNotes) return 0;
+  const allowed = await Notifications.getPermissionsAsync();
+  if (allowed.status !== "granted") return 0;
+  const base = new Date(`${today}T00:00:00`);
+  if (!Number.isFinite(base.getTime())) return 0;
+  const nickname = state.partner?.nickname || state.me.nickname;
+  let scheduled = 0;
+  for (let offset = 0; offset < 8; offset++) {
+    const day = new Date(base);
+    day.setDate(day.getDate() + offset);
+    const dayKey = dateOnly(day, state.timezone);
+    const line = loveLineFor(dayKey);
+    for (const hour of [9, 21]) {
+      const when = new Date(day);
+      when.setHours(hour, 0, 0, 0);
+      if (when.getTime() <= Date.now()) continue;
+      await Notifications.scheduleNotificationAsync({
+        identifier: `${loveLineKey(dayKey)}-${hour}`,
+        content: {
+          title: `${line.emoji} Lời yêu thương`,
+          body: `${line.text} — gửi ${nickname} nhé.`,
+          sound: "default",
+          data: { key: loveLineKey(dayKey) },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: when,
+          channelId: "love-reminders",
+        },
+      });
+      scheduled += 1;
+    }
+  }
+  return scheduled;
+}
+/** Sắp lịch lại cả lời nhắc lẫn lời yêu thương (gọi khi mở app hoặc đổi cài đặt). */
+export async function rescheduleEverything(
+  state: State,
+  today = dateOnly(new Date(), state.timezone),
+) {
+  const reminders = await rescheduleReminders(state, today);
+  const notes = await scheduleLoveNotes(state, today);
+  return { reminders, notes };
 }
 export function dueAlertActions(
   state: State,

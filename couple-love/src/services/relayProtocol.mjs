@@ -227,6 +227,25 @@ export function open(room, text) {
     );
   return JSON.parse(utf8Decode(box));
 }
+import { normalizeReact, replyPreview } from "../logic/chatExtras.mjs";
+
+const ownMessages = (state) =>
+  (Array.isArray(state?.messages) ? state.messages : []).filter(
+    (message) => message && message.authorId !== "partner",
+  );
+const partnerMessages = (state) =>
+  (Array.isArray(state?.messages) ? state.messages : [])
+    .filter((message) => message && message.authorId === "partner")
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+const previewOf = (message) => replyPreview(message);
+/** Tra cứu nhanh tin nhắn theo mã để đóng gói phần trả lời trích dẫn. */
+function messagesById(state) {
+  const map = new Map();
+  for (const message of Array.isArray(state?.messages) ? state.messages : []) {
+    if (message && typeof message.id === "string") map.set(message.id, message);
+  }
+  return map;
+}
 export function buildRelayPayload(
   state,
   limit = 60000,
@@ -239,6 +258,8 @@ export function buildRelayPayload(
   const ownDiary = (Array.isArray(state.diary) ? state.diary : []).filter(
     (entry) => entry.authorId !== "partner",
   );
+  // Tra cứu tin nhắn theo mã: dùng cho phần trả lời trích dẫn.
+  const lookup = messagesById(state);
   const base = {
     v: 3,
     device: String(deviceId || "me"),
@@ -247,7 +268,12 @@ export function buildRelayPayload(
       nickname: state.me?.nickname ?? "Bạn",
       mood: state.me?.mood ?? "calm",
       moodNote: state.me?.moodNote ?? "",
-      avatar: null,
+      // Ảnh đại diện: tên tệp đã lưu trong thư mục ảnh của app. Máy kia thiếu
+      // tệp thì tự xin gửi lại (xem kind "photoRequest" trong App.tsx).
+      avatar:
+        typeof state.me?.avatar === "string" && state.me.avatar
+          ? String(state.me.avatar).slice(0, 90)
+          : null,
       appVersion: String(appVersion || state.settings?.appVersion || "").slice(
         0,
         24,
@@ -299,7 +325,43 @@ export function buildRelayPayload(
         lng: Number.isFinite(Number(message.lng)) ? Number(message.lng) : null,
         place: String(message.place ?? "").slice(0, 120),
         durationMs: Number(message.durationMs) || 0,
+        // Thả cảm xúc: chỉ gửi cảm xúc CỦA MÌNH cho chính tin này.
+        react: { me: normalizeReact(message.react).me },
+        // Thu hồi: máy kia xoá nội dung tin này theo.
+        recalled: Boolean(message.recalledAt) || message.kind === "recalled",
+        recalledAt: message.recalledAt
+          ? String(message.recalledAt)
+          : message.kind === "recalled"
+            ? String(message.createdAt ?? "")
+            : null,
+        // Trả lời trích dẫn: bySender = tin được trích dẫn là của MÁY GỬI.
+        reply: (() => {
+          const quoted = lookup.get(String(message.reply?.id ?? ""));
+          if (!quoted) return null;
+          return {
+            id: String(quoted.id),
+            body: previewOf(quoted),
+            bySender: quoted.authorId !== "partner",
+          };
+        })(),
       })),
+    // Cảm xúc mình thả vào tin CỦA NGƯỜI THƯƠNG: tin của họ không nằm trong gói
+    // này nên phải đi kèm ở đây, nếu không máy kia không thấy tim mình thả.
+    reactTo: partnerMessages(state)
+      .filter(
+        (message) => normalizeReact(message.react).me && Boolean(message.id),
+      )
+      .slice(0, 40)
+      .map((message) => ({
+        id: String(message.id),
+        emoji: normalizeReact(message.react).me,
+      })),
+    // Tin mới nhất của MÌNH mà mình đã đọc (tin của người thương): máy kia hiện
+    // avatar nhỏ cạnh tin cuối cùng mình đã xem, giống Messenger.
+    readTo: (() => {
+      const read = partnerMessages(state).find((message) => message.readAt);
+      return read ? String(read.id) : null;
+    })(),
     alerts: (Array.isArray(state.alerts) ? state.alerts : []).slice(0, 60),
     // Chỉ gửi phần mô tả khoảnh khắc; ảnh đi bằng gói riêng (mã hóa như nhau).
     moments: (Array.isArray(state.moments) ? state.moments : [])

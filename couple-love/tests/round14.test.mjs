@@ -201,6 +201,6 @@ test("Cuộc gọi dùng đường tiếng trực tiếp: ghi âm cũ dừng, mi
   );
   const pkg = JSON.parse(read("package.json"));
   assert.equal(pkg.dependencies["react-native-webrtc"], "124.0.8");
-  assert.equal(pkg.version, "1.15.0");
-  assert.equal(config.includes('version: "1.15.0"'), true);
+  assert.equal(pkg.version, "1.16.0");
+  assert.equal(config.includes('version: "1.16.0"'), true);
 });

@@ -18,7 +18,8 @@ export const RTC_SIGNAL_KEEP = 80;
 /** Nối trực tiếp được nhưng mạng chập chờn quá lâu thì quay về kênh ghép nối. */
 export const RTC_DROP_MS = 2500;
 /** Nhịp đọc số liệu thật của WebRTC (bao nhiêu byte tiếng vào/ra). */
-export const RTC_STATS_MS = 2000;
+/** Đọc số liệu WebRTC mỗi 500 ms: đủ dày để trái tim đập theo giọng nói. */
+export const RTC_STATS_MS = 500;
 /**
  * Nối rồi mà từng này mili giây không có MỘT byte tiếng nào đi vào/đi ra thì
  * coi như đường tiếng trực tiếp hỏng (kiểu "nối được mà không nghe gì") và

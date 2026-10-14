@@ -1,9 +1,9 @@
 const fs = require("fs");
 module.exports = {
   expo: {
-    name: "Hai Trái Tim",
+    name: "Mật Mã Yêu",
     slug: "hai-trai-tim",
-    version: "1.15.0",
+    version: "1.16.0",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
@@ -21,9 +21,13 @@ module.exports = {
         // giữ máy thức. RECORD_AUDIO do plugin expo-audio thêm sẵn.
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+        // Giữ kết nối khi app ở chế độ nền để tin nhắn vẫn nổi thông báo.
+        "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
         "android.permission.WAKE_LOCK",
+        // Thông báo tin nhắn trên Android 13+ (hệ thống vẫn hỏi người dùng).
+        "android.permission.POST_NOTIFICATIONS",
       ],
-      versionCode: 17,
+      versionCode: 18,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#fff1f2",
@@ -37,6 +41,12 @@ module.exports = {
       supportsTablet: true,
       icon: "./assets/icon.png",
       infoPlist: {
+        // Mở thông báo tin nhắn là vào thẳng đoạn chat để trả lời.
+        NSCameraUsageDescription: "Chụp ảnh để gửi cho người thương.",
+        NSPhotoLibraryUsageDescription:
+          "Chọn ảnh trong máy để gửi cho người thương.",
+        NSPhotoLibraryAddUsageDescription:
+          "Lưu ảnh người thương gửi vào thư viện ảnh của bạn.",
         NSFaceIDUsageDescription:
           "Xác thực để mở nhật ký và dữ liệu riêng tư của bạn.",
         // WebRTC tự tìm đường nối trực tiếp giữa hai máy trong cùng mạng Wi-Fi.
@@ -78,9 +88,24 @@ module.exports = {
         "expo-notifications",
         { icon: "./assets/notification-icon.png", color: "#e64980" },
       ],
-      // Đổi dịch vụ chạy nổi của Notifee sang kiểu "microphone" (Android 14 bắt
-      // buộc) để cuộc gọi không bị tắt khi tắt màn hình.
+      // Ảnh: chọn ảnh trong máy (thư viện ảnh của hệ thống) và lưu ảnh về máy.
+      [
+        "expo-media-library",
+        {
+          photosPermission:
+            "Chọn ảnh trong máy để gửi cho người thương và lưu ảnh người thương gửi.",
+          savePhotosPermission:
+            "Lưu ảnh người thương gửi vào thư viện ảnh của bạn.",
+          granularPermissions: ["photo"],
+        },
+      ],
+      // Đổi dịch vụ chạy nổi của Notifee sang kiểu "microphone" (cuộc gọi khi
+      // tắt màn hình) và "dataSync" (giữ kết nối để nhận tin nhắn khi ở nền).
       "./plugins/with-call-foreground-service",
+      // Không để Android huỷ Activity khi đổi cỡ chữ / ngôn ngữ / sáng tối —
+      // nếu không, hộp chọn ảnh và máy ảnh sẽ chết với lỗi
+      // "unregistered ActivityResultLauncher" (xem tệp plugin để rõ chi tiết).
+      "./plugins/with-android-activity-config",
       [
         "expo-image-picker",
         {

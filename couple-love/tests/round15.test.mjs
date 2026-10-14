@@ -72,7 +72,9 @@ test("SDP chưa có dòng fmtp của Opus thì được thêm vào ngay sau rtpm
 
 test("Nối rồi mà không có byte tiếng nào thì coi như không nghe được", () => {
   assert.equal(RTC_DEAD_MS >= 4000, true, "chờ đủ lâu mới kết luận");
-  assert.equal(RTC_STATS_MS, 2000);
+  // 1.16.0: đọc số liệu dày hơn (500 ms) để trái tim đập theo giọng nói, vẫn
+  // dùng cùng số liệu đó cho phép kiểm "im quá lâu thì chuyển đường tiếng".
+  assert.equal(RTC_STATS_MS, 500);
   assert.equal(rtcAudioIsDead(10000, 9000), false, "vừa có byte thì còn sống");
   assert.equal(
     rtcAudioIsDead(9000 + RTC_DEAD_MS + 1, 9000),
@@ -191,7 +193,8 @@ test("TURN dự phòng cho mạng khó, nhưng vẫn ưu tiên nối trực ti�
 });
 
 test("Tắt màn hình vẫn gọi được: dịch vụ chạy nổi + chế độ chạy nền", () => {
-  const service = read("src/services/callService.ts");
+  const service =
+    read("src/services/callService.ts") + read("src/services/notifeeCore.ts");
   assert.match(service, /registerForegroundService/, "mở dịch vụ chạy nổi");
   assert.match(
     service,
@@ -223,6 +226,7 @@ test("Tắt màn hình vẫn gọi được: dịch vụ chạy nổi + chế đ
   for (const permission of [
     "FOREGROUND_SERVICE",
     "FOREGROUND_SERVICE_MICROPHONE",
+    "FOREGROUND_SERVICE_DATA_SYNC",
     "WAKE_LOCK",
   ])
     assert.equal(config.includes(permission), true, `có quyền ${permission}`);
@@ -247,14 +251,15 @@ test("Tắt màn hình vẫn gọi được: dịch vụ chạy nổi + chế đ
   assert.match(app, /onCallServiceHangup/, "nút Cúp máy kết thúc cuộc gọi");
 });
 
-test("Bản 1.15.0 (bản dựng 17) đã sẵn sàng", () => {
+test("Bản 1.16.0 (bản dựng 18) đã sẵn sàng", () => {
   const config = read("app.config.js");
   const pkg = JSON.parse(read("package.json"));
-  assert.equal(pkg.version, "1.15.0");
-  assert.equal(config.includes('version: "1.15.0"'), true);
-  assert.equal(config.includes("versionCode: 17"), true);
+  assert.equal(pkg.version, "1.16.0");
+  assert.equal(config.includes('version: "1.16.0"'), true);
+  assert.equal(config.includes("versionCode: 18"), true);
+  assert.equal(config.includes('name: "Mật Mã Yêu"'), true, "đổi tên app");
   const settings = read("src/screens/local/SettingsLocal.tsx");
-  assert.match(settings, /1\.15\.0/, "màn hình Cài đặt dự phòng đúng bản mới");
+  assert.match(settings, /1\.16\.0/, "màn hình Cài đặt dự phòng đúng bản mới");
 });
 
 test("Lớp 1 dùng PeerJS: máy chủ chào hỏi + TURN miễn phí, không tài khoản", () => {

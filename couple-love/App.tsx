@@ -95,6 +95,18 @@ import {
   startCallService,
   stopCallService,
 } from "./src/services/callService";
+// Giữ kết nối khi app ở nền / tắt màn hình để tin nhắn vẫn nổi thông báo.
+import {
+  onRelayServiceStop,
+  relayServiceSupport,
+  startRelayService,
+  stopRelayService,
+} from "./src/services/relayService";
+// Lưu ảnh người thương gửi vào thư viện ảnh của máy.
+import { savePhotoToDevice } from "./src/services/media";
+import { TYPING_HOLD_MS, TYPING_SEND_MS } from "./src/logic/chatExtras.mjs";
+/** Ảnh đại diện nhỏ nên cho hạn mức ảnh riêng khi gửi qua kênh ghép nối. */
+import { AVATAR_LIMIT_BYTES } from "./src/services/momentTransfer.mjs";
 import { RTC_RETRY_SIGNAL_MS, rtcStatusText } from "./src/logic/rtcSignal.mjs";
 import type { RtcState } from "./src/logic/rtcSignal.mjs";
 import * as DocumentPicker from "expo-document-picker";
@@ -254,7 +266,7 @@ function CloudApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     setUnlocking(true);
     try {
       const r = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Mở Hai Trái Tim",
+        promptMessage: "Mở Mật Mã Yêu",
         cancelLabel: "Để sau",
         disableDeviceFallback: true,
         biometricsSecurityLevel: "strong",
@@ -342,7 +354,7 @@ function CloudApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       <View className="flex-row px-5 py-4 items-center justify-between">
         <View>
           <Text className="text-xl font-bold text-ink">
-            Hai Trái Tim <Text className="text-love">♡</Text>
+            Mật Mã Yêu <Text className="text-love">♡</Text>
           </Text>
           <Text className="text-xs text-stone-500 mt-1">
             {data.online
@@ -486,6 +498,9 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     const askedAt = askedPhotosRef.current.get(id) ?? 0;
     return Date.now() - askedAt > waitMs;
   };
+  const [partnerTyping, setPartnerTyping] = useState(false);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSentRef = useRef(0);
   const [notifyState, setNotifyState] = useState<
     "unknown" | "granted" | "denied"
   >("unknown");
@@ -529,7 +544,14 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   const rtcLiveRef = useRef(false);
   const [rtcLive, setRtcLive] = useState(false);
   // Số liệu thật của đường tiếng (byte vào/ra) để thấy ngay có tiếng hay không.
-  const [rtcAudio, setRtcAudio] = useState({ inBytes: 0, outBytes: 0 });
+  // Số liệu thật của WebRTC: byte vào/ra + cường độ tiếng nói (0..1) — màn hình
+  // gọi dùng mức này cho trái tim đập theo giọng người thương.
+  const [rtcAudio, setRtcAudio] = useState({
+    inBytes: 0,
+    outBytes: 0,
+    level: 0,
+    levelSource: "",
+  });
   // WebRTC chưa nối được (máy không có thư viện, mạng chặn, micro bận) thì mới
   // bật lại đường tiếng cũ — mic không thể chạy hai nơi cùng lúc.
   const [rtcFallback, setRtcFallback] = useState(false);
@@ -659,7 +681,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     setUnlocking(true);
     try {
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Mở Hai Trái Tim",
+        promptMessage: "Mở Mật Mã Yêu",
         cancelLabel: "Để sau",
         disableDeviceFallback: true,
       });
@@ -783,7 +805,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     closeRtc();
     setRtcInfo({ state: "off", detail: "" });
     setRtcFallback(false);
-    setRtcAudio({ inBytes: 0, outBytes: 0 });
+    setRtcAudio({ inBytes: 0, outBytes: 0, level: 0, levelSource: "" });
     const sent = client.publish({
       kind: "call",
       event: "ring",
@@ -846,7 +868,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     rtcLiveRef.current = false;
     setRtcLive(false);
     setRtcFallback(true);
-    setRtcAudio({ inBytes: 0, outBytes: 0 });
+    setRtcAudio({ inBytes: 0, outBytes: 0, level: 0, levelSource: "" });
     setRtcInfo({
       state: "failed",
       detail: "Đang dùng đường tiếng qua kênh ghép nối (bạn chọn).",
@@ -906,6 +928,68 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       return;
     }
     applyCall(callEvent(active, event));
+  }
+  /**
+   * Báo cho máy kia biết mình đang gõ chữ. Gói tin siêu nhỏ đi qua kênh ghép nối
+   * sẵn có; máy nhận tự tắt chấm "đang nhập…" sau TYPING_HOLD_MS nếu không thấy
+   * gói mới (nên không bao giờ kẹt chữ "đang nhập…" mãi).
+   */
+  function sendTyping(active: boolean) {
+    const client = relayRef.current;
+    if (!client) return;
+    const now = Date.now();
+    if (active && now - lastTypingSentRef.current < TYPING_SEND_MS) return;
+    lastTypingSentRef.current = now;
+    client.publish({ kind: "typing", state: active });
+    if (!active) lastTypingSentRef.current = 0;
+  }
+  /** Thả (hoặc bỏ) cảm xúc trên một tin nhắn — gửi ngay cho máy kia. */
+  function reactToMessage(id: string, emoji: string | null) {
+    const client = relayRef.current;
+    try {
+      update({ type: "message.setReact", id, side: "me", emoji });
+    } catch {
+      return;
+    }
+    if (!client) return;
+    client.publish({ kind: "chatReact", id, emoji });
+    // Gửi lại lần hai: gói QoS 0 có thể mất, gói sau vá lại tình trạng đúng.
+    setTimeout(
+      () => relayRef.current?.publish({ kind: "chatReact", id, emoji }),
+      420,
+    );
+    // Gói dữ liệu đầy đủ cũng mang theo cảm xúc, để lần sau mở app vẫn còn.
+    setTimeout(() => publishCurrent(true), 900);
+  }
+  /**
+   * Thu hồi tin nhắn: xoá nội dung ở CẢ HAI máy (chữ, ảnh, tin thoại, vị trí).
+   * Khác nút "Xóa ở máy này" chỉ xoá trên máy mình.
+   */
+  function recallMessage(id: string) {
+    try {
+      update({ type: "message.recall", id });
+    } catch {
+      return;
+    }
+    const packet = { kind: "chatRecall", id };
+    relayRef.current?.publish(packet);
+    setTimeout(() => relayRef.current?.publish(packet), 400);
+    setTimeout(() => relayRef.current?.publish(packet), 1200);
+    setTimeout(() => publishCurrent(true), 900);
+  }
+  /** Lưu ảnh người thương gửi vào thư viện ảnh của máy. */
+  function savePhoto(photo: string | null | undefined) {
+    void (async () => {
+      const result = await savePhotoToDevice(
+        imageUri(photo),
+        photo ?? undefined,
+      );
+      setRelayLog((lines) => [...lines, result.detail].slice(-12));
+      Alert.alert(
+        result.ok ? "Đã lưu ảnh" : "Chưa lưu được ảnh",
+        result.detail,
+      );
+    })();
   }
   // Gửi ảnh trong đoạn chat (chụp hoặc chọn từ thư viện).
   function sendChatPhoto(uri: string, caption: string) {
@@ -1340,6 +1424,21 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
                 `moment-${newMoments[0].id}`,
               );
           }
+          const incomingAvatar = (payload as { from?: { avatar?: unknown } })
+            ?.from?.avatar;
+          if (
+            typeof incomingAvatar === "string" &&
+            incomingAvatar &&
+            !imageExists(incomingAvatar) &&
+            shouldAsk(incomingAvatar)
+          ) {
+            // Hồ sơ đã tới nhưng tệp ảnh đại diện chưa: xin gửi lại.
+            askedPhotosRef.current.set(incomingAvatar, Date.now());
+            relayRef.current?.publish({
+              kind: "photoRequest",
+              ids: [incomingAvatar],
+            });
+          }
           const incoming = payload?.appearance as
             { wallpaperId?: string | null; updatedAt?: string } | undefined;
           const wanted = incoming?.wallpaperId;
@@ -1462,7 +1561,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             closeRtc();
             setRtcInfo({ state: "off", detail: "" });
             setRtcFallback(false);
-            setRtcAudio({ inBytes: 0, outBytes: 0 });
+            setRtcAudio({ inBytes: 0, outBytes: 0, level: 0, levelSource: "" });
             applyCall(newCall({ id: callId, role: "callee", name: who }));
             void notifyNow(
               `${who} đang gọi cho bạn 📞`,
@@ -1520,6 +1619,43 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           if (ids.length) update({ type: "message.delivered", ids });
           return;
         }
+        if (kind === "typing") {
+          // Người thương đang gõ chữ: hiện ba chấm, tự tắt sau ít giây.
+          const active = message.state === true;
+          setPartnerTyping(active);
+          if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+          if (active)
+            typingTimerRef.current = setTimeout(
+              () => setPartnerTyping(false),
+              TYPING_HOLD_MS,
+            );
+          return;
+        }
+        if (kind === "chatReact") {
+          // Người thương thả cảm xúc vào một tin (của mình hoặc của họ).
+          const id = String(message.id ?? "");
+          if (!id) return;
+          const emoji =
+            typeof message.emoji === "string" ? message.emoji : null;
+          try {
+            update({ type: "message.setReact", id, side: "them", emoji });
+          } catch {}
+          return;
+        }
+        if (kind === "chatRecall") {
+          // Người thương thu hồi một tin: xoá nội dung ở máy này luôn.
+          const id = String(message.id ?? "");
+          if (!id) return;
+          try {
+            update({ type: "message.recall", id });
+            noticeFromPartner(
+              `${stateRef.current?.partner?.nickname ?? "Người thương"} 💌`,
+              "đã thu hồi một tin nhắn",
+              `recall-${id}`,
+            );
+          } catch {}
+          return;
+        }
         if (kind === "photo") {
           const photo = assemblerRef.current.add(message);
           if (photo && photo.meta?.role === "voice") {
@@ -1562,6 +1698,28 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
                 [
                   ...lines,
                   `Nhận ảnh nhưng chưa lưu được: ${
+                    error instanceof Error ? error.message : "lỗi không rõ"
+                  }`,
+                ].slice(-12),
+              );
+            }
+            return;
+          }
+          if (photo && photo.meta?.role === "avatar") {
+            try {
+              const name = String(photo.meta?.avatarId || photo.id);
+              writeBase64(name, photo.base64);
+              update({ type: "partner.avatar", file: name });
+              setRelayLog((lines) =>
+                [...lines, "Đã nhận ảnh đại diện mới của người thương"].slice(
+                  -12,
+                ),
+              );
+            } catch (error) {
+              setRelayLog((lines) =>
+                [
+                  ...lines,
+                  `Nhận ảnh đại diện nhưng chưa lưu được: ${
                     error instanceof Error ? error.message : "lỗi không rõ"
                   }`,
                 ].slice(-12),
@@ -1627,6 +1785,33 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           for (const id of ids) {
             if (current.appearance?.wallpaperId === String(id)) {
               sendWallpaper(String(id));
+              continue;
+            }
+            // Ảnh đại diện của mình: gửi lại nguyên tệp để máy kia hiện được.
+            if (current.me?.avatar && current.me.avatar === String(id)) {
+              const avatarBase64 = imageBase64(
+                current.me.avatar,
+                AVATAR_LIMIT_BYTES,
+              );
+              if (avatarBase64) {
+                void (async () => {
+                  try {
+                    for (const packet of photoMessages({
+                      id: String(id),
+                      base64: avatarBase64,
+                      nickname: current.me.nickname,
+                      role: "avatar",
+                      avatarId: current.me.avatar ?? undefined,
+                    })) {
+                      client.publish(packet);
+                      await new Promise((resolve) => setTimeout(resolve, 60));
+                    }
+                    setRelayLog((lines) =>
+                      [...lines, "Đã gửi lại ảnh đại diện"].slice(-12),
+                    );
+                  } catch {}
+                })();
+              }
               continue;
             }
             const chatPhoto = (current.messages ?? []).find(
@@ -2028,6 +2213,84 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, relayRoom?.id]);
+  /**
+   * Giữ kết nối khi app ở chế độ nền (công tắc trong Cài đặt): Android mở một
+   * dịch vụ chạy nổi nên kết nối MQTT sống tiếp và tin nhắn vẫn nổi thông báo dù
+   * màn hình đã tắt. Tắt công tắc là dịch vụ dừng ngay, không hao pin.
+   */
+  useEffect(() => {
+    const wanted =
+      state?.settings?.keepAlive === true &&
+      state?.settings?.relay !== false &&
+      Boolean(state?.relay?.id);
+    if (wanted) void startRelayService(state?.partner?.nickname ?? null);
+    else void stopRelayService();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    state?.settings?.keepAlive,
+    state?.settings?.relay,
+    state?.relay?.id,
+    state?.partner?.nickname,
+  ]);
+  /** Nút "Tắt" trên thông báo giữ kết nối → tắt công tắc trong Cài đặt. */
+  const stopKeepAliveRef = useRef<() => void>(() => {});
+  stopKeepAliveRef.current = () =>
+    update({ type: "settings.set", keepAlive: false });
+  useEffect(() => {
+    onRelayServiceStop(() => stopKeepAliveRef.current());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  /**
+   * Thông báo tin nhắn: bấm vào là vào thẳng đoạn chat, kéo xuống có nút **Trả
+   * lời** (nhắn ngay từ màn hình khoá, không cần mở app) và **Đã xem**.
+   */
+  const notificationReplyRef = useRef<(response: unknown) => void>(() => {});
+  notificationReplyRef.current = (response: unknown) => {
+    const value = (response ?? {}) as {
+      actionIdentifier?: string;
+      userText?: string;
+      notification?: { date?: number; request?: { content?: { data?: any } } };
+    };
+    const data = (value.notification?.request?.content?.data ?? {}) as {
+      open?: string;
+      key?: string;
+    };
+    const action = String(value.actionIdentifier ?? "");
+    const quick = String(value.userText ?? "").trim();
+    if (action === "tra-loi" && quick) {
+      try {
+        update({ type: "message.add", kind: "text", body: quick });
+        setTimeout(() => flushMessages(), 160);
+        setTab("chat");
+        setRelayLog((lines) =>
+          [...lines, `Đã trả lời nhanh từ thông báo: ${quick}`].slice(-12),
+        );
+      } catch {}
+      return;
+    }
+    if (action === "da-xem") {
+      update({ type: "message.read" });
+      setTab("chat");
+      return;
+    }
+    if (data.open === "chat" || String(data.key ?? "").startsWith("chat-"))
+      setTab("chat");
+    else if (data.open === "alerts") setAlertPage(true);
+  };
+  useEffect(() => {
+    const feed = (response: unknown) => notificationReplyRef.current(response);
+    const subscription =
+      Notifications.addNotificationResponseReceivedListener?.(feed);
+    // App mở từ thông báo (kể cả khi bị hệ thống tắt): chỉ xử lý thông báo vừa
+    // bấm trong vòng 2 phút, tránh gửi lại tin cũ mỗi lần mở app.
+    void Notifications.getLastNotificationResponseAsync?.().then((response) => {
+      if (!response) return;
+      const at = Number(response.notification?.date ?? 0);
+      if (!at || Date.now() - at < 120000) feed(response);
+    });
+    return () => subscription?.remove?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Người thương vừa mở app: gửi ngay toàn bộ dữ liệu của mình cho họ và báo
   // cho chính mình biết là hai máy đã ghép nối (cả hai bên đều nhận như nhau).
   useEffect(() => {
@@ -2142,6 +2405,11 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         rtcAudio={rtcAudio}
         onUseLegacyAudio={useLegacyAudio}
         onSendPhoto={sendChatPhoto}
+        partnerTyping={partnerTyping}
+        onTyping={sendTyping}
+        onReact={reactToMessage}
+        onRecall={recallMessage}
+        onSavePhoto={savePhoto}
         onSendLocation={() => void sendLocation()}
         callAction={callAction}
         callRef={callRef}
@@ -2224,6 +2492,11 @@ function LocalShell({
   onStartCall,
   onSendPhoto,
   onSendLocation,
+  partnerTyping,
+  onTyping,
+  onReact,
+  onRecall,
+  onSavePhoto,
   callAction,
   callRef,
 }: {
@@ -2270,8 +2543,13 @@ function LocalShell({
   /** Trạng thái đường tiếng trực tiếp (WebRTC) của cuộc gọi đang mở. */
   rtcInfo: { state: string; detail: string };
   rtcLive: boolean;
-  /** Số byte tiếng thật đang vào/ra của WebRTC. */
-  rtcAudio: { inBytes: number; outBytes: number };
+  /** Số byte tiếng thật đang vào/ra + cường độ tiếng nói (0..1). */
+  rtcAudio: {
+    inBytes: number;
+    outBytes: number;
+    level: number;
+    levelSource: string;
+  };
   /** Người dùng bấm "nghe không được" → chuyển về đường tiếng qua kênh ghép nối. */
   onUseLegacyAudio: () => void;
   onPickRingtone: () => void;
@@ -2279,6 +2557,16 @@ function LocalShell({
   onStartCall: () => void;
   onSendPhoto: (uri: string, caption: string) => void;
   onSendLocation: () => void;
+  /** Người thương đang gõ chữ (ba chấm nhảy ở đầu khung chat). */
+  partnerTyping: boolean;
+  /** Báo máy kia biết mình đang gõ / ngừng gõ. */
+  onTyping: (typing: boolean) => void;
+  /** Thả cảm xúc vào một tin nhắn (null = bỏ cảm xúc). */
+  onReact: (id: string, emoji: string | null) => void;
+  /** Thu hồi tin nhắn ở CẢ HAI máy. */
+  onRecall: (id: string) => void;
+  /** Lưu ảnh người thương gửi vào thư viện ảnh của máy. */
+  onSavePhoto: (photo: string | null | undefined) => void;
   callAction: (event: { type: string; on?: boolean; min?: boolean }) => void;
   callRef: React.MutableRefObject<CallInfo | null>;
 }) {
@@ -2317,7 +2605,7 @@ function LocalShell({
         >
           <View>
             <Text className="text-xl font-bold" style={{ color: theme.ink }}>
-              Hai Trái Tim <Text style={{ color: theme.deep[0] }}>♡</Text>
+              Mật Mã Yêu <Text style={{ color: theme.deep[0] }}>♡</Text>
             </Text>
             <View className="flex-row items-center mt-1">
               <View
@@ -2437,6 +2725,11 @@ function LocalShell({
               onSendMessage={flushMessages}
               onStartCall={onStartCall}
               onSendPhoto={onSendPhoto}
+              partnerTyping={partnerTyping}
+              onTyping={onTyping}
+              onReact={onReact}
+              onRecall={onRecall}
+              onSavePhoto={onSavePhoto}
               onSendLocation={onSendLocation}
             />
           </View>
@@ -2645,7 +2938,7 @@ function ModeChooser({
       contentContainerStyle={{ padding: 24, paddingTop: 60 }}
     >
       <Text className="text-5xl mb-6">💕</Text>
-      <Title>Hai Trái Tim</Title>
+      <Title>Mật Mã Yêu</Title>
       <Note>
         Một góc riêng để hai bạn giữ những ngày yêu thương. Chọn cách chạy phù
         hợp — có thể đổi lại trong Cài đặt.

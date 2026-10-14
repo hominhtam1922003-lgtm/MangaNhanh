@@ -1,6 +1,6 @@
 /**
- * Plugin Expo: đổi kiểu dịch vụ chạy nổi của Notifee thành "microphone" và thêm
- * các quyền cần thiết.
+ * Plugin Expo: đổi kiểu dịch vụ chạy nổi của Notifee thành "microphone|dataSync"
+ * và thêm các quyền cần thiết.
  *
  * Vì sao phải viết plugin: Notifee khai dịch vụ `app.notifee.core.ForegroundService`
  * trong thư viện của họ với kiểu mặc định `shortService`. Kiểu đó (a) chỉ sống
@@ -11,15 +11,22 @@
  *
  * Quyền thì khai trong `app.config.js` (`android.permissions`) cho dễ đọc:
  * `FOREGROUND_SERVICE` (bắt buộc từ Android 9), `FOREGROUND_SERVICE_MICROPHONE`
- * (bắt buộc từ Android 14), `WAKE_LOCK`; `RECORD_AUDIO` đã có sẵn từ plugin
- * expo-audio. Plugin này chỉ lo phần manifest mà app.config.js không viết được.
+ * và `FOREGROUND_SERVICE_DATA_SYNC` (bắt buộc từ Android 14), `WAKE_LOCK`;
+ * `RECORD_AUDIO` đã có sẵn từ plugin expo-audio. Plugin này chỉ lo phần manifest mà app.config.js không viết được.
  *
  * Chạy tự động trong `expo prebuild` nên APK dựng trên CI cũng có đủ.
  */
 const { AndroidConfig, withAndroidManifest } = require("@expo/config-plugins");
 
 const SERVICE_NAME = "app.notifee.core.ForegroundService";
-const FGS_TYPE = "microphone";
+/**
+ * Hai kiểu dịch vụ chạy nổi mà app dùng:
+ * · `microphone` — cuộc gọi tiếp tục thu tiếng khi tắt màn hình (1.15.0);
+ * · `dataSync`   — giữ kết nối để tin nhắn vẫn nổi thông báo khi app ở chế độ
+ *   nền / tắt màn hình (1.16.0, bật trong Cài đặt).
+ * Android 14 bắt buộc kiểu xin phép phải nằm trong khai báo này.
+ */
+const FGS_TYPE = "microphone|dataSync";
 
 function withCallForegroundService(config) {
   return withAndroidManifest(config, (current) => {

@@ -21,6 +21,25 @@ try {
     }),
   });
 } catch {}
+/** Nhóm nút trên thông báo tin nhắn: Trả lời nhanh + Đã xem (như Messenger). */
+export const CHAT_CATEGORY = "tin-nhan";
+
+export async function ensureMessageCategory() {
+  try {
+    await Notifications.setNotificationCategoryAsync?.(CHAT_CATEGORY, [
+      {
+        identifier: "tra-loi",
+        buttonTitle: "Trả lời",
+        textInput: {
+          submitButtonTitle: "Gửi",
+          placeholder: "Nhắn cho người thương…",
+        },
+      },
+      { identifier: "da-xem", buttonTitle: "Đã xem" },
+    ]);
+  } catch {}
+}
+
 export async function ensureChannel() {
   if (Notifications.getPermissionsAsync === undefined) return false;
   // Kênh tin nhắn: mức cao nhất để hiện băng-rôn và kêu như tin nhắn.
@@ -73,6 +92,7 @@ export async function openNotificationSettings() {
 }
 export async function requestNotifications() {
   await ensureChannel();
+  await ensureMessageCategory();
   let permission = await Notifications.getPermissionsAsync();
   if (permission.status !== "granted")
     permission = await Notifications.requestPermissionsAsync();
@@ -81,18 +101,30 @@ export async function requestNotifications() {
 /** Báo ngay lập tức (tin nhắn mới, nhật ký mới, cảm xúc mới) — kiểu thông báo
  * tin nhắn: hiện ngay cả khi app đang mở ở màn hình khác. Chưa cấp quyền thì bỏ
  * qua, người dùng vẫn thấy trong mục “Lời nhắc”. */
-export async function notifyNow(title: string, body: string, chat = false) {
+export async function notifyNow(
+  title: string,
+  body: string,
+  chat = false,
+  extra: Record<string, unknown> = {},
+) {
   try {
     if (Notifications.getPermissionsAsync === undefined) return false;
     const permission = await Notifications.getPermissionsAsync();
     if (permission.status !== "granted") return false;
     await ensureChannel();
+    if (chat) await ensureMessageCategory();
     await Notifications.scheduleNotificationAsync({
       content: {
         title,
         body,
         sound: "default",
-        data: { key: `now-${Date.now()}` },
+        // Tin nhắn: bấm vào là mở thẳng đoạn chat; kéo xuống có nút Trả lời.
+        categoryIdentifier: chat ? CHAT_CATEGORY : undefined,
+        data: {
+          key: `now-${Date.now()}`,
+          open: chat ? "chat" : "alerts",
+          ...extra,
+        },
       },
       trigger: chat
         ? { channelId: "love-messages" }

@@ -163,8 +163,13 @@ export default function CallLocal({
   /** Đường tiếng trực tiếp (WebRTC): đã nối thì tiếng đi thẳng, không qua tệp. */
   rtcInfo: { state: string; detail: string };
   rtcLive: boolean;
-  /** Số byte tiếng thật đang vào/ra — nhìn là biết có tiếng hay không. */
-  rtcAudio: { inBytes: number; outBytes: number };
+  /** Số byte tiếng thật đang vào/ra + mức tiếng nói (0..1) cho trái tim đập. */
+  rtcAudio: {
+    inBytes: number;
+    outBytes: number;
+    level: number;
+    levelSource: string;
+  };
   /** Bấm khi không nghe được: chuyển về đường tiếng qua kênh ghép nối. */
   onUseLegacyAudio: () => void;
   onToggleMic: () => void;
@@ -185,6 +190,9 @@ export default function CallLocal({
   const lastPlayRef = useRef(0);
   const startedRef = useRef(false);
   const pulse = useRef(new Animated.Value(0)).current;
+  // Nhịp tim theo GIỌNG NÓI: mức tiếng nói lấy từ chính track WebRTC (audio
+  // level trong số liệu getStats) nên nói to là tim to, nói nhỏ là tim nhẹ.
+  const beat = useRef(new Animated.Value(0)).current;
   const active = call.phase === "active";
   const ringing = call.phase === "ringing";
 
@@ -247,6 +255,19 @@ export default function CallLocal({
     loop.start();
     return () => loop.stop();
   }, [active, pulse]);
+
+  // Mỗi lần số liệu WebRTC cập nhật: đưa mức tiếng nói vào nhịp tim.
+  useEffect(() => {
+    if (!active) return;
+    const next = Math.min(1, Math.max(0, Number(rtcAudio.level) || 0));
+    Animated.timing(beat, {
+      toValue: next,
+      duration: 160,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, rtcAudio.level]);
 
   useEffect(() => {
     if (active) return;
@@ -322,6 +343,11 @@ export default function CallLocal({
   const scale = pulse.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 1.14],
+  });
+  // Trái tim: phập phồng 1 → 1,34 lần theo cường độ giọng nói.
+  const heartScale = beat.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.34],
   });
   const haloOpacity = pulse.interpolate({
     inputRange: [0, 1],
@@ -400,8 +426,8 @@ export default function CallLocal({
         <View className="items-center">
           <View
             style={{
-              width: 132,
-              height: 132,
+              width: 156,
+              height: 156,
               alignItems: "center",
               justifyContent: "center",
             }}
@@ -409,18 +435,39 @@ export default function CallLocal({
             <Animated.View
               style={{
                 position: "absolute",
-                width: 132,
-                height: 132,
-                borderRadius: 66,
+                width: 156,
+                height: 156,
+                borderRadius: 78,
                 backgroundColor: theme.glow,
                 opacity: active ? haloOpacity : 0.14,
                 transform: [{ scale }],
               }}
             />
+            {/* Trái tim đập theo giọng nói, avatar của người thương ở giữa. */}
             <Animated.View
-              style={{ transform: [{ scale: active ? scale : 1 }] }}
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                transform: [{ scale: active && rtcLive ? heartScale : 1 }],
+              }}
             >
-              <LocalAvatar name={partnerName} image={partnerAvatar} size={92} />
+              <Text
+                style={{
+                  fontSize: 150,
+                  lineHeight: 160,
+                  color: "#ef4466",
+                  opacity: active ? 0.95 : 0.5,
+                }}
+              >
+                ♥
+              </Text>
+            </Animated.View>
+            <Animated.View
+              style={{
+                transform: [{ scale: active && !rtcLive ? scale : 1 }],
+              }}
+            >
+              <LocalAvatar name={partnerName} image={partnerAvatar} size={72} />
             </Animated.View>
           </View>
           <Text
@@ -479,7 +526,7 @@ export default function CallLocal({
                   style={{ color: theme.dark ? theme.sub : "#ffffffaa" }}
                 >
                   Tiếng vào {formatAudioBytes(rtcAudio.inBytes)} · tiếng ra{" "}
-                  {formatAudioBytes(rtcAudio.outBytes)}
+                  {formatAudioBytes(rtcAudio.outBytes)} · tim đập theo giọng nói
                 </Text>
               ) : null}
               {rtcLive ? (
@@ -545,26 +592,28 @@ export default function CallLocal({
             />
           </View>
         ) : active ? (
-          <View className="flex-row justify-center mt-5">
+          <View className="flex-row justify-center items-end mt-8">
             <CallButton
               emoji={micOn ? "🎙" : "🔇"}
               label={micOn ? "Tắt mic" : "Bật mic"}
               tone="soft"
               active={!micOn}
+              size={68}
               onPress={onToggleMic}
-            />
-            <CallButton
-              emoji="⤡"
-              label="Thu nhỏ"
-              tone="soft"
-              onPress={onMinimize}
             />
             <CallButton
               emoji="📴"
               label="Kết thúc"
               tone="red"
-              size={72}
+              size={80}
               onPress={onHangUp}
+            />
+            <CallButton
+              emoji="⤡"
+              label="Thu nhỏ"
+              tone="soft"
+              size={56}
+              onPress={onMinimize}
             />
           </View>
         ) : (

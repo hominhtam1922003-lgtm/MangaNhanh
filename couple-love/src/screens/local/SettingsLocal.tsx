@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { Alert, Image, Pressable, Switch, Text, View } from "react-native";
-import * as ImagePicker from "expo-image-picker";
 import {
   ImageManipulator as ImageTool,
   SaveFormat,
 } from "expo-image-manipulator";
+import PhotoPicker from "../../components/PhotoPicker";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   Button,
@@ -30,6 +30,8 @@ import { THEMES } from "../../logic/themes.mjs";
 import { useTheme } from "../../theme/ThemeContext";
 import { peerSupport, rtcSupport } from "../../services/rtcCall";
 import { callServiceSupport } from "../../services/callService";
+import { relayServiceSupport } from "../../services/relayService";
+import { mediaSupport } from "../../services/media";
 import Constants from "expo-constants";
 export default function SettingsLocal({
   state,
@@ -64,6 +66,8 @@ export default function SettingsLocal({
 }) {
   const [name, setName] = useState(state.me.nickname);
   const [busy, setBusy] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const { theme } = useTheme();
   async function run(task: () => Promise<void> | void) {
     setBusy(true);
@@ -78,39 +82,58 @@ export default function SettingsLocal({
       setBusy(false);
     }
   }
-  async function pickAvatar() {
-    await run(async () => {
-      const permission =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted)
-        throw new Error("Cần quyền chọn ảnh từ thư viện.");
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-      if (result.canceled || !result.assets?.length) return;
-      const context = ImageTool.manipulate(result.assets[0].uri);
-      context.resize({ width: 480 });
-      const rendered = await context.renderAsync();
-      const processed = await rendered.saveAsync({
-        compress: 0.8,
-        format: SaveFormat.JPEG,
-      });
-      const previous = state.me.avatar;
-      // Tên tệp mới mỗi lần đổi để máy không hiện lại ảnh cũ đã nhớ trong bộ đệm.
-      const saved = saveImage(
-        processed.uri,
-        `avatar-${Date.now().toString(36)}.jpg`,
-      );
-      update({ type: "profile.avatar", file: saved });
-      if (previous && previous !== saved) deleteImage(previous);
-      Alert.alert(
-        "Đã đổi ảnh đại diện",
-        "Ảnh mới sẽ tự sang máy người thương ở lần ghép nối tiếp theo.",
-      );
+  /**
+   * Đổi ảnh đại diện: mở thư viện ảnh NGAY TRONG APP rồi nén lại 480 px cho nhẹ
+   * đường truyền. Không dùng hộp chọn ảnh của hệ thống nữa vì nó có thể chết hẳn
+   * với lỗi "unregistered ActivityResultLauncher" (xem components/PhotoPicker.tsx).
+   */
+  function pickAvatar() {
+    setPhotoOpen(true);
+  }
+  /** Ảnh nền dùng chung: nén 1080 px rồi gửi sang máy người thương. */
+  async function applyWallpaper(uri: string) {
+    const context = ImageTool.manipulate(uri);
+    context.resize({ width: 1080 });
+    const rendered = await context.renderAsync();
+    const saved = await rendered.saveAsync({
+      compress: 0.72,
+      format: SaveFormat.JPEG,
     });
+    const id = "w" + Date.now().toString(36);
+    const previous = state.appearance?.wallpaper;
+    const file = saveImage(saved.uri, `wallpaper-${id}.jpg`);
+    update({
+      type: "appearance.set",
+      theme: state.appearance?.theme ?? state.settings.theme,
+      wallpaperId: id,
+      wallpaper: file,
+    });
+    if (previous && previous !== file) deleteImage(previous);
+    Alert.alert(
+      "Đã đặt ảnh nền",
+      "Ảnh nền sẽ sang máy người thương ở lần kết nối kế tiếp.",
+    );
+  }
+  async function applyAvatar(uri: string) {
+    const context = ImageTool.manipulate(uri);
+    context.resize({ width: 480 });
+    const rendered = await context.renderAsync();
+    const processed = await rendered.saveAsync({
+      compress: 0.8,
+      format: SaveFormat.JPEG,
+    });
+    const previous = state.me.avatar;
+    // Tên tệp mới mỗi lần đổi để máy không hiện lại ảnh cũ đã nhớ trong bộ đệm.
+    const saved = saveImage(
+      processed.uri,
+      `avatar-${Date.now().toString(36)}.jpg`,
+    );
+    update({ type: "profile.avatar", file: saved });
+    if (previous && previous !== saved) deleteImage(previous);
+    Alert.alert(
+      "Đã đổi ảnh đại diện",
+      "Ảnh mới tự sang máy người thương ngay khi hai máy đang mở app (máy kia thiếu ảnh thì tự xin gửi lại).",
+    );
   }
   return (
     <>
@@ -148,6 +171,10 @@ export default function SettingsLocal({
           busy={busy}
           onPress={() => void pickAvatar()}
         />
+        <Note>
+          Ảnh chọn từ thư viện ảnh ngay trong app ({mediaSupport().detail}) rồi
+          nén còn 480 px trước khi gửi.
+        </Note>
       </GradientCard>
       <Card>
         <Title small>Riêng tư trên máy này</Title>
@@ -471,41 +498,7 @@ export default function SettingsLocal({
         <Button
           label="Chọn ảnh từ thư viện làm nền"
           busy={busy}
-          onPress={() =>
-            void run(async () => {
-              const allowed =
-                await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (!allowed.granted)
-                throw new Error("Cần quyền chọn ảnh từ thư viện.");
-              const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ["images"],
-                allowsEditing: false,
-                quality: 0.9,
-              });
-              if (result.canceled || !result.assets?.length) return;
-              const context = ImageTool.manipulate(result.assets[0].uri);
-              context.resize({ width: 1080 });
-              const rendered = await context.renderAsync();
-              const saved = await rendered.saveAsync({
-                compress: 0.72,
-                format: SaveFormat.JPEG,
-              });
-              const id = "w" + Date.now().toString(36);
-              const previous = state.appearance?.wallpaper;
-              const file = saveImage(saved.uri, `wallpaper-${id}.jpg`);
-              update({
-                type: "appearance.set",
-                theme: state.appearance?.theme ?? state.settings.theme,
-                wallpaperId: id,
-                wallpaper: file,
-              });
-              if (previous && previous !== file) deleteImage(previous);
-              Alert.alert(
-                "Đã đặt ảnh nền",
-                "Ảnh nền sẽ sang máy người thương ở lần kết nối kế tiếp.",
-              );
-            })
-          }
+          onPress={() => setWallpaperOpen(true)}
         />
         {state.appearance?.wallpaper ? (
           <Button
@@ -587,6 +580,36 @@ export default function SettingsLocal({
                 loveNotes: state.settings.loveNotes,
                 theme: state.settings.theme,
                 readReceipts: value,
+              })
+            }
+          />
+        </View>
+        <View className="flex-row justify-between items-center my-3">
+          <View className="flex-1 pr-2">
+            <Text style={{ color: theme.ink }}>
+              Giữ kết nối khi tắt màn hình
+            </Text>
+            <Note>
+              Bật thì máy chạy một dịch vụ nhỏ kèm thông báo “Đang giữ kết nối”
+              nên tin nhắn của người thương vẫn nổi ngay cả khi màn hình đã tắt
+              hoặc bạn đang ở app khác ({relayServiceSupport().detail}). Tắt đi
+              thì máy tiết kiệm pin hơn, nhưng tin chỉ hiện khi bạn mở app. Lưu
+              ý: nếu vào Cài đặt điện thoại bấm “Buộc dừng” app thì mọi kết nối
+              đều tắt — trường hợp đó phải có máy chủ đẩy riêng, app này không
+              dùng máy chủ nên không làm được.
+            </Note>
+          </View>
+          <Switch
+            accessibilityLabel="Giữ kết nối khi tắt màn hình"
+            value={state.settings.keepAlive === true}
+            onValueChange={(value) =>
+              update({
+                type: "settings.set",
+                notify: state.settings.notify,
+                relay: state.settings.relay,
+                loveNotes: state.settings.loveNotes,
+                theme: state.settings.theme,
+                keepAlive: value,
               })
             }
           />
@@ -728,13 +751,29 @@ export default function SettingsLocal({
         tôi biết máy đang dùng đường tiếng nào.
       </Note>
       <Note>
-        Hai Trái Tim {Constants.expoConfig?.version ?? "1.15.0"} (chế độ trên
-        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 17}) — ghi
-        lại số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục
-        riêng của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ
-        liệu, nên hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch,
-        không phải kết luận y tế và không dùng để tránh thai.
+        Mật Mã Yêu {Constants.expoConfig?.version ?? "1.16.0"} (chế độ trên máy,
+        bản dựng {Constants.expoConfig?.android?.versionCode ?? 18}) — ghi lại
+        số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục riêng
+        của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ liệu, nên
+        hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch, không phải
+        kết luận y tế và không dùng để tránh thai.
       </Note>
+      {photoOpen ? (
+        <PhotoPicker
+          title="Đổi ảnh đại diện"
+          busyLabel="Đang lưu ảnh đại diện…"
+          onClose={() => setPhotoOpen(false)}
+          onPick={(uri) => applyAvatar(uri)}
+        />
+      ) : null}
+      {wallpaperOpen ? (
+        <PhotoPicker
+          title="Chọn ảnh nền từ thư viện"
+          busyLabel="Đang xử lý ảnh nền…"
+          onClose={() => setWallpaperOpen(false)}
+          onPick={(uri) => applyWallpaper(uri)}
+        />
+      ) : null}
     </>
   );
 }

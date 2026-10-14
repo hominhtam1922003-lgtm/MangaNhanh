@@ -11,6 +11,8 @@ export const WALLPAPER_LIMIT_BYTES = 420 * 1024;
 export const VOICE_LIMIT_BYTES = 420 * 1024;
 /** Ảnh gửi trong đoạn chat: nén như ảnh khoảnh khắc cho nhẹ đường truyền. */
 export const CHAT_PHOTO_LIMIT_BYTES = 160 * 1024;
+/** Ảnh đại diện: đã nén sẵn 512 px nên thường dưới 60 KB — hạn mức riêng. */
+export const AVATAR_LIMIT_BYTES = 120 * 1024;
 /** Cắt ảnh base64 thành các gói tin gửi qua kênh kết nối. */
 export function photoMessages(photo, chunkSize = CHUNK_SIZE) {
   const base64 = String(photo?.base64 ?? "").replace(/\s+/g, "");
@@ -42,7 +44,12 @@ export function photoMessages(photo, chunkSize = CHUNK_SIZE) {
               ? "voice"
               : photo.role === "chat"
                 ? "chat"
-                : "moment",
+                : photo.role === "avatar"
+                  ? "avatar"
+                  : "moment",
+        // Ảnh đại diện: mã tệp để máy kia lưu ĐÚNG tên (nhờ vậy gói dữ liệu chỉ
+        // cần gửi tên tệp là máy kia hiện được ảnh).
+        avatarId: String(photo.avatarId ?? "").slice(0, 90),
         chatId: String(photo.chatId ?? "").slice(0, 40),
         wallpaperId: String(photo.wallpaperId ?? "").slice(0, 60),
         voiceId: String(photo.voiceId ?? "").slice(0, 60),

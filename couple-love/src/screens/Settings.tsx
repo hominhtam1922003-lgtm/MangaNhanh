@@ -303,9 +303,9 @@ export default function Settings({
         />
       </Card>
       <Note>
-        Hai Trái Tim · 1.0.0. Dữ liệu truyền qua HTTPS, quyền truy cập kiểm tra
-        ở máy chủ. Không phải mã hóa đầu-cuối: quản trị viên Supabase có thể
-        truy cập. Không dùng dự báo sức khỏe làm biện pháp tránh thai.
+        Mật Mã Yêu · 1.0.0. Dữ liệu truyền qua HTTPS, quyền truy cập kiểm tra ở
+        máy chủ. Không phải mã hóa đầu-cuối: quản trị viên Supabase có thể truy
+        cập. Không dùng dự báo sức khỏe làm biện pháp tránh thai.
       </Note>
     </>
   );

@@ -8,48 +8,33 @@
  * có thông báo "Cuộc gọi đang diễn ra…" nên không giết app, micro vẫn thu được,
  * và trên thông báo có luôn nút **Cúp máy** để kết thúc khi app đang ẩn.
  *
- * Thư viện dùng: @notifee/react-native (miễn phí, mã nguồn mở), gọi qua `require`
- * muộn và bọc trong try/catch: máy nào không nạp được thì cuộc gọi vẫn chạy như
- * cũ, chỉ là tắt màn hình có thể bị hệ điều hành tạm dừng.
+ * Thư viện dùng: @notifee/react-native (miễn phí, mã nguồn mở) qua
+ * `services/notifeeCore` — một chỗ duy nhất giữ thông báo + dịch vụ chạy nổi cho
+ * cả cuộc gọi lẫn phần "giữ kết nối nền" (nếu mỗi thứ tự đăng ký riêng thì cái
+ * sau đè cái trước và nút Cúp máy sẽ mất tác dụng).
  *
  * iOS không có dịch vụ chạy nổi: chỉ cần khai báo `UIBackgroundModes` gồm `audio`
  * và `voip` trong app.config.js, cộng với `setAudioModeAsync({ shouldPlayInBackground: true })`,
  * là hệ thống cho phép tiếp tục thu/phát tiếng khi ở chế độ nền.
  */
 import { Platform } from "react-native";
+import {
+  notifeeSupport,
+  onNotifeeAction,
+  useNotifeeService,
+} from "./notifeeCore";
 
-// Nạp muộn để app vẫn chạy khi thiếu thư viện native.
-declare const require: (name: string) => unknown;
-
-let notifeeModule: any = null;
-let notifeeProblem = "";
-let serviceReady = false;
 let hangupHandler: (() => void) | null = null;
+let actionReady = false;
 
-/** Mã kênh thông báo và mã thông báo của cuộc gọi (một cuộc gọi mỗi lúc). */
+/** Mã kênh thông báo, mã thông báo và mã nút Cúp máy. */
 const CALL_CHANNEL = "cuoc-goi";
 const CALL_NOTIFICATION = "cuoc-goi-dang-mo";
-
-function loadNotifee(): any {
-  if (notifeeModule) return notifeeModule;
-  if (notifeeProblem) return null;
-  try {
-    notifeeModule = require("@notifee/react-native");
-    return notifeeModule;
-  } catch (error) {
-    notifeeProblem =
-      error instanceof Error ? error.message : "Không nạp được Notifee.";
-    return null;
-  }
-}
+const CALL_HANGUP_ACTION = "cup-may";
 
 /** Máy này có mở được dịch vụ chạy nổi không (để Cài đặt báo cho đúng). */
 export function callServiceSupport() {
-  if (Platform.OS !== "android")
-    return { ok: false, detail: "iOS không cần dịch vụ chạy nổi" };
-  const mod = loadNotifee();
-  if (mod?.default) return { ok: true, detail: "có dịch vụ chạy nổi" };
-  return { ok: false, detail: notifeeProblem || "máy này không có Notifee" };
+  return notifeeSupport();
 }
 
 /**
@@ -58,6 +43,11 @@ export function callServiceSupport() {
  */
 export function onCallServiceHangup(handler: () => void) {
   hangupHandler = handler;
+  if (actionReady) return;
+  onNotifeeAction(({ actionId }) => {
+    if (actionId === CALL_HANGUP_ACTION) hangupHandler?.();
+  });
+  actionReady = true;
 }
 
 /**
@@ -67,25 +57,14 @@ export function onCallServiceHangup(handler: () => void) {
  */
 export async function startCallService(partnerName: string) {
   if (Platform.OS !== "android") return false;
-  const mod = loadNotifee();
-  if (!mod?.default) return false;
-  const notifee = mod.default;
+  const notifee = useNotifeeService();
+  if (!notifee) return false;
+  if (!actionReady) onCallServiceHangup(() => {});
   try {
-    if (!serviceReady) {
-      // Dịch vụ chỉ đăng ký một lần cho cả vòng đời app; Notifee giữ dịch vụ sống
-      // cho tới khi ta gọi stopForegroundService.
-      notifee.registerForegroundService(() => new Promise(() => {}));
-      notifee.onForegroundEvent(({ type, detail }: any) => {
-        const action = detail?.pressAction?.id;
-        if (type === mod.EventType.ACTION_PRESS && action === "cup-may")
-          hangupHandler?.();
-      });
-      serviceReady = true;
-    }
     const channelId = await notifee.createChannel({
       id: CALL_CHANNEL,
       name: "Cuộc gọi",
-      importance: mod.AndroidImportance.LOW,
+      importance: notifee.AndroidImportance?.LOW ?? 2,
     });
     await notifee.displayNotification({
       id: CALL_NOTIFICATION,
@@ -99,15 +78,19 @@ export async function startCallService(partnerName: string) {
         // Kiểu "microphone": Android 14 bắt buộc khai đúng kiểu này mới cho thu
         // micro khi app ở chế độ nền (xem plugins/with-call-foreground-service.js).
         foregroundServiceTypes: [
-          mod.AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+          notifee.AndroidForegroundServiceType
+            ?.FOREGROUND_SERVICE_TYPE_MICROPHONE ?? 128,
         ],
         ongoing: true,
         autoCancel: false,
         onlyAlertOnce: true,
         showTimestamp: false,
         smallIcon: "ic_launcher",
-        pressAction: { id: "mo-app" },
-        actions: [{ title: "Cúp máy", pressAction: { id: "cup-may" } }],
+        // Bấm vào thân thông báo là mở app (Notifee chỉ mở app với id "default").
+        pressAction: { id: "default" },
+        actions: [
+          { title: "Cúp máy", pressAction: { id: CALL_HANGUP_ACTION } },
+        ],
       },
     });
     return true;
@@ -122,9 +105,8 @@ export async function startCallService(partnerName: string) {
  */
 export async function stopCallService() {
   if (Platform.OS !== "android") return;
-  const mod = loadNotifee();
-  if (!mod?.default) return;
-  const notifee = mod.default;
+  const notifee = useNotifeeService();
+  if (!notifee) return;
   try {
     await notifee.stopForegroundService();
   } catch {}

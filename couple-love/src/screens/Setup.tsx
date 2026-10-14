@@ -15,7 +15,7 @@ export function Setup({ onReady }: { onReady: (config: Config) => void }) {
       keyboardShouldPersistTaps="handled"
     >
       <Text className="text-5xl mb-6">💕</Text>
-      <Title>Hai Trái Tim</Title>
+      <Title>Mật Mã Yêu</Title>
       <Note>
         Một góc riêng để hai bạn giữ những ngày yêu thương. Dùng chung một dự án
         Supabase để kết nối Android và iPhone.

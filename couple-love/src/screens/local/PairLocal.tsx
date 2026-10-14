@@ -394,7 +394,7 @@ export default function PairLocal({
                 onPress={() =>
                   void Share.share({
                     message:
-                      `Mã kết nối Hai Trái Tim của mình: ${room.code}\n` +
+                      `Mã ghép nối Mật Mã Yêu của mình: ${room.code}\n` +
                       "Bạn mở app → mục Ghép nối → nhập 6 số này là hai máy chung dữ liệu luôn nhé.",
                   }).catch(() => {})
                 }
@@ -545,7 +545,7 @@ export default function PairLocal({
             onPress={() =>
               void Share.share({
                 message:
-                  "Mã Hai Trái Tim của mình đây, bạn dán vào mục “Không có mạng” nhé:\n" +
+                  "Mã ghép nối Mật Mã Yêu của mình đây, bạn dán vào mục “Không có mạng” nhé:\n" +
                   chunks.join("\n"),
               }).catch(() => {})
             }

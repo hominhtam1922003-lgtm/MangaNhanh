@@ -1,4 +1,10 @@
 import { DEFAULT_THEME, isTheme } from "./themes.mjs";
+import {
+  emptyReact,
+  normalizeReact,
+  recallMessage,
+  setReact,
+} from "./chatExtras.mjs";
 export const STATE_VERSION = 1;
 export const makeId = () =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -22,6 +28,8 @@ export const MESSAGE_KINDS = [
   "location",
   // Nhật ký cuộc gọi: "Cuộc gọi đi · 01:23" nằm ngay trong đoạn chat.
   "call",
+  // Tin đã thu hồi: nội dung bị xoá ở CẢ HAI máy, chỉ còn một dòng báo.
+  "recalled",
 ];
 const text = (value, max) =>
   (typeof value === "string" ? value : "").slice(0, max);
@@ -33,6 +41,21 @@ const date = (value) =>
   /^\d{4}-\d{2}-\d{2}$/.test(value || "") ? value : null;
 const uid = () =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+/**
+ * Phần trích dẫn khi trả lời: `mine` = tin được trích dẫn là của MÁY NÀY.
+ * Trên đường truyền dùng `bySender` (tin được trích dẫn là của máy GỬI gói tin)
+ * để hai bên hiểu giống nhau mà không phải đoán.
+ */
+const normalizeReply = (raw) => {
+  const value = raw && typeof raw === "object" ? raw : null;
+  const id = text(value?.id, 40);
+  if (!id) return null;
+  const mine =
+    value?.bySender === undefined
+      ? value?.mine === true
+      : value.bySender !== true;
+  return { id, body: text(value?.body, 90), mine };
+};
 const profile = (raw, id, name, fallback = "") => ({
   id,
   nickname: text(raw?.nickname, 40).trim() || name,
@@ -175,6 +198,8 @@ export function migrate(raw, now = new Date().toISOString()) {
     replyNudge: raw.settings?.replyNudge !== false,
     ringtone: text(raw.settings?.ringtone, 80),
     ringtoneName: text(raw.settings?.ringtoneName, 60),
+    // Giữ kết nối chạy nền: thông báo tin nhắn vẫn nổi khi tắt màn hình.
+    keepAlive: raw.settings?.keepAlive === true,
   };
   state.autoLoveAt = Math.max(0, Number(raw.autoLoveAt) || 0);
   const messages = Array.isArray(raw.messages) ? raw.messages : [];
@@ -205,6 +230,10 @@ export function migrate(raw, now = new Date().toISOString()) {
       deliveredAt: message.deliveredAt ? iso(message.deliveredAt, now) : null,
       receivedAt: message.receivedAt ? iso(message.receivedAt, now) : null,
       readAt: message.readAt ? iso(message.readAt, now) : null,
+      // Thả cảm xúc + trả lời + dấu thu hồi (bản 1.16.0 trở lên).
+      react: normalizeReact(message.react),
+      recalledAt: message.recalledAt ? iso(message.recalledAt, now) : null,
+      reply: normalizeReply(message.reply),
     }))
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
     .slice(0, 300);
@@ -492,6 +521,9 @@ export function reduce(state, action) {
         deliveredAt: null,
         receivedAt: null,
         readAt: null,
+        react: emptyReact(),
+        recalledAt: null,
+        reply: normalizeReply(action.reply),
       },
       ...next.messages,
     ].slice(0, 300);
@@ -511,6 +543,8 @@ export function reduce(state, action) {
                   ? text(action.audio, 90)
                   : message.audio,
               receivedAt: new Date().toISOString(),
+              react: normalizeReact(message.react),
+              reply: message.reply ?? normalizeReply(action.reply),
             }
           : message,
       );
@@ -538,6 +572,9 @@ export function reduce(state, action) {
           deliveredAt: null,
           receivedAt: new Date().toISOString(),
           readAt: null,
+          react: emptyReact(),
+          recalledAt: null,
+          reply: normalizeReply(action.reply),
         },
         ...next.messages,
       ]
@@ -625,6 +662,28 @@ export function reduce(state, action) {
         ? { ...message, readAt: at }
         : message,
     );
+  } else if (type === "partner.avatar") {
+    // Ảnh đại diện của người thương vừa nhận được (gửi theo tên tệp).
+    const file = text(action.file, 90);
+    if (!file) throw new Error("Ảnh đại diện nhận được thiếu tệp.");
+    if (next.partner) next.partner = { ...next.partner, avatar: file };
+  } else if (type === "message.setReact") {
+    // Thả cảm xúc vào một tin (của mình hay của người thương đều được).
+    const id = text(action.id, 40);
+    if (!id) throw new Error("Thiếu mã tin nhắn để thả cảm xúc.");
+    const side = action.side === "them" ? "them" : "me";
+    const emoji = typeof action.emoji === "string" ? action.emoji : null;
+    next.messages = next.messages.map((message) =>
+      message.id === id ? setReact(message, side, emoji) : message,
+    );
+  } else if (type === "message.recall") {
+    // Thu hồi: xoá cả chữ, ảnh, tiếng, vị trí — máy bên kia cũng xoá theo.
+    const id = text(action.id, 40);
+    if (!id) throw new Error("Thiếu mã tin nhắn để thu hồi.");
+    const at = new Date().toISOString();
+    next.messages = next.messages.map((message) =>
+      message.id === id ? recallMessage(message, at) : message,
+    );
   } else if (type === "message.remove") {
     next.messages = next.messages.filter(
       (message) => message.id !== text(action.id, 40),
@@ -663,6 +722,12 @@ export function reduce(state, action) {
         action.ringtone === undefined
           ? next.settings.ringtoneName
           : text(action.ringtoneName, 60),
+      // Giữ kết nối khi app ở nền (bật trong Cài đặt) — để tin nhắn vẫn nổi
+      // thông báo khi tắt màn hình.
+      keepAlive:
+        action.keepAlive === undefined
+          ? next.settings.keepAlive === true
+          : action.keepAlive === true,
     };
     if (isTheme(action.theme) && action.theme !== next.appearance.theme) {
       next.appearance = {
@@ -710,6 +775,28 @@ export function reduce(state, action) {
     next.alerts = mergeAlerts(next.alerts, incoming.alerts);
     next.moments = mergeMoments(next.moments, incoming.moments);
     next.messages = mergeMessages(next.messages, incoming.messages);
+    // Cảm xúc mà người thương thả vào tin CỦA MÌNH (đi kèm ở gói riêng vì tin
+    // của họ không chứa tin của mình).
+    for (const item of Array.isArray(raw.reactTo)
+      ? raw.reactTo.slice(0, 40)
+      : []) {
+      const id = text(item?.id, 40);
+      const emoji = typeof item?.emoji === "string" ? item.emoji : null;
+      if (!id) continue;
+      next.messages = next.messages.map((message) =>
+        message.id === id ? setReact(message, "them", emoji) : message,
+      );
+    }
+    // Người thương báo đã đọc tới tin nào: hiện avatar nhỏ cạnh tin cuối đã đọc.
+    const readTo = text(raw.readTo, 40);
+    if (readTo) {
+      const at = new Date().toISOString();
+      next.messages = next.messages.map((message) =>
+        message.id === readTo && message.authorId === "me" && !message.readAt
+          ? { ...message, readAt: at }
+          : message,
+      );
+    }
     if (
       incoming.cycle &&
       (!next.cycle ||
@@ -860,7 +947,7 @@ export function joinCodes(codes) {
   if (parts.length === 1) {
     const single = parts[0];
     if (!single.startsWith("HTT1:"))
-      throw new Error("Mã không đúng định dạng Hai Trái Tim.");
+      throw new Error("Mã không đúng định dạng Mật Mã Yêu.");
     const singleMatch = /^HTT1:(\d+)\/(\d+):/.exec(single);
     if (singleMatch && Number(singleMatch[2]) > 1)
       throw new Error(`Cần đủ ${singleMatch[2]} đoạn mã, hiện có 1.`);
@@ -903,7 +990,7 @@ export function encodeLink(state, kind = "link", images = {}) {
 export function decodeLink(code) {
   const trimmed = String(code || "").trim();
   if (!trimmed.startsWith("HTT1:"))
-    throw new Error("Mã không đúng định dạng Hai Trái Tim.");
+    throw new Error("Mã không đúng định dạng Mật Mã Yêu.");
   const envelope = JSON.parse(base64Decode(trimmed.slice(5)));
   if (typeof envelope?.data !== "string")
     throw new Error("Mã bị thiếu dữ liệu.");
@@ -1086,6 +1173,12 @@ function mergeMessages(local, remote) {
         ? iso(message.receivedAt, new Date().toISOString())
         : new Date().toISOString(),
       readAt: null,
+      // Tin của người thương: cảm xúc họ thả vào chính tin đó là "them" ở máy này.
+      react: { me: null, them: normalizeReact(message.react).me },
+      recalledAt: message.recalledAt
+        ? iso(message.recalledAt, new Date().toISOString())
+        : null,
+      reply: normalizeReply(message.reply),
     };
     const existing = mine.get(incoming.id);
     if (existing) {
@@ -1096,6 +1189,15 @@ function mergeMessages(local, remote) {
               body: item.body || incoming.body,
               audio: item.audio || incoming.audio,
               durationMs: item.durationMs || incoming.durationMs,
+              // Cảm xúc của người thương (gửi kèm trong tin của chính họ).
+              react: {
+                me: normalizeReact(item.react).me,
+                them:
+                  normalizeReact(incoming.react).me ??
+                  normalizeReact(item.react).them,
+              },
+              recalledAt: item.recalledAt ?? incoming.recalledAt,
+              reply: item.reply ?? incoming.reply,
             }
           : item,
       );

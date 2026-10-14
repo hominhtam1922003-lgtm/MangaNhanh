@@ -62,6 +62,8 @@ export type State = {
     ringtone?: string;
     /** Tên bài nhạc chuông để hiện trong Cài đặt. */
     ringtoneName?: string;
+    /** Giữ kết nối khi app ở nền để tin nhắn vẫn nổi thông báo (Android). */
+    keepAlive?: boolean;
   };
   /** Mốc lần cuối tự gửi lời yêu, để không gửi dồn. */
   autoLoveAt?: number;
@@ -99,6 +101,12 @@ export type State = {
     deliveredAt: string | null;
     receivedAt: string | null;
     readAt: string | null;
+    /** Thả cảm xúc: `me` là của bạn, `them` là của người thương. */
+    react?: { me: string | null; them: string | null };
+    /** Thu hồi: có mốc này là tin đã bị xoá ở cả hai máy. */
+    recalledAt?: string | null;
+    /** Trả lời trích dẫn: `mine` = tin được trích dẫn là của máy này. */
+    reply?: { id: string; body: string; mine: boolean } | null;
   }[];
   appearance: {
     theme: string;

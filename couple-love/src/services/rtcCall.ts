@@ -36,6 +36,11 @@ import {
   tuneOpusSdp,
 } from "../logic/rtcSignal.mjs";
 import type { RtcState } from "../logic/rtcSignal.mjs";
+import {
+  audioLevelFromBytes,
+  audioLevelFromReport,
+  smoothLevel,
+} from "../logic/chatExtras.mjs";
 
 type Signal = {
   sub?: unknown;
@@ -52,8 +57,16 @@ type Options = {
   send: (packet: Record<string, unknown>, retries?: number) => void;
   /** Báo cho giao diện biết đường tiếng đang ở bước nào. */
   onState: (state: RtcState, detail: string) => void;
-  /** Số liệu thật của đường tiếng (byte vào/ra) để hiện lên màn hình gọi. */
-  onStats?: (info: { inBytes: number; outBytes: number }) => void;
+  /**
+   * Số liệu thật của đường tiếng: byte vào/ra và cường độ tiếng nói (0..1) để
+   * màn hình gọi cho trái tim đập theo giọng của người thương.
+   */
+  onStats?: (info: {
+    inBytes: number;
+    outBytes: number;
+    level: number;
+    levelSource: string;
+  }) => void;
 };
 
 // `require` muộn: chỉ nạp thư viện native khi thật sự gọi, để app vẫn chạy
@@ -143,6 +156,10 @@ export class RtcCall {
   private watchdog: ReturnType<typeof setTimeout> | null = null;
   private peerTimer: ReturnType<typeof setTimeout> | null = null;
   private statsTimer: ReturnType<typeof setInterval> | null = null;
+  /** Mức tiếng nói đã làm mượt + mốc byte lần trước (cho trái tim đập). */
+  private lastLevel = 0;
+  private lastLevelAt = 0;
+  private lastInBytes = 0;
   private lastAudioAt = 0;
   private readonly ready: Promise<void>;
 
@@ -461,7 +478,24 @@ export class RtcCall {
           outBytes += Number(item.bytesSent ?? 0);
       });
       if (inBytes > 0 || outBytes > 0) this.lastAudioAt = Date.now();
-      this.opts.onStats?.({ inBytes, outBytes });
+      // Cường độ tiếng nói: ưu tiên audioLevel thật của WebRTC, không có thì
+      // ước lượng theo lượng byte chảy qua (máy ảo thường không trả audioLevel).
+      const now = Date.now();
+      const span = Math.max(120, now - this.lastLevelAt);
+      const measured = audioLevelFromReport(report);
+      const level =
+        measured.level === null
+          ? audioLevelFromBytes(this.lastInBytes, inBytes, span)
+          : { source: measured.source, level: measured.level };
+      this.lastLevel = smoothLevel(this.lastLevel, level.level);
+      this.lastLevelAt = now;
+      this.lastInBytes = inBytes;
+      this.opts.onStats?.({
+        inBytes,
+        outBytes,
+        level: this.lastLevel,
+        levelSource: level.source,
+      });
       if (this.live && rtcAudioIsDead(Date.now(), this.lastAudioAt)) {
         this.fail(
           "Nối trực tiếp rồi mà không có tiếng, đã quay về đường tiếng qua kênh ghép nối.",

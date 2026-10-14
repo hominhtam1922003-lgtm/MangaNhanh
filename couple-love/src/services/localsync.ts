@@ -45,7 +45,7 @@ export async function exportBackup(state: State) {
   const code = buildLink(state, true, images);
   const file = new File(
     Paths.cache,
-    `HaiTraiTim-${new Date().toISOString().slice(0, 10)}.json`,
+    `MatMaYeu-${new Date().toISOString().slice(0, 10)}.json`,
   );
   if (file.exists) file.delete();
   file.write(code);
@@ -56,7 +56,7 @@ export async function shareBackup(uri: string) {
     throw new Error("Thiết bị này không có bảng chia sẻ tệp.");
   await Sharing.shareAsync(uri, {
     mimeType: "application/json",
-    dialogTitle: "Chia sẻ dữ liệu Hai Trái Tim",
+    dialogTitle: "Chia sẻ dữ liệu Mật Mã Yêu",
     UTI: "public.json",
   });
 }

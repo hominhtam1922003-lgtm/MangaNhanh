@@ -23,6 +23,8 @@ Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo
 
 ### Có gì mới ở 1.10.0 — hết chữ ngược, gọi điện, sticker, cầu tình yêu
 
+**Tải APK 1.10.0 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.10.0-test-0a44d5f/HaiTraiTim-1.10.0.apk · 58.549.853 byte · SHA256 `6e9426fcd457b010ef58bc01f2ba8045f848201e9aea839ba59224e6abe581f0` · dựng từ `0a44d5f` (build 38552769225). **iOS (.ipa chưa ký):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.10.0-test-0a44d5f/HaiTraiTim-1.10.0-unsigned.ipa · 11.458.596 byte · SHA256 `38aad59124ebe92378810bb2fad5e382e209802c8be33f31bd017d34c34669bc` (build 38552769096).
+
 - **Hết chữ bị ngược trong khung chat.** Nguyên nhân: bảng tin trước đây dùng `FlatList inverted`; trên Android kiểu này chạy bằng `transform: [{ scale: -1 }]` nên **ô trống và cả chữ trong đó cũng bị soi gương**. Nay danh sách không lật: `const ordered = [...messages].reverse()` hiển thị cũ → mới, có `scrollToEnd` (và `followRef` theo dõi khi bạn đang ở gần đáy) để tin mới tự hiện ở dưới.
 - **Ô nhắn tin được kéo lên** khỏi thanh chuyển mục (`marginBottom`), không còn dính liền.
 - **Nhiều sticker hơn:** 4 bộ × 12 sticker (Yêu thương, Vui vẻ, Nhớ nhung, Dễ thương) + bảng 48 emoji chèn thẳng vào câu chữ.

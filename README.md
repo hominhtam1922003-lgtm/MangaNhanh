@@ -227,16 +227,16 @@ Nguồn `e241f0f3460b5d2df3af5ea6b3620f8e4293a09e`, [run #38392914401](https://g
 
 Commit **`d783451c0cc3867f9f610755df28827e4440f856`**, [run #38386193021](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38386193021): **success, 9 phút 7 giây**.
 
-| Bước | Kết quả thật |
-|---|---|
-| Flutter 3.47.7 / Dart 3.13.5 | Stable, Java 17 |
-| Định dạng | Không có diff `lib` / `test` |
-| Analyze | **No issues found** |
-| Flutter test | **73 tests passed**, gồm IME ghép dấu/caret, storage key, migration alarm, permission fallback, ngang 1440×800 và màn nhỏ/chữ lớn |
-| Build release APK | Thành công, **62,6 MB** theo Flutter |
-| Native unit policy | `:app:testReleaseUnitTest` thành công, kiểm tra giữ hoãn/marker đã phát/đổi hạn/múi giờ |
-| Android 15 emulator | **OK (2 tests), 19,541 giây**; lịch thật AlarmManager chạy đến receiver/service, MediaPlayer báo đang phát, hoãn 5 phút, đồng bộ/restore giữ hoãn, hai chuông xếp hàng và hủy |
-| API thời tiết thật | **HTTP 200**, chấp nhận các tham số mới (gió giật, áp suất, mưa tổng, UV, mọc/lặn) |
+| Bước                         | Kết quả thật                                                                                                                                                                  |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Flutter 3.47.7 / Dart 3.13.5 | Stable, Java 17                                                                                                                                                               |
+| Định dạng                    | Không có diff `lib` / `test`                                                                                                                                                  |
+| Analyze                      | **No issues found**                                                                                                                                                           |
+| Flutter test                 | **73 tests passed**, gồm IME ghép dấu/caret, storage key, migration alarm, permission fallback, ngang 1440×800 và màn nhỏ/chữ lớn                                             |
+| Build release APK            | Thành công, **62,6 MB** theo Flutter                                                                                                                                          |
+| Native unit policy           | `:app:testReleaseUnitTest` thành công, kiểm tra giữ hoãn/marker đã phát/đổi hạn/múi giờ                                                                                       |
+| Android 15 emulator          | **OK (2 tests), 19,541 giây**; lịch thật AlarmManager chạy đến receiver/service, MediaPlayer báo đang phát, hoãn 5 phút, đồng bộ/restore giữ hoãn, hai chuông xếp hàng và hủy |
+| API thời tiết thật           | **HTTP 200**, chấp nhận các tham số mới (gió giật, áp suất, mưa tổng, UV, mọc/lặn)                                                                                            |
 
 Emulator kiểm tra trạng thái MediaPlayer, **không chứng minh loa điện thoại/OEM, DND, reboot vật lý hay độ đúng của dự báo**. Chưa dùng key Google thật của người dùng; key test là chuỗi giả, storage/network được mock. Không đo FPS trên máy thật. Khôi phục lịch đã được kiểm tra bằng gọi `restore`, chưa mô phỏng reboot hệ điều hành.
 
@@ -246,16 +246,16 @@ Môi trường Arena thiếu Flutter/Dart và không tải được SDK từ Goo
 
 Bản mã **`56783aa`**, [workflow #38373854418](https://github.com/hominhtam1922003-lgtm/MangaNhanh/actions/runs/38373854418), đã hoàn tất thành công:
 
-| Hạng mục | Kết quả thực tế |
-|---|---|
-| Flutter / Dart | Stable 3.47.7 / Dart 3.13.5, Java 17 |
-| `flutter pub get` | Thành công, lockfile đã cố định |
-| `dart format lib test` | Thành công, không có thay đổi định dạng |
-| `flutter analyze` | No issues found |
-| `flutter test` | **58 test đạt**, gồm màn hình 320×640 và chữ phóng 1,5 lần |
-| `flutter build apk --release` | Thành công, `app-release.apk` **62,2 MB** |
-| Nguồn thời tiết thật | **HTTP 200**, tham số app được Open-Meteo chấp nhận tại điểm Mỹ Tho; có dữ liệu 7 ngày và cờ ban ngày |
-| Upload artifact | Thành công, **`lich-nhac-apk`** |
+| Hạng mục                      | Kết quả thực tế                                                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Flutter / Dart                | Stable 3.47.7 / Dart 3.13.5, Java 17                                                                  |
+| `flutter pub get`             | Thành công, lockfile đã cố định                                                                       |
+| `dart format lib test`        | Thành công, không có thay đổi định dạng                                                               |
+| `flutter analyze`             | No issues found                                                                                       |
+| `flutter test`                | **58 test đạt**, gồm màn hình 320×640 và chữ phóng 1,5 lần                                            |
+| `flutter build apk --release` | Thành công, `app-release.apk` **62,2 MB**                                                             |
+| Nguồn thời tiết thật          | **HTTP 200**, tham số app được Open-Meteo chấp nhận tại điểm Mỹ Tho; có dữ liệu 7 ngày và cờ ban ngày |
+| Upload artifact               | Thành công, **`lich-nhac-apk`**                                                                       |
 
 Log đầy đủ được công bố qua GitHub Checks **Flutter diagnostics**. Build thử nghiệm trên nhánh làm việc, **chưa merge vào main**. Phần cập nhật tài liệu sau lần chạy này không thay đổi mã ứng dụng đã được kiểm chứng.
 
@@ -269,7 +269,30 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Hai Trái Tim 1.9.1 (bản mới nhất) — ảnh nền kiểu Zalo
+## Hai Trái Tim 1.10.0 (bản mới nhất) — hết chữ ngược, gọi điện, sticker, cầu tình yêu
+
+**APK Android (cài trực tiếp, không cần ZIP):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.10.0-test-0a44d5f/HaiTraiTim-1.10.0.apk · **58.549.853 byte** · SHA256 `6e9426fcd457b010ef58bc01f2ba8045f848201e9aea839ba59224e6abe581f0` · dựng từ `0a44d5f` (lần build 38552769225, đăng bằng workflow 38554460474). Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.10.0, bản dựng 12**.
+
+**iPhone (file .ipa chưa ký, phải tự ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.10.0-test-0a44d5f/HaiTraiTim-1.10.0-unsigned.ipa · **11.458.596 byte** · SHA256 `38aad59124ebe92378810bb2fad5e382e209802c8be33f31bd017d34c34669bc` · dựng từ `0a44d5f` (lần build 38552769096, đăng bằng workflow 38554460357).
+
+Bản 1.10.0 sửa đúng 13 việc bạn nêu:
+
+1. **Hết chữ bị ngược trong khung chat.** Bảng tin trước dùng `FlatList inverted`; trên Android kiểu này chạy bằng `transform: [{ scale: -1 }]` nên **chữ trong ô trống cũng bị soi gương**. Nay danh sách **không lật** (`const ordered = [...messages].reverse()`, `scrollToEnd`): cũ ở trên, mới ở dưới, tin mới tự hiện.
+2. **Ô nhắn tin được kéo lên** khỏi thanh chuyển mục, hết dính liền.
+3. **Nhiều sticker hơn:** 4 bộ × 12 sticker (Yêu thương · Vui vẻ · Nhớ nhung · Dễ thương) + **48 emoji** chèn thẳng vào câu chữ.
+4. **Trái tim 3D đẹp hơn** và **2 avatar + tên** nằm trong viên gradient nổi, mỗi người một nhãn tên.
+5. **Cầu tình yêu:** cô dâu & chú rể chibi ở hai đầu **cầu 3D**, tự chạy lại gần nhau rồi gặp nhau giữa cầu (`src/components/LoveBridge.tsx`).
+6. **Gọi điện như Messenger/Zalo:** bấm gọi → máy kia **đổ chuông** (45 giây tự ngắt) → **Nghe / Từ chối** → **giữ nút để nói** (mỗi lần ≤ 25 giây) → **bật/tắt mic**, **thu nhỏ cửa sổ** khi đang gọi, kết thúc thì tự ẩn sau 4,5 giây. _Nói thẳng:_ cuộc gọi đi qua **kênh ghép nối sẵn có**, chạy như **bộ đàm** (chuông + giữ để nói), **chưa phải thoại hai chiều liên tục** — muốn vậy phải thêm WebRTC và build lại phần native.
+7. **Cách 2 tiếng tự gửi lời yêu / thơ** (07:00–22:00, xen kẽ lời yêu và thơ, hai máy cùng mốc thì cùng câu), tắt được trong Cài đặt.
+8. **Nhắc khi chưa trả lời:** quá **3 phút** → “Người ấy vẫn đang đợi tin nhắn từ bạn 💌”; quá **1 tiếng** thì kèm một lời yêu; **không nhắc từ 22:00–07:00**.
+9. **Bật/tắt “đã xem”** trong Cài đặt.
+10. **Gửi ảnh chụp / ảnh trong máy / vị trí đang ở** ngay trong đoạn chat (nén 720 px, ≤ 160 KB; vị trí kèm nút mở bản đồ).
+
+Giữ nguyên toàn bộ của 1.9.x (ảnh nền trong suốt kiểu Zalo 3 mức, chữ theo chủ đề, thông báo nổi, bảng tin cố định, 14 chủ đề có hoạ tiết). Lần dựng này chạy **64 bài kiểm thử đều xanh**, TypeScript sạch, `expo export` cho Android thành công.
+
+**_Ghi chú:_** đổ chuông, giữ-để-nói, sticker, gửi ảnh/vị trí, lời yêu 2 tiếng một lần và nhắc trả lời mới kiểm thử bằng máy ảo + bài kiểm thử tự động (có bài dựng broker MQTT thật chạy trong máy), chưa kiểm chứng trên hai điện thoại thật. **Bản vá chữ bị ngược cần bạn xem lại trên LDPlayer.**
+
+## Hai Trái Tim 1.9.1 — ảnh nền kiểu Zalo
 
 **APK Android (cài trực tiếp, không cần ZIP):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.9.1-test-ef2dc57/HaiTraiTim-1.9.1.apk · **57.934.306 byte** · SHA256 `15d43a165d853b67a0889b8dd45cb9aff832c6686f14023932c0b605fa38ad94` · dựng từ `ef2dc57` (lần build 38543908536, đăng bằng workflow 38546491860). Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.9.1, bản dựng 11**.
 
@@ -320,9 +343,9 @@ Kèm theo: tự chọn ảnh trong máy làm nền app và **hai máy gửi ản
   4. **Lời yêu thương mỗi ngày** — hai máy cùng nhận một câu nhắc yêu thương/thơ ngắn lúc **09:00** và **21:00**; câu chọn theo ngày (45 câu) nên hai máy luôn giống nhau và không cần mạng; tắt được trong **Cài đặt**.
   5. **Đổi hình nền / chủ đề trang chủ** — **8 chủ đề** (Hồng, Tím, Biển, Bạc hà, Hoàng hôn, Nắng, Tuyết, Đêm) đổi nền chuyển sắc, màu nhấn và biểu tượng trang trí, giống đổi chủ đề trong tin nhắn.
 - **Bản 1.5.0 sửa lỗi app bị văng (quan trọng):** mã kết nối dùng `TextEncoder`/`TextDecoder` mà **React Native không có** (module ném lỗi ngay khi nạp ⇒ app văng lúc mở) và `nacl.randomBytes` cần `crypto.getRandomValues` mà React Native **cũng không có** (⇒ văng khi tạo phòng/bắt tay). Nay phần chuyển chữ ↔ byte được tự viết trong app (đã đối chiếu **từng byte** với chuẩn UTF-8 của Node, kể cả tiếng Việt có dấu và emoji) và nguồn ngẫu nhiên an toàn lấy từ **expo-crypto**. Có bài kiểm thử chạy mã kết nối trong môi trường **đã xóa `TextEncoder`/`TextDecoder`** nên lỗi này không thể tái diễn mà không bị CI phát hiện.
-- Bản 1.5.0 còn thêm: **Cài đặt** hiện số phiên bản + bản dựng và mục **“Lỗi gần nhất”**; mọi lỗi JavaScript được ghi lại thay vì làm văng app (màn hình lỗi hiện tiếng Việt kèm nút *Mở lại màn hình*); màn hình **Ghép nối → Chi tiết kết nối** có nút **Tự kiểm tra lại** hiện ✓/✗ cho nguồn ngẫu nhiên, mã hóa đầu-cuối và WebSocket của máy.
-- Bản 1.4.0 — **nối song song mọi trạm**, gửi dữ liệu **sau khi đăng ký phòng xong (SUBACK)** thay vì ngay sau bắt tay (CONNACK) nên tin không còn bị mất, chống trùng theo mã bản tin, **“Chi tiết kết nối”** ngay trong app (từng trạm báo gì + nhật ký + nút *Thử kết nối lại*), thêm trạm **broker-cn.emqx.io** gần Việt Nam, và máy nhập mã **không còn hiện lại mã y như máy tạo mã**. Đo thật trên trạm công cộng từ runner CI: máy A sẵn sàng 807 ms, máy B 1.410 ms, **B nhận dữ liệu của A sau 1.533 ms**, cả hai cùng thấy nhau trực tuyến (EMQX 1,7 s · EMQX châu Á 1,1 s · Mosquitto 1,5 s; HiveMQ chậm 21 s; Eclipse cổng 443 chết hẳn).
-- Bản 1.3.0 — **ghép nối tức thời bằng mã 6 số, cả hai máy cùng nhận**: một bạn bấm *Tạo mã 6 số*, bạn kia nhập đúng 6 số đó là xong. Vào phòng thì **mỗi máy vừa gửi dữ liệu của mình vừa nhận dữ liệu của người thương**, và **cả hai máy** đều hiện “Đã ghép nối với …” nên không còn cảnh một máy có dữ liệu còn máy kia trống. Không phải quét hai lần, không phải làm lại ở bên nào, không cần máy chủ, không cần đăng ký.
+- Bản 1.5.0 còn thêm: **Cài đặt** hiện số phiên bản + bản dựng và mục **“Lỗi gần nhất”**; mọi lỗi JavaScript được ghi lại thay vì làm văng app (màn hình lỗi hiện tiếng Việt kèm nút _Mở lại màn hình_); màn hình **Ghép nối → Chi tiết kết nối** có nút **Tự kiểm tra lại** hiện ✓/✗ cho nguồn ngẫu nhiên, mã hóa đầu-cuối và WebSocket của máy.
+- Bản 1.4.0 — **nối song song mọi trạm**, gửi dữ liệu **sau khi đăng ký phòng xong (SUBACK)** thay vì ngay sau bắt tay (CONNACK) nên tin không còn bị mất, chống trùng theo mã bản tin, **“Chi tiết kết nối”** ngay trong app (từng trạm báo gì + nhật ký + nút _Thử kết nối lại_), thêm trạm **broker-cn.emqx.io** gần Việt Nam, và máy nhập mã **không còn hiện lại mã y như máy tạo mã**. Đo thật trên trạm công cộng từ runner CI: máy A sẵn sàng 807 ms, máy B 1.410 ms, **B nhận dữ liệu của A sau 1.533 ms**, cả hai cùng thấy nhau trực tuyến (EMQX 1,7 s · EMQX châu Á 1,1 s · Mosquitto 1,5 s; HiveMQ chậm 21 s; Eclipse cổng 443 chết hẳn).
+- Bản 1.3.0 — **ghép nối tức thời bằng mã 6 số, cả hai máy cùng nhận**: một bạn bấm _Tạo mã 6 số_, bạn kia nhập đúng 6 số đó là xong. Vào phòng thì **mỗi máy vừa gửi dữ liệu của mình vừa nhận dữ liệu của người thương**, và **cả hai máy** đều hiện “Đã ghép nối với …” nên không còn cảnh một máy có dữ liệu còn máy kia trống. Không phải quét hai lần, không phải làm lại ở bên nào, không cần máy chủ, không cần đăng ký.
 - Dữ liệu đi qua các trạm MQTT công cộng miễn phí (EMQX → HiveMQ → Mosquitto, tự đổi trạm khi trạm trước không tới được) nhưng luôn **mã hóa đầu-cuối** bằng NaCl secretbox: trạm chỉ thấy chuỗi đã mã hóa — bốn trạm theo thứ tự: EMQX (8084), mqtt.eclipseprojects.io (cổng 443, dễ qua mạng di động), HiveMQ (8884), Mosquitto (8081). Khóa phòng suy ra từ chính mã 6 số và chỉ nằm trong máy hai bạn, nên người khác không đọc được nếu không biết mã.
 - Mỗi máy chỉ gửi **dữ liệu của mình** (tên, cảm xúc, chu kỳ, kỷ niệm do mình viết, lời nhắc) và gói tin tự cắt bớt khi quá lớn, bỏ ảnh riêng — nhờ vậy hai máy không gửi trả lại dữ liệu của nhau và không lặp vô tận. Mỗi gói tin còn mang mã máy gửi, nên bản tin mà trạm **dội lại cho chính máy vừa gửi** bị bỏ qua — không còn chuyện máy tự nhận mình là người thương. Kỷ niệm kèm ảnh vẫn gửi qua “Xuất và chia sẻ tệp dữ liệu”.
 - Vẫn giữ chế độ chạy hoàn toàn trên máy và cách chuyển dữ liệu thủ công (mã dán tay / tệp JSON) cho lúc một bên không có mạng, cùng dự báo chu kỳ, nhắc nhở trên máy, khóa Face ID/vân tay và giao diện 3D.

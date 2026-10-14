@@ -55,7 +55,7 @@ import {
   payloadKey,
   relayPayloadFor,
   relaySelfTest,
-  roomFromState,
+  roomFromPair,
 } from "./src/services/relay";
 import {
   clearCrash,
@@ -118,6 +118,23 @@ import * as DocumentPicker from "expo-document-picker";
 import { dueLoveNote, waitingNotice } from "./src/logic/autoLove.mjs";
 import { loveNoteFor } from "./src/logic/lovelines.mjs";
 import { wallpaperFile } from "./src/logic/localState.mjs";
+import { pairGate, gateReasonText } from "./src/logic/pairing.mjs";
+import {
+  accountConfigured,
+  currentSession,
+  ensureAccount,
+  pairWithCode,
+  signInAnonymously as signInAnonymous,
+  signInWithProvider,
+  signOut as signOutAccount,
+  unpairAccount,
+  watchAccount,
+} from "./src/services/account";
+import type {
+  Account,
+  AuthProvider,
+  PairingWatcher,
+} from "./src/services/account";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeContext";
 import {
   imageBase64,
@@ -131,6 +148,7 @@ import HomeLocal from "./src/screens/local/HomeLocal";
 import CycleLocal from "./src/screens/local/CycleLocal";
 import DiaryLocal from "./src/screens/local/DiaryLocal";
 import PairLocal from "./src/screens/local/PairLocal";
+import PairGate from "./src/screens/local/PairGate";
 import SettingsLocal from "./src/screens/local/SettingsLocal";
 import Home from "./src/screens/Home";
 import Cycle from "./src/screens/Cycle";
@@ -596,7 +614,44 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   const lastSentRef = useRef("");
   const sentRoomRef = useRef("");
   const joinedRef = useRef("");
-  const relayRoom = state ? roomFromState(state) : null;
+  /**
+   * Tài khoản ghép nối (Google/Facebook) + trạng thái kiểm tra với máy chủ. Từ
+   * 1.18.0 app KHÔNG tin bộ nhớ máy: mỗi lần mở app đều hỏi máy chủ xem còn ghép
+   * với ai không, rồi mới quyết định có kết nối hay dừng ở màn hình nhập mã.
+   */
+  const [account, setAccount] = useState<Account | null>(null);
+  const [pairChecked, setPairChecked] = useState(false);
+  const [pairError, setPairError] = useState("");
+  const [pairBusy, setPairBusy] = useState(false);
+  const [pairMessage, setPairMessage] = useState("");
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
+  const pairWatcherRef = useRef<PairingWatcher | null>(null);
+  const wrongPairRef = useRef(false);
+  useEffect(() => {
+    if (!wrongPairRef.current) return;
+    wrongPairRef.current = false;
+    setPairMessage(
+      "Máy chủ cho biết tài khoản này chưa ghép nối (có thể máy kia đã ngắt kết nối), nên app đã ngừng kết nối tức thời để tránh vào phòng cũ.",
+    );
+  }, [account?.partnerId]);
+  /**
+   * Phòng kết nối: CHỈ suy ra từ tài khoản đã ghép nối trên máy chủ (pair_secret).
+   * Cố ý KHÔNG đọc phòng cũ trong bộ nhớ máy (`state.relay`) nữa: đó chính là
+   * đường "kết nối ảo" khiến máy tự chui vào phòng MQTT cũ sau khi khôi phục dữ
+   * liệu/sao lưu. Không có tài khoản ghép nối → không có phòng → không thể kết nối.
+   */
+  const relayRoom = (() => {
+    if (!account || !pairChecked) return null;
+    if (!account.partnerId || !account.pairSecret) return null;
+    try {
+      return roomFromPair(account.pairSecret);
+    } catch {
+      return null;
+    }
+  })();
+  // Nhận biết máy kia vừa ngắt kết nối: khoá ghép nối đổi là phải vào lại phòng mới.
+  const lastRoomKeyRef = useRef("");
+  const pairRoomKey = relayRoom ? `${relayRoom.id}|${relayRoom.key}` : "";
   // Bắt mọi lỗi JavaScript: ghi lại để hiển thị trong app thay vì văng im lặng.
   useEffect(() => {
     const utils = (
@@ -1416,7 +1471,9 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     client.publish({ kind: "photoRequest", ids });
   }
   useEffect(() => {
-    if (!relayRoom || !state?.settings.relay) {
+    if (!relayRoom || !pairChecked || !state?.settings.relay) {
+      // Chưa kiểm tra xong với máy chủ (hoặc chưa ghép nối) thì KHÔNG mở phòng:
+      // đây là chốt chặn "kết nối ảo" của bản 1.18.0.
       relayRef.current?.stop();
       relayRef.current = null;
       readyRef.current = false;
@@ -2051,7 +2108,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       relayRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [relayRoom?.id, relayRoom?.key, state?.settings.relay]);
+  }, [relayRoom?.id, relayRoom?.key, state?.settings.relay, pairChecked]);
   // Chế độ âm thanh trong suốt cuộc gọi:
   // - `shouldPlayInBackground: true`: iOS/Android vẫn cho thu/phát tiếng khi app
   //   xuống chạy nền hoặc tắt màn hình (cùng với dịch vụ chạy nổi ở Android).
@@ -2321,8 +2378,8 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   }, [state?.moments]);
   useEffect(() => {
     if (!state || !relayRef.current) return;
-    if (sentRoomRef.current !== (relayRoom?.id ?? "")) {
-      sentRoomRef.current = relayRoom?.id ?? "";
+    if (sentRoomRef.current !== pairRoomKey) {
+      sentRoomRef.current = pairRoomKey;
       lastSentRef.current = "";
     }
     if (publishTimer.current) clearTimeout(publishTimer.current);
@@ -2331,7 +2388,164 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       if (publishTimer.current) clearTimeout(publishTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, relayRoom?.id]);
+  }, [state, pairRoomKey]);
+  /** Hỏi máy chủ trạng thái ghép nối thật (không tin bộ nhớ máy). */
+  async function refreshAccount(reason?: string) {
+    const configured = await accountConfigured();
+    if (!configured) return;
+    const session = await currentSession();
+    setAccountEmail(session.email);
+    if (!session.signedIn) {
+      if (stateRef.current?.relay || (stateRef.current?.links?.length ?? 0) > 0)
+        update({ type: "pairing.clear" });
+      setAccount(null);
+      setPairChecked(true);
+      return;
+    }
+    const result = await ensureAccount();
+    if (!result.ok) {
+      setPairError(result.message);
+      setPairChecked(false);
+      return;
+    }
+    const fresh = result.account!;
+    const previous = accountRef.current;
+    if (previous && previous.partnerId && !fresh.partnerId) {
+      wrongPairRef.current = true;
+      if (stateRef.current?.relay) update({ type: "pairing.clear" });
+    }
+    setPairError("");
+    setPairChecked(true);
+    setAccount(fresh);
+    if (fresh.partnerId) {
+      update({
+        type: "partner.account",
+        uid: fresh.partnerId,
+        nickname: fresh.partnerName || fresh.partnerCode || "Người thương",
+        avatar: fresh.partnerAvatar ?? undefined,
+      });
+    }
+    if (reason) setPairMessage(reason);
+  }
+  const accountRef = useRef<Account | null>(null);
+  accountRef.current = account;
+  const gate = pairGate({
+    hasConfig: Boolean(account || accountEmail || pairChecked || !pairError),
+    session: Boolean(account || accountEmail),
+    checked: pairChecked,
+    partnerId: account?.partnerId ?? null,
+    secret: account?.pairSecret ?? null,
+    error: pairError,
+  });
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const configured = await accountConfigured();
+      if (!configured) {
+        if (alive) {
+          setPairChecked(false);
+          setPairError("");
+        }
+        return;
+      }
+      await refreshAccount();
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Máy kia bấm "Ngắt kết nối" → máy này biết trong vài giây và văng về màn nhập mã.
+  useEffect(() => {
+    if (!account?.uid) return;
+    let watcher: PairingWatcher | null = null;
+    let alive = true;
+    void (async () => {
+      const created = await watchAccount(account.uid, () => {
+        void refreshAccount();
+      });
+      if (alive) {
+        watcher = created;
+        pairWatcherRef.current = created;
+      } else created.stop();
+    })();
+    return () => {
+      alive = false;
+      watcher?.stop();
+      pairWatcherRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.uid]);
+  /** Bảng điều khiển tài khoản dùng ở màn hình ghép nối. */
+  const pairActions = {
+    onSignIn: (provider: AuthProvider) =>
+      void (async () => {
+        setPairBusy(true);
+        setPairMessage("");
+        const result = await signInWithProvider(provider);
+        setPairMessage(result.message);
+        if (result.ok) {
+          setAccountEmail((await currentSession()).email);
+          await refreshAccount();
+        }
+        setPairBusy(false);
+      })(),
+    onSignInAnonymous: () =>
+      void (async () => {
+        setPairBusy(true);
+        setPairMessage("");
+        const result = await signInAnonymous();
+        setPairMessage(result.message);
+        if (result.ok) {
+          setAccountEmail((await currentSession()).email);
+          await refreshAccount();
+        }
+        setPairBusy(false);
+      })(),
+    onSignOut: () =>
+      void (async () => {
+        setPairBusy(true);
+        await signOutAccount();
+        if (stateRef.current?.relay) update({ type: "pairing.clear" });
+        setAccount(null);
+        setPairChecked(true);
+        setPairMessage("Đã đăng xuất tài khoản ghép nối.");
+        setPairBusy(false);
+      })(),
+    onPair: (code: string) =>
+      void (async () => {
+        setPairBusy(true);
+        setPairMessage("");
+        const result = await pairWithCode(code);
+        setPairMessage(result.message);
+        if (result.ok)
+          await refreshAccount(
+            "Ghép nối xong. Hai máy đang nói chuyện với nhau.",
+          );
+        setPairBusy(false);
+      })(),
+    onUnpair: () =>
+      void (async () => {
+        setPairBusy(true);
+        setPairMessage("");
+        const result = await unpairAccount();
+        if (stateRef.current?.relay) update({ type: "pairing.clear" });
+        setPairMessage(
+          result.ok
+            ? "Đã ngắt kết nối ở cả hai máy. Hai máy đã rời khỏi phòng cũ."
+            : result.message,
+        );
+        await refreshAccount();
+        setPairBusy(false);
+      })(),
+    onRetry: () =>
+      void (async () => {
+        setPairBusy(true);
+        await refreshAccount();
+        setPairBusy(false);
+      })(),
+    onManual: () => setTab("pair"),
+  };
   /**
    * Giữ kết nối khi app ở chế độ nền (công tắc trong Cài đặt): Android mở một
    * dịch vụ chạy nổi nên kết nối MQTT sống tiếp và tin nhắn vẫn nổi thông báo dù
@@ -2457,6 +2671,38 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relayStatus.partnerOnline, relayStatus.partnerName]);
+
+  // Chưa ghép nối (hoặc chưa kiểm tra được với máy chủ) thì DỪNG ở đây, không cho
+  // vào app: đây là chỗ chặn "tự chui vào phòng MQTT cũ" khi khôi phục sao lưu.
+  const hasCfg = Boolean(account || accountEmail || pairChecked || pairError);
+  if (hasCfg && gate.screen !== "paired") {
+    return (
+      <ThemeProvider themeId={state?.appearance?.theme ?? "hong"}>
+        <KeyboardAvoidingView
+          className="flex-1 bg-pink-50"
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View className="px-5 py-4">
+            <Text className="text-xl font-bold text-ink">
+              Mật Mã Yêu <Text className="text-love">♡</Text>
+            </Text>
+            <Text className="text-xs text-stone-500 mt-1">
+              {gateReasonText(gate)}
+            </Text>
+          </View>
+          <PairGate
+            gate={gate}
+            account={account}
+            email={accountEmail}
+            busy={pairBusy}
+            message={pairMessage}
+            relayConnected={relayStatus.state === "online"}
+            {...pairActions}
+          />
+        </KeyboardAvoidingView>
+      </ThemeProvider>
+    );
+  }
 
   if (!state) {
     return (

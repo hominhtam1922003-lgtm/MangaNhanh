@@ -9,6 +9,7 @@ import {
   open,
   randomSourceReady,
   roomFromCode,
+  roomFromPair,
   roomFromQr,
   roomToQr,
   seal,
@@ -29,7 +30,15 @@ export type RelayStatus = {
   readyCount?: number;
   summary?: { host: string; state: string }[];
 };
-export { BROKERS, createRoom, makeCode, roomFromCode, roomFromQr, roomToQr };
+export {
+  BROKERS,
+  createRoom,
+  makeCode,
+  roomFromCode,
+  roomFromPair,
+  roomFromQr,
+  roomToQr,
+};
 // React Native không có crypto.getRandomValues, nên lấy nguồn ngẫu nhiên an toàn
 // từ expo-crypto. Nếu việc này lỗi thì KHÔNG ném ra ngoài (tránh làm văng app),
 // chỉ ghi lại để màn hình Ghép nối báo cho người dùng biết.

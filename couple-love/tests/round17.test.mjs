@@ -155,10 +155,12 @@ test("Đổi tên app đã sạch, gói cài vẫn giữ nguyên nên cài đè 
   assert.match(config, /name: "Mật Mã Yêu"/);
   assert.match(config, /slug: "hai-trai-tim"/, "slug giữ nguyên để cài đè");
   assert.match(config, /scheme: "haitraitim"/);
-  assert.match(config, /version: "1.17.0"/);
-  assert.match(config, /versionCode: 19/);
   const pkg = JSON.parse(read("package.json"));
-  assert.equal(pkg.version, "1.17.0");
+  assert.equal(config.includes(`version: "${pkg.version}"`), true);
+  assert.ok(
+    Number(/versionCode: (\d+)/.exec(config)?.[1] ?? 0) >= 19,
+    "số bản dựng tăng dần",
+  );
   for (const file of ["App.tsx", "src/screens/local/PairLocal.tsx"])
     assert.equal(
       read(file).includes("Hai Trái Tim"),

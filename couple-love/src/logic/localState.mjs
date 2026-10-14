@@ -402,6 +402,27 @@ export function reduce(state, action) {
     );
   } else if (type === "alerts.clear") {
     next.alerts = [];
+  } else if (type === "partner.account") {
+    // Hồ sơ người thương lấy từ MÁY CHỦ (uid + tên + ảnh): chỉ đặt khi máy chủ đã
+    // xác nhận có partner_id, không bao giờ lấy từ bộ nhớ máy.
+    const uid = text(action.uid, 60);
+    if (!uid) next.partner = null;
+    else
+      next.partner = {
+        ...(next.partner ?? {}),
+        uid,
+        nickname:
+          text(action.nickname, 40) || next.partner?.nickname || "Người thương",
+        avatar: action.avatar
+          ? text(action.avatar, 120)
+          : (next.partner?.avatar ?? null),
+        updatedAt: new Date().toISOString(),
+      };
+  } else if (type === "pairing.clear") {
+    // Xoá dấu ghép nối cũ (phòng + người thương) nhưng GIỮ lại dữ liệu đã viết:
+    // tin nhắn, nhật ký, kỷ niệm vẫn còn để xem lại.
+    next.relay = null;
+    next.partner = null;
   } else if (type === "relay.set") {
     if (!action.room) next.relay = null;
     else {
@@ -411,7 +432,12 @@ export function reduce(state, action) {
       next.relay = {
         id,
         key,
-        mode: action.room.mode === "code" ? "code" : "qr",
+        mode:
+          action.room.mode === "code"
+            ? "code"
+            : action.room.mode === "pair"
+              ? "pair"
+              : "qr",
         code: /^\d{6}$/.test(String(action.room.code ?? ""))
           ? String(action.room.code)
           : null,

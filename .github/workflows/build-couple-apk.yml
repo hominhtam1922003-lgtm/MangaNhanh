@@ -120,24 +120,24 @@ jobs:
           # cho mỗi yêu cầu tải thư viện. Không đổi mã ứng dụng, chỉ đổi cách lấy thư viện khi build.
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures=arm64-v8a,armeabi-v7a -Dorg.gradle.internal.repository.max.retries=5 -Dorg.gradle.internal.repository.initial.backoff=500 -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
-          cp app/build/outputs/apk/release/app-release.apk ../MatMaYeu-1.17.0.apk
+          cp app/build/outputs/apk/release/app-release.apk ../MatMaYeu-1.18.0.apk
           # Bản nhẹ: chỉ arm64-v8a (máy thật đời mới và LDPlayer 64-bit đều dùng được),
           # nhỏ hơn khoảng một phần tư nên dễ tải khi mạng yếu.
           ./gradlew assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures=arm64-v8a -Dorg.gradle.internal.repository.max.retries=5 -Dorg.gradle.internal.repository.initial.backoff=500 -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
-          cp app/build/outputs/apk/release/app-release.apk ../MatMaYeu-1.17.0-arm64.apk
+          cp app/build/outputs/apk/release/app-release.apk ../MatMaYeu-1.18.0-arm64.apk
           cd ..
-          sha256sum MatMaYeu-1.17.0.apk > MatMaYeu-1.17.0.sha256
-          sha256sum MatMaYeu-1.17.0-arm64.apk > MatMaYeu-1.17.0-arm64.sha256
-          ls -l MatMaYeu-1.17.0*.apk
+          sha256sum MatMaYeu-1.18.0.apk > MatMaYeu-1.18.0.sha256
+          sha256sum MatMaYeu-1.18.0-arm64.apk > MatMaYeu-1.18.0-arm64.sha256
+          ls -l MatMaYeu-1.18.0*.apk
       - name: Tải APK xuống từ Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: MatMaYeu-1.17.0-APK
+          name: MatMaYeu-1.18.0-APK
           path: |
-            ${{ env.PROJECT_DIR }}/MatMaYeu-1.17.0.apk
-            ${{ env.PROJECT_DIR }}/MatMaYeu-1.17.0.sha256
-            ${{ env.PROJECT_DIR }}/MatMaYeu-1.17.0-arm64.apk
-            ${{ env.PROJECT_DIR }}/MatMaYeu-1.17.0-arm64.sha256
+            ${{ env.PROJECT_DIR }}/MatMaYeu-1.18.0.apk
+            ${{ env.PROJECT_DIR }}/MatMaYeu-1.18.0.sha256
+            ${{ env.PROJECT_DIR }}/MatMaYeu-1.18.0-arm64.apk
+            ${{ env.PROJECT_DIR }}/MatMaYeu-1.18.0-arm64.sha256
           if-no-files-found: error
           retention-days: 14
       - name: Đính kèm lỗi build vào GitHub Checks

@@ -201,6 +201,8 @@ test("Cuộc gọi dùng đường tiếng trực tiếp: ghi âm cũ dừng, mi
   );
   const pkg = JSON.parse(read("package.json"));
   assert.equal(pkg.dependencies["react-native-webrtc"], "124.0.8");
-  assert.equal(pkg.version, "1.17.0");
-  assert.equal(config.includes('version: "1.17.0"'), true);
+  // Phiên bản đọc từ package.json: bản dựng phải khớp, không cần sửa tệp này mỗi
+  // lần tăng bản (trước đây hay quên nên CI đỏ oan).
+  assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
+  assert.equal(config.includes(`version: "${pkg.version}"`), true);
 });

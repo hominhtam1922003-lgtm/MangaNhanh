@@ -168,6 +168,21 @@ function roomFromSeed(seed) {
 // Mã 6 số là mật khẩu phòng: cùng 6 số thì hai máy tự vào đúng một phòng,
 // không cần trao đổi gì thêm ngoài con số đó.
 const codePattern = /^\d{6}$/;
+/**
+ * Phòng kết nối suy ra từ `pair_secret` — khoá bí mật mà máy chủ sinh khi hai
+ * người ghép đôi và chỉ hai hàng hồ sơ của hai người đọc được. Ưu điểm so với mã
+ * 6 số cũ: không đoán/trùng được, không có chuyện hai máy lạ vào chung một phòng,
+ * và máy nào không còn là người thương thì máy chủ đã xoá khoá nên không vào được.
+ */
+export function roomFromPair(secret) {
+  const value = String(secret ?? "").trim();
+  if (value.length < 16) throw new Error("Chưa có khoá ghép nối từ máy chủ.");
+  return {
+    ...roomFromSeed("haitraitim-pair-v4|" + value),
+    code: null,
+    mode: "pair",
+  };
+}
 export function createRoom() {
   return {
     id: toBase64Url(secureBytes(16)),

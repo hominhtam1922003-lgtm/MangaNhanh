@@ -1,9 +1,41 @@
 const fs = require("fs");
+
+// ── Dự án ghép nối (Supabase) ─────────────────────────────────────────────────
+// Khoá publishable là khoá công khai; quyền thật do RLS trên máy chủ quyết định.
+const SUPABASE_URL = "https://nbbopfvsthuopiopupqd.supabase.co";
+const SUPABASE_KEY = "sb_publishable_ycuVrcaQYdRT8mgQx5vypg_-ir0JLv6";
+function sameHost(candidate) {
+  try {
+    return new URL(candidate).hostname === new URL(SUPABASE_URL).hostname;
+  } catch {
+    return false;
+  }
+}
+function supabaseUrl() {
+  const fromEnv = String(process.env.EXPO_PUBLIC_SUPABASE_URL || "").trim();
+  if (fromEnv && !sameHost(fromEnv))
+    console.warn(
+      "Cảnh báo: EXPO_PUBLIC_SUPABASE_URL trỏ " +
+        fromEnv +
+        " nhưng bản dựng dùng " +
+        SUPABASE_URL +
+        " để bảo đảm đúng dự án ghép nối.",
+    );
+  return SUPABASE_URL;
+}
+function supabaseKey() {
+  const fromEnv = String(
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "",
+  ).trim();
+  if (fromEnv.startsWith("sb_secret_") || fromEnv.startsWith("eyJ"))
+    return SUPABASE_KEY;
+  return fromEnv || SUPABASE_KEY;
+}
 module.exports = {
   expo: {
     name: "Mật Mã Yêu",
     slug: "hai-trai-tim",
-    version: "1.17.0",
+    version: "1.18.0",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
@@ -27,7 +59,7 @@ module.exports = {
         // Thông báo tin nhắn trên Android 13+ (hệ thống vẫn hỏi người dùng).
         "android.permission.POST_NOTIFICATIONS",
       ],
-      versionCode: 19,
+      versionCode: 20,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#fff1f2",
@@ -124,8 +156,13 @@ module.exports = {
       "@react-native-community/datetimepicker",
     ],
     extra: {
-      supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL || "",
-      supabaseKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "",
+      // Dự án ghép nối của bản 1.18.0. Khoá dưới đây là khoá CÔNG KHAI
+      // (publishable/anon) — Supabase thiết kế để khoá này nằm trong app; quyền
+      // hạn thật do RLS quyết định nên đây KHÔNG phải bí mật. Giá trị trong bản
+      // dựng luôn thắng biến môi trường: nếu kho secret cũ trên GitHub còn trỏ
+      // dự án khác thì bản dựng vẫn dùng đúng dự án này, chỉ ghi cảnh báo ở CI.
+      supabaseUrl: supabaseUrl(),
+      supabaseKey: supabaseKey(),
       eas: { projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID || "" },
     },
   },

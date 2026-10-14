@@ -251,15 +251,19 @@ test("Tắt màn hình vẫn gọi được: dịch vụ chạy nổi + chế đ
   assert.match(app, /onCallServiceHangup/, "nút Cúp máy kết thúc cuộc gọi");
 });
 
-test("Bản 1.17.0 (bản dựng 19) đã sẵn sàng", () => {
+test("Bản mới nhất đã sẵn sàng: tên, phiên bản, số bản dựng khớp nhau", () => {
   const config = read("app.config.js");
   const pkg = JSON.parse(read("package.json"));
-  assert.equal(pkg.version, "1.17.0");
-  assert.equal(config.includes('version: "1.17.0"'), true);
-  assert.equal(config.includes("versionCode: 19"), true);
+  assert.equal(config.includes(`version: "${pkg.version}"`), true);
+  const code = Number(/versionCode: (\d+)/.exec(config)?.[1] ?? 0);
+  assert.ok(code >= 19, "số bản dựng phải tăng dần để cài đè được");
   assert.equal(config.includes('name: "Mật Mã Yêu"'), true, "đổi tên app");
   const settings = read("src/screens/local/SettingsLocal.tsx");
-  assert.match(settings, /1\.17\.0/, "màn hình Cài đặt dự phòng đúng bản mới");
+  assert.match(
+    settings,
+    /Constants\.expoConfig\?\.version/,
+    "màn hình Cài đặt đọc phiên bản thật của bản dựng",
+  );
 });
 
 test("Lớp 1 dùng PeerJS: máy chủ chào hỏi + TURN miễn phí, không tài khoản", () => {

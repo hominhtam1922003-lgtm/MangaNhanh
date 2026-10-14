@@ -2,22 +2,45 @@ import "react-native-url-polyfill/auto";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import Constants from "expo-constants";
 import { secureStorage } from "./storage";
+import { accountConfig } from "./accountConfig.mjs";
 export type Config = { url: string; key: string; projectId: string };
+/**
+ * Cấu hình máy chủ ghép nối: ƯU TIÊN giá trị đóng trong bản dựng.
+ *
+ * Vì sao đổi thứ tự so với trước: bản 1.17.0 đọc cấu hình đã lưu trong máy trước,
+ * nên máy nào từng nhập tay địa chỉ dự án cũ sẽ mãi dùng dự án cũ dù bản mới đã
+ * đóng sẵn dự án mới (khi đó phần ghép nối theo tài khoản không chạy được).
+ * Giá trị đóng trong bản dựng luôn thắng; chỉ khi bản dựng không có sẵn thì mới
+ * dùng cấu hình lưu trong máy.
+ */
 export async function readConfig(): Promise<Config | null> {
+  const built = accountConfig();
+  const extra = Constants.expoConfig?.extra as
+    | {
+        supabaseUrl?: string;
+        supabaseKey?: string;
+        eas?: { projectId?: string };
+      }
+    | undefined;
+  if (built)
+    return {
+      url: built.url,
+      key: built.key,
+      projectId: extra?.eas?.projectId || "",
+    };
+  if (extra?.supabaseUrl && extra?.supabaseKey)
+    return {
+      url: extra.supabaseUrl,
+      key: extra.supabaseKey,
+      projectId: extra?.eas?.projectId || "",
+    };
   const saved = await secureStorage.getItem("backend-config");
   if (saved) {
     try {
       return JSON.parse(saved);
     } catch {}
   }
-  const extra = Constants.expoConfig?.extra;
-  return extra?.supabaseUrl && extra?.supabaseKey
-    ? {
-        url: extra.supabaseUrl,
-        key: extra.supabaseKey,
-        projectId: extra?.eas?.projectId || "",
-      }
-    : null;
+  return null;
 }
 export async function saveConfig(config: Config) {
   const url = new URL(config.url);

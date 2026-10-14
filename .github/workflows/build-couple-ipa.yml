@@ -149,19 +149,19 @@ jobs:
           mkdir -p ios/Payload
           cp -R "$APP" ios/Payload/
           cd ios
-          zip -qry "../HaiTraiTim-$VERSION-unsigned.ipa" Payload
+          zip -qry "../MatMaYeu-$VERSION-unsigned.ipa" Payload
           cd ..
-          ls -l "HaiTraiTim-$VERSION-unsigned.ipa"
-          unzip -l "HaiTraiTim-$VERSION-unsigned.ipa" | head -12
+          ls -l "MatMaYeu-$VERSION-unsigned.ipa"
+          unzip -l "MatMaYeu-$VERSION-unsigned.ipa" | head -12
           if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum "HaiTraiTim-$VERSION-unsigned.ipa"
+            sha256sum "MatMaYeu-$VERSION-unsigned.ipa"
           else
-            shasum -a 256 "HaiTraiTim-$VERSION-unsigned.ipa"
-          fi | tee "HaiTraiTim-$VERSION-unsigned.ipa.sha256"
+            shasum -a 256 "MatMaYeu-$VERSION-unsigned.ipa"
+          fi | tee "MatMaYeu-$VERSION-unsigned.ipa.sha256"
       - name: Tải .ipa lên Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: HaiTraiTim-iOS-unsigned-IPA
+          name: MatMaYeu-iOS-unsigned-IPA
           path: |
             ${{ env.PROJECT_DIR }}/HaiTraiTim-*-unsigned.ipa
             ${{ env.PROJECT_DIR }}/HaiTraiTim-*-unsigned.ipa.sha256

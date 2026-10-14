@@ -78,6 +78,20 @@ function turnFromEnv() {
  */
 export const RTC_TURN_SERVERS = [
   ...turnFromEnv(),
+  // Máy chủ trung chuyển RIÊNG của bạn (Metered, gói "couple-love"): có cổng 80,
+  // 443 và TCP 443 nên chui được qua cả mạng 4G chặn P2P — đặt trước các bộ công
+  // cộng để ICE thử ngay từ đầu. Thông tin đăng nhập nằm trong bản dựng (WebRTC
+  // buộc phải có trong máy khách); muốn đổi thì đặt EXPO_PUBLIC_TURN_URLS/USER/
+  // CREDENTIAL rồi dựng lại APK, không cần sửa mã.
+  {
+    urls: [
+      "turn:couple-love.metered.live:80",
+      "turn:couple-love.metered.live:443",
+      "turn:couple-love.metered.live:443?transport=tcp",
+    ],
+    username: "5cddad6cdc6b69bdedd42c87",
+    credential: "nYUBQYjvrQIMo6lG",
+  },
   {
     urls: ["turn:eu-0.turn.peerjs.com:3478", "turn:us-0.turn.peerjs.com:3478"],
     username: "peerjs",

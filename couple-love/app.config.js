@@ -3,7 +3,7 @@ module.exports = {
   expo: {
     name: "Mật Mã Yêu",
     slug: "hai-trai-tim",
-    version: "1.16.0",
+    version: "1.17.0",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
@@ -27,7 +27,7 @@ module.exports = {
         // Thông báo tin nhắn trên Android 13+ (hệ thống vẫn hỏi người dùng).
         "android.permission.POST_NOTIFICATIONS",
       ],
-      versionCode: 18,
+      versionCode: 19,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#fff1f2",

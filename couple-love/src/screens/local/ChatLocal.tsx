@@ -21,6 +21,12 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Reanimated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   AudioModule,
@@ -337,11 +343,16 @@ function VoiceBubble({
   );
 }
 
+/** Ngưỡng kéo ngang để tính là "vuốt trả lời" (px). */
+const REPLY_SWIPE_PX = 56;
+
 /**
  * Vuốt một dòng tin nhắn sang phải để trả lời — thao tác quen thuộc của
- * Messenger/Zalo. Dùng PanResponder sẵn có của React Native (không cần thêm thư
- * viện native nào), và chỉ giành lấy cử chỉ khi người dùng vuốt NGANG thật sự để
- * việc cuộn dọc trong khung chat vẫn trơn.
+ * Messenger/Zalo. Dùng `react-native-gesture-handler` cho cử chỉ và
+ * `react-native-reanimated` cho chuyển động (chạy trên luồng UI nên không giật
+ * khi danh sách tin nhắn đang dài). Cử chỉ chỉ được "giành" khi người dùng vuốt
+ * NGANG thật sự (activeOffsetX) và không lệch dọc quá nhiều, nhờ vậy việc cuộn
+ * dọc trong khung chat vẫn trơn.
  */
 function SwipeRow({
   children,
@@ -352,53 +363,57 @@ function SwipeRow({
   onReply: () => void;
   hint: string;
 }) {
-  const translate = useRef(new Animated.Value(0)).current;
   const { theme } = useTheme();
-  const settle = useCallback(() => {
-    Animated.timing(translate, {
-      toValue: 0,
-      duration: 150,
-      useNativeDriver: true,
-    }).start();
-  }, [translate]);
+  const x = useSharedValue(0);
+  // Cử chỉ này cố tình chạy callback trên luồng JS (runOnJS) để gọi thẳng hàm
+  // trả lời của React mà không cần bắc cầu worklet — nhẹ và dễ hiểu hơn.
   const pan = useMemo(
     () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_event, gesture) =>
-          gesture.dx > 14 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5,
-        onPanResponderMove: (_event, gesture) => {
-          if (gesture.dx > 0) translate.setValue(Math.min(76, gesture.dx));
-        },
-        onPanResponderRelease: (_event, gesture) => {
-          const go = gesture.dx > 48;
-          settle();
+      Gesture.Pan()
+        .runOnJS(true)
+        .activeOffsetX(14)
+        .failOffsetY([-14, 14])
+        .onUpdate((event) => {
+          x.value = Math.max(0, Math.min(84, event.translationX * 0.9));
+        })
+        .onEnd((event) => {
+          const go = event.translationX > REPLY_SWIPE_PX;
+          x.value = withTiming(0, { duration: 160 });
           if (go) onReply();
-        },
-        onPanResponderTerminate: settle,
-      }),
-    [onReply, settle, translate],
+        })
+        .onFinalize(() => {
+          x.value = withTiming(0, { duration: 160 });
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onReply],
   );
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.value }],
+  }));
+  const hintStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, x.value / 40),
+  }));
   return (
-    <View>
-      <View
-        pointerEvents="none"
-        style={{
-          position: "absolute",
-          left: 8,
-          top: 0,
-          bottom: 0,
-          justifyContent: "center",
-        }}
-      >
-        <Text style={{ color: theme.sub, opacity: 0.7 }}>↩ {hint}</Text>
+    <GestureDetector gesture={pan}>
+      <View>
+        <Reanimated.View
+          pointerEvents="none"
+          style={[
+            {
+              position: "absolute",
+              left: 10,
+              top: 0,
+              bottom: 0,
+              justifyContent: "center",
+            },
+            hintStyle,
+          ]}
+        >
+          <Text style={{ color: theme.sub, fontWeight: "600" }}>↩ {hint}</Text>
+        </Reanimated.View>
+        <Reanimated.View style={style}>{children}</Reanimated.View>
       </View>
-      <Animated.View
-        style={{ transform: [{ translateX: translate }] }}
-        {...pan.panHandlers}
-      >
-        {children}
-      </Animated.View>
-    </View>
+    </GestureDetector>
   );
 }
 

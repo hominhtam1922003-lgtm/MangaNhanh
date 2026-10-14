@@ -373,7 +373,9 @@ export class RtcCall {
       iceServers: RTC_ICE_SERVERS,
       // Ưu tiên P2P: chỉ nhờ máy chủ trung chuyển khi không nối thẳng được.
       iceTransportPolicy: ICE_POLICY,
-      iceCandidatePoolSize: 2,
+      // Giữ sẵn vài địa chỉ: mạng 4G đổi trạm hoặc Wi-Fi ↔ 4G thì có sẵn đường
+      // mới để chuyển ngay, không phải chờ thu thập lại từ đầu.
+      iceCandidatePoolSize: 6,
       bundlePolicy: "max-bundle",
       rtcpMuxPolicy: "require",
     });
@@ -452,7 +454,14 @@ export class RtcCall {
     }
     if (state === "disconnected" || ice === "disconnected") {
       if (this.dropTimer) return;
-      // Mạng vừa chớp: chờ vài giây, không nối lại được thì quay về kênh ghép nối.
+      // Mạng vừa chớp (4G đổi trạm, Wi-Fi ↔ 4G): thử nối lại NGAY trên cùng cuộc
+      // gọi bằng ICE restart, vẫn chờ vài giây rồi mới quay về kênh ghép nối.
+      try {
+        this.pc?.restartIce?.();
+      } catch {}
+      try {
+        this.peerMedia?.peerConnection?.restartIce?.();
+      } catch {}
       this.dropTimer = setTimeout(() => {
         this.dropTimer = null;
         const now = String(this.pc?.connectionState ?? "");

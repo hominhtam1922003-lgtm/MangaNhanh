@@ -10,6 +10,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { useAudioPlayer } from "expo-audio";
 import { LocalAvatar, Note } from "../../components/UI";
+import ThreeHeart from "../../components/ThreeHeart";
 import { useTheme } from "../../theme/ThemeContext";
 import { callClock } from "../../logic/callLogic.mjs";
 import type { CallInfo } from "../../logic/callLogic.mjs";
@@ -143,6 +144,7 @@ export default function CallLocal({
   playingRef,
   rtcInfo,
   rtcLive,
+  reduced = false,
   rtcAudio,
   onUseLegacyAudio,
   onToggleMic,
@@ -163,6 +165,8 @@ export default function CallLocal({
   /** Đường tiếng trực tiếp (WebRTC): đã nối thì tiếng đi thẳng, không qua tệp. */
   rtcInfo: { state: string; detail: string };
   rtcLive: boolean;
+  /** Máy yếu / người dùng bật giảm chuyển động: không mở WebGL trong cuộc gọi. */
+  reduced?: boolean;
   /** Số byte tiếng thật đang vào/ra + mức tiếng nói (0..1) cho trái tim đập. */
   rtcAudio: {
     inBytes: number;
@@ -443,31 +447,65 @@ export default function CallLocal({
                 transform: [{ scale }],
               }}
             />
-            {/* Trái tim đập theo giọng nói, avatar của người thương ở giữa. */}
+            {/* Trái tim 3D (WebGL) đập theo cường độ giọng nói lấy từ track
+                WebRTC; máy yếu hoặc bật "giảm chuyển động" thì dùng tim vẽ sẵn
+                cho nhẹ máy. */}
+            {active && !reduced ? (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: "absolute",
+                  width: 320,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <ThreeHeart
+                  height={230}
+                  level={active && rtcLive ? rtcAudio.level : 0}
+                  interactive={false}
+                />
+              </View>
+            ) : (
+              <Animated.View
+                pointerEvents="none"
+                style={{
+                  position: "absolute",
+                  transform: [{ scale: active && rtcLive ? heartScale : 1 }],
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 150,
+                    lineHeight: 160,
+                    color: "#ef4466",
+                    opacity: active ? 0.95 : 0.5,
+                  }}
+                >
+                  ♥
+                </Text>
+              </Animated.View>
+            )}
             <Animated.View
               pointerEvents="none"
               style={{
-                position: "absolute",
-                transform: [{ scale: active && rtcLive ? heartScale : 1 }],
+                transform: [
+                  {
+                    scale:
+                      active && !rtcLive
+                        ? scale
+                        : active && rtcLive && reduced
+                          ? heartScale
+                          : 1,
+                  },
+                ],
               }}
             >
-              <Text
-                style={{
-                  fontSize: 150,
-                  lineHeight: 160,
-                  color: "#ef4466",
-                  opacity: active ? 0.95 : 0.5,
-                }}
-              >
-                ♥
-              </Text>
-            </Animated.View>
-            <Animated.View
-              style={{
-                transform: [{ scale: active && !rtcLive ? scale : 1 }],
-              }}
-            >
-              <LocalAvatar name={partnerName} image={partnerAvatar} size={72} />
+              <LocalAvatar
+                name={partnerName}
+                image={partnerAvatar}
+                size={active && !reduced ? 62 : 72}
+              />
             </Animated.View>
           </View>
           <Text

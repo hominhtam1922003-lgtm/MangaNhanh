@@ -187,12 +187,17 @@ function Session({
   drag,
   reduced,
   pressed,
+  level,
 }: {
   drag: { x: number; y: number };
   reduced: boolean;
   pressed: boolean;
+  /** Mức tiếng nói 0..1 (lấy từ track WebRTC) — tim đập to nhỏ theo giọng. */
+  level: number;
 }) {
   const group = useRef<THREE.Group>(null);
+  // Làm mượt mức tiếng để tim to lên nhanh mà nhỏ xuống từ từ, không giật.
+  const smoothLevel = useRef(0);
   const glow = useRef<THREE.Mesh>(null);
   const stars = useRef<THREE.Points>(null);
   const shell = useRef<THREE.Mesh>(null);
@@ -208,7 +213,14 @@ function Session({
       group.current.rotation.x = drag.y;
       group.current.rotation.z = reduced ? 0 : Math.sin(t * 0.22) * 0.06;
       group.current.position.y = reduced ? 0 : Math.sin(t * 0.8) * 0.1;
-      const beat = reduced ? 1 : 1 + Math.sin(t * 1.6) * 0.03;
+      const nextLevel = Math.min(1, Math.max(0, Number(level) || 0));
+      const current = smoothLevel.current;
+      smoothLevel.current =
+        current + (nextLevel - current) * (nextLevel > current ? 0.35 : 0.08);
+      // Nhịp tim nền (1 → 1,03) + phần "đập theo giọng nói" (tối đa +30%).
+      const beat = reduced
+        ? 1 + smoothLevel.current * 0.3
+        : 1 + Math.sin(t * 1.6) * 0.03 + smoothLevel.current * 0.3;
       group.current.scale.setScalar(pressed ? beat * 1.09 : beat);
     }
     if (shell.current && !reduced) {
@@ -329,9 +341,15 @@ function Session({
 export default memo(function ThreeHeart({
   reduced = false,
   height = 320,
+  level = 0,
+  interactive = true,
 }: {
   reduced?: boolean;
   height?: number;
+  /** Mức tiếng nói 0..1 để trái tim đập theo giọng trong cuộc gọi. */
+  level?: number;
+  /** false = chỉ để nhìn (màn hình cuộc gọi), không nuốt thao tác chạm. */
+  interactive?: boolean;
 }) {
   const [drag, setDrag] = useState({ x: 0, y: 0 });
   const [pressed, setPressed] = useState(false);
@@ -367,7 +385,8 @@ export default memo(function ThreeHeart({
       <View
         accessibilityLabel="Trái tim 3D ở chính giữa và vũ trụ trái tim quay quanh nó"
         style={{ height }}
-        {...responder.panHandlers}
+        pointerEvents={interactive ? "auto" : "none"}
+        {...(interactive ? responder.panHandlers : {})}
       >
         <Canvas
           camera={{ position: [0, 0, 6.1], fov: 42 }}
@@ -378,7 +397,12 @@ export default memo(function ThreeHeart({
             powerPreference: "high-performance",
           }}
         >
-          <Session drag={drag} reduced={reduced} pressed={pressed} />
+          <Session
+            drag={drag}
+            reduced={reduced}
+            pressed={pressed}
+            level={level}
+          />
         </Canvas>
       </View>
     </Boundary>

@@ -1,10 +1,15 @@
+// Phải nạp trước các thư viện khác: react-native-gesture-handler cần đăng ký
+// native module trước khi cây giao diện được dựng.
+import "react-native-gesture-handler";
 import "./global.css";
 import React, { useState, useEffect, useRef } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   View,
   Text,
   ScrollView,
   Pressable,
+  AccessibilityInfo,
   ActivityIndicator,
   AppState,
   Alert,
@@ -736,8 +741,16 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         )
         .map((message) => message.id)
         .slice(0, 20);
-      if (fresh.length && next.settings?.readReceipts !== false)
+      if (fresh.length && next.settings?.readReceipts !== false) {
+        // Gói mới {type:"read", lastMessageId} + gói cũ cho máy chưa cập nhật.
+        relayRef.current?.publish({
+          kind: "read",
+          type: "read",
+          lastMessageId: fresh[0],
+          ids: fresh,
+        });
         relayRef.current?.publish({ kind: "chatRead", ids: fresh });
+      }
     }
   }
 
@@ -940,7 +953,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     const now = Date.now();
     if (active && now - lastTypingSentRef.current < TYPING_SEND_MS) return;
     lastTypingSentRef.current = now;
-    client.publish({ kind: "typing", state: active });
+    client.publish({ kind: "typing", type: "typing", state: active });
     if (!active) lastTypingSentRef.current = 0;
   }
   /** Thả (hoặc bỏ) cảm xúc trên một tin nhắn — gửi ngay cho máy kia. */
@@ -952,12 +965,24 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       return;
     }
     if (!client) return;
-    client.publish({ kind: "chatReact", id, emoji });
+    // Gói mới: {type:"reaction", messageId, emotion} — máy 1.17.0 đọc thẳng.
+    // Gói cũ (chatReact) gửi kèm để máy còn ở bản 1.16 hiểu được.
+    const packets = [
+      {
+        kind: "reaction",
+        type: "reaction",
+        messageId: id,
+        id,
+        emotion: emoji,
+        emoji,
+      },
+      { kind: "chatReact", id, emoji },
+    ];
+    for (const packet of packets) client.publish(packet);
     // Gửi lại lần hai: gói QoS 0 có thể mất, gói sau vá lại tình trạng đúng.
-    setTimeout(
-      () => relayRef.current?.publish({ kind: "chatReact", id, emoji }),
-      420,
-    );
+    setTimeout(() => {
+      for (const packet of packets) relayRef.current?.publish(packet);
+    }, 420);
     // Gói dữ liệu đầy đủ cũng mang theo cảm xúc, để lần sau mở app vẫn còn.
     setTimeout(() => publishCurrent(true), 900);
   }
@@ -971,13 +996,47 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     } catch {
       return;
     }
-    const packet = { kind: "chatRecall", id };
-    relayRef.current?.publish(packet);
-    setTimeout(() => relayRef.current?.publish(packet), 400);
-    setTimeout(() => relayRef.current?.publish(packet), 1200);
+    const packets = [
+      { kind: "unsend", type: "unsend", messageId: id, id },
+      { kind: "chatRecall", id },
+    ];
+    const send = () => {
+      for (const packet of packets) relayRef.current?.publish(packet);
+    };
+    send();
+    setTimeout(send, 400);
+    setTimeout(send, 1200);
     setTimeout(() => publishCurrent(true), 900);
   }
   /** Lưu ảnh người thương gửi vào thư viện ảnh của máy. */
+  /**
+   * Gửi kèm TỆP ảnh đại diện của mình cho máy kia (gói ảnh vai "avatar").
+   * Dùng khi vừa đổi ảnh đại diện và khi máy kia xin lại.
+   */
+  function sendAvatarFile(note = "") {
+    const client = relayRef.current;
+    const current = stateRef.current;
+    const name = current?.me?.avatar;
+    if (!client || !current || !name) return false;
+    const base64 = imageBase64(name, AVATAR_LIMIT_BYTES);
+    if (!base64) return false;
+    void (async () => {
+      try {
+        for (const packet of photoMessages({
+          id: name,
+          base64,
+          nickname: current.me.nickname,
+          role: "avatar",
+          avatarId: name,
+        })) {
+          client.publish(packet);
+          await new Promise((resolve) => setTimeout(resolve, 60));
+        }
+        if (note) setRelayLog((lines) => [...lines, note].slice(-12));
+      } catch {}
+    })();
+    return true;
+  }
   function savePhoto(photo: string | null | undefined) {
     void (async () => {
       const result = await savePhotoToDevice(
@@ -1531,6 +1590,16 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           }
           return;
         }
+        if (kind === "read") {
+          // Gói mới {type:"read", lastMessageId}: hiểu như chatRead.
+          const ids = Array.isArray(message.ids)
+            ? (message.ids as unknown[]).map((id) => String(id)).slice(0, 20)
+            : message.lastMessageId
+              ? [String(message.lastMessageId)]
+              : [];
+          if (ids.length) update({ type: "message.seen", ids });
+          return;
+        }
         if (kind === "chatRead") {
           // Người thương báo đã xem tin của mình (chỉ khi họ bật “cho biết đã xem”).
           const ids = Array.isArray(message.ids)
@@ -1631,6 +1700,21 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             );
           return;
         }
+        if (kind === "reaction") {
+          // Gói mới {type:"reaction", messageId, emotion} — hiểu như chatReact.
+          const id = String(message.messageId ?? message.id ?? "");
+          if (!id) return;
+          const emoji =
+            typeof message.emotion === "string"
+              ? message.emotion
+              : typeof message.emoji === "string"
+                ? message.emoji
+                : null;
+          try {
+            update({ type: "message.setReact", id, side: "them", emoji });
+          } catch {}
+          return;
+        }
         if (kind === "chatReact") {
           // Người thương thả cảm xúc vào một tin (của mình hoặc của họ).
           const id = String(message.id ?? "");
@@ -1640,6 +1724,41 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           try {
             update({ type: "message.setReact", id, side: "them", emoji });
           } catch {}
+          return;
+        }
+        if (kind === "unsend") {
+          // Gói mới {type:"unsend", messageId} — thu hồi cả hai bên.
+          const id = String(message.messageId ?? message.id ?? "");
+          if (!id) return;
+          try {
+            update({ type: "message.recall", id });
+            noticeFromPartner(
+              `${stateRef.current?.partner?.nickname ?? "Người thương"} 💌`,
+              "đã thu hồi một tin nhắn",
+              `recall-${id}`,
+            );
+          } catch {}
+          return;
+        }
+        if (kind === "profile") {
+          // Đổi ảnh đại diện/tên: máy kia cập nhật giao diện ngay, không đợi gói
+          // dữ liệu định kỳ. Ảnh thiếu thì xin gửi lại (gói ảnh đi kèm gói này).
+          const avatar =
+            typeof message.avatar === "string" && message.avatar
+              ? message.avatar.slice(0, 90)
+              : null;
+          const nickname =
+            typeof message.nickname === "string"
+              ? message.nickname.slice(0, 40)
+              : "";
+          try {
+            update({
+              type: "partner.merge",
+              state: { from: { id: "me", nickname, avatar }, messages: [] },
+            });
+          } catch {}
+          if (avatar && !imageExists(avatar) && shouldAsk(avatar, 20000))
+            relayRef.current?.publish({ kind: "photoRequest", ids: [avatar] });
           return;
         }
         if (kind === "chatRecall") {
@@ -2291,6 +2410,36 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     return () => subscription?.remove?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  /**
+   * Đổi ảnh đại diện: báo máy kia NGAY bằng một gói hồ sơ nhỏ rồi gửi kèm tệp
+   * ảnh (tối đa 120 KB) — máy kia đổi giao diện trong tích tắc, không phải đợi
+   * gói dữ liệu định kỳ. Lần mở đầu tiên thì bỏ qua: lúc đó gói dữ liệu và phần
+   * "xin gửi lại ảnh" đã lo việc này.
+   */
+  const pushedAvatarRef = useRef<string | null>(null);
+  useEffect(() => {
+    const avatar = state?.me?.avatar ?? null;
+    if (!avatar) return;
+    if (pushedAvatarRef.current === avatar) return;
+    const firstRun = pushedAvatarRef.current === null;
+    pushedAvatarRef.current = avatar;
+    if (firstRun) return;
+    const client = relayRef.current;
+    if (!client) return;
+    client.publish({
+      kind: "profile",
+      type: "profile",
+      avatar,
+      nickname: state?.me?.nickname ?? "",
+    });
+    setTimeout(
+      () => sendAvatarFile("Đã gửi ảnh đại diện mới cho người thương"),
+      120,
+    );
+    setTimeout(() => publishCurrent(true), 600);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.me?.avatar]);
+
   // Người thương vừa mở app: gửi ngay toàn bộ dữ liệu của mình cho họ và báo
   // cho chính mình biết là hai máy đã ghép nối (cả hai bên đều nhận như nhau).
   useEffect(() => {
@@ -2570,6 +2719,17 @@ function LocalShell({
   callAction: (event: { type: string; on?: boolean; min?: boolean }) => void;
   callRef: React.MutableRefObject<CallInfo | null>;
 }) {
+  // Máy yếu hoặc người dùng bật "giảm chuyển động": màn hình gọi không mở
+  // WebGL, dùng tim vẽ sẵn cho nhẹ máy.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduceMotion,
+    );
+    return () => subscription?.remove?.();
+  }, []);
   const { theme } = useTheme();
   const unreadMessages = state.messages.filter(
     (message) => message.authorId === "partner" && !message.readAt,
@@ -2872,6 +3032,7 @@ function LocalShell({
             playingRef={callPlayingRef}
             rtcInfo={rtcInfo}
             rtcLive={rtcLive}
+            reduced={reduceMotion}
             rtcAudio={rtcAudio}
             onUseLegacyAudio={onUseLegacyAudio}
             onToggleMic={() =>
@@ -3039,16 +3200,18 @@ class ErrorBoundary extends React.Component<
 }
 export default function App() {
   return (
-    <ErrorBoundary>
-      <SafeAreaProvider>
-        <SafeAreaView
-          style={{ flex: 1, backgroundColor: "#fff1f2" }}
-          edges={["top", "bottom"]}
-        >
-          <StatusBar style="dark" />
-          <Root />
-        </SafeAreaView>
-      </SafeAreaProvider>
-    </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
+        <SafeAreaProvider>
+          <SafeAreaView
+            style={{ flex: 1, backgroundColor: "#fff1f2" }}
+            edges={["top", "bottom"]}
+          >
+            <StatusBar style="dark" />
+            <Root />
+          </SafeAreaView>
+        </SafeAreaProvider>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }

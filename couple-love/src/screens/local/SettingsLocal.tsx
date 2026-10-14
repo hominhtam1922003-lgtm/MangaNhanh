@@ -751,8 +751,8 @@ export default function SettingsLocal({
         tôi biết máy đang dùng đường tiếng nào.
       </Note>
       <Note>
-        Mật Mã Yêu {Constants.expoConfig?.version ?? "1.16.0"} (chế độ trên máy,
-        bản dựng {Constants.expoConfig?.android?.versionCode ?? 18}) — ghi lại
+        Mật Mã Yêu {Constants.expoConfig?.version ?? "1.17.0"} (chế độ trên máy,
+        bản dựng {Constants.expoConfig?.android?.versionCode ?? 19}) — ghi lại
         số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục riêng
         của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ liệu, nên
         hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch, không phải

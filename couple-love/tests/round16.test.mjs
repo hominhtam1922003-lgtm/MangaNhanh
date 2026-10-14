@@ -468,7 +468,7 @@ test("Trái tim đập theo giọng nói: lấy mức tiếng từ track WebRTC"
   assert.match(screen, /size=\{68\}/, "nút mic to trong hình tròn");
 });
 
-test("Đổi tên app thành Mật Mã Yêu và gói mới 1.16.0 (bản dựng 18)", () => {
+test("Đổi tên app thành Mật Mã Yêu và gói mới (bản dựng tiếp theo)", () => {
   const config = read("app.config.js");
   assert.match(config, /name: "Mật Mã Yêu"/);
   assert.equal(

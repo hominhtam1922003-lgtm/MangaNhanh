@@ -251,15 +251,15 @@ test("Tắt màn hình vẫn gọi được: dịch vụ chạy nổi + chế đ
   assert.match(app, /onCallServiceHangup/, "nút Cúp máy kết thúc cuộc gọi");
 });
 
-test("Bản 1.16.0 (bản dựng 18) đã sẵn sàng", () => {
+test("Bản 1.17.0 (bản dựng 19) đã sẵn sàng", () => {
   const config = read("app.config.js");
   const pkg = JSON.parse(read("package.json"));
-  assert.equal(pkg.version, "1.16.0");
-  assert.equal(config.includes('version: "1.16.0"'), true);
-  assert.equal(config.includes("versionCode: 18"), true);
+  assert.equal(pkg.version, "1.17.0");
+  assert.equal(config.includes('version: "1.17.0"'), true);
+  assert.equal(config.includes("versionCode: 19"), true);
   assert.equal(config.includes('name: "Mật Mã Yêu"'), true, "đổi tên app");
   const settings = read("src/screens/local/SettingsLocal.tsx");
-  assert.match(settings, /1\.16\.0/, "màn hình Cài đặt dự phòng đúng bản mới");
+  assert.match(settings, /1\.17\.0/, "màn hình Cài đặt dự phòng đúng bản mới");
 });
 
 test("Lớp 1 dùng PeerJS: máy chủ chào hỏi + TURN miễn phí, không tài khoản", () => {
@@ -282,10 +282,14 @@ test("Lớp 1 dùng PeerJS: máy chủ chào hỏi + TURN miễn phí, không t�
     assert.equal(
       server.urls.every(
         (url) =>
-          url.includes("peerjs.com") || url.includes("openrelay.metered.ca"),
+          url.includes("peerjs.com") ||
+          url.includes("openrelay.metered.ca") ||
+          // Từ 1.17.0: máy chủ trung chuyển riêng của bạn (Metered gói
+          // "couple-love") đặt trước để ICE thử ngay, qua được cả 4G chặn P2P.
+          url.includes("couple-love.metered.live"),
       ),
       true,
-      "toàn máy chủ trung chuyển miễn phí của cộng đồng, không phải của ta",
+      "chỉ dùng máy chủ trung chuyển đã khai báo (cộng đồng + máy chủ riêng)",
     );
   }
   const urls = RTC_ICE_SERVERS.flatMap((server) =>

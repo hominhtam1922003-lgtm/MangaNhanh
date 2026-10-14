@@ -271,9 +271,9 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ## Hai Trái Tim 1.9.0 (bản mới nhất)
 
-**APK Android (cài trực tiếp, không cần ZIP):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.9.0-test-51bc943/HaiTraiTim-1.9.0.apk · dựng từ `51bc943` (lần build 38541252032).
+**APK Android (cài trực tiếp, không cần ZIP):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.9.0-test-51bc943/HaiTraiTim-1.9.0.apk · **57.931.650 byte** · SHA256 `bcbcc29a69407c65b7acfb17a2580bdfb18b2d1e89e4ef42788a586253ad0a11` · dựng từ `51bc943` (lần build 38541252032, đăng bằng workflow 38542781168). Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.9.0, bản dựng 10**.
 
-**iPhone (file .ipa chưa ký, phải tự ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.9.0-test-51bc943/HaiTraiTim-1.9.0-unsigned.ipa · dựng từ `51bc943` (lần build 38541251941). iPhone **không cài file trực tiếp như APK**: dùng Sideloadly/AltStore trên Windows với Apple ID miễn phí, app hết hạn sau 7 ngày và ký lại; muốn 1 năm không cần cắm cáp thì phải có Apple Developer 99 USD/năm.
+**iPhone (file .ipa chưa ký, phải tự ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.9.0-test-51bc943/HaiTraiTim-1.9.0-unsigned.ipa · **11.307.936 byte** · SHA256 `1a6ce4070292bbaee902a21dcaee324067407c599656dfbc10e32827a4433390` · dựng từ `51bc943` (lần build 38541251941, đăng bằng workflow 38542781178). iPhone **không cài file trực tiếp như APK**: dùng Sideloadly/AltStore trên Windows với Apple ID miễn phí, app hết hạn sau 7 ngày và ký lại; muốn 1 năm không cần cắm cáp thì phải có Apple Developer 99 USD/năm.
 
 Bản 1.9.0 sửa đúng 5 việc bạn nêu:
 

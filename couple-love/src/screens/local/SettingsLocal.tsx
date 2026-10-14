@@ -773,8 +773,7 @@ export default function SettingsLocal({
           account.partnerId ? (
             <>
               <Note>
-                Đã ghép nối với{" "}
-                {account.partnerName || account.partnerId}
+                Đã ghép nối với {account.partnerName || account.partnerId}
                 {account.partnerCode
                   ? ` (mã ${formatPairCode(account.partnerCode)})`
                   : ""}

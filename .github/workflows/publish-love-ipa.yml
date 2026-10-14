@@ -1,6 +1,6 @@
-# Nguồn IPA 1.12.0: run_id 38562494369 (commit 65aafef, artifact HaiTraiTim-iOS-unsigned-IPA).
-# Ghi chú: Release nháp hai-trai-tim-ios-v1.12.0-test-65aafef đã tạo sẵn ở máy,
-# runner chỉ tải artifact của run 38562494369 lên rồi mở công khai sau khi kiểm tra.
+# Nguồn IPA 1.13.0: run_id 38567292645 (commit cc33e5c, artifact HaiTraiTim-iOS-unsigned-IPA).
+# Ghi chú: Release nháp hai-trai-tim-ios-v1.13.0-test-cc33e5c đã tạo sẵn ở máy,
+# runner chỉ tải artifact của run 38567292645 lên rồi mở công khai sau khi kiểm tra.
 # Lưu ý: runner không tạo được Release (403) — luôn tạo Release nháp cục bộ trước rồi push file này để runner tải IPA lên.
 name: Đăng IPA Hai Trái Tim (iOS) tải trực tiếp
 
@@ -13,7 +13,7 @@ on:
       run_id:
         description: ID lần chạy "IPA Hai Trái Tim (iOS, chưa ký)" đã thành công
         required: true
-        default: '38562494369'
+        default: '38567292645'
         type: string
 
 permissions:
@@ -35,9 +35,9 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38562494369' }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38567292645' }}
       ARTIFACT_NAME: HaiTraiTim-iOS-unsigned-IPA
-      IPA_FILE: HaiTraiTim-1.12.0-unsigned.ipa
+      IPA_FILE: HaiTraiTim-1.13.0-unsigned.ipa
     steps:
       - name: Kiểm tra nguồn IPA đã build thành công
         id: verify
@@ -53,7 +53,7 @@ jobs:
           assert run['path'] == '.github/workflows/build-couple-ipa.yml', 'Sai workflow build iOS'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f"sha={run['head_sha']}\n")
-              output.write(f"tag=hai-trai-tim-ios-v1.12.0-test-{run['head_sha'][:7]}\n")
+              output.write(f"tag=hai-trai-tim-ios-v1.13.0-test-{run['head_sha'][:7]}\n")
           PY
       - name: Lấy IPA đã kiểm chứng qua REST API (không build lại)
         run: |
@@ -109,13 +109,15 @@ jobs:
             gh release upload "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --clobber --repo "$GITHUB_REPOSITORY"
           else
             cat > /tmp/ipa-notes.md <<EOF
-          Bản iOS **Hai Trái Tim 1.12.0** (file .ipa **chưa ký**), lấy nguyên vẹn từ lần build trên macOS của GitHub Actions.
+          Bản iOS **Hai Trái Tim 1.13.0** (file .ipa **chưa ký**), lấy nguyên vẹn từ lần build trên macOS của GitHub Actions.
 
-          Tải file **HaiTraiTim-1.12.0-unsigned.ipa** trong Assets. Gói \`vn.haitraitim.app\`.
+          Tải file **HaiTraiTim-1.13.0-unsigned.ipa** trong Assets. Gói \`vn.haitraitim.app\`.
+
+          Bản 1.13.0: nói chuyện trong cuộc gọi liền mạch hơn, một máy kết thúc là máy kia tự kết thúc, cầu tình yêu vẽ lại theo tranh gửi, bỏ tab Cảm xúc.
 
           iPhone **không cài file trực tiếp như APK**: ký lại bằng Sideloadly/AltStore với Apple ID miễn phí (hết hạn sau 7 ngày) hoặc Apple Developer 99 USD/năm để dùng TestFlight.
           EOF
-            gh release create "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.12.0 — IPA iOS (chưa ký)" --notes-file /tmp/ipa-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
+            gh release create "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.13.0 — IPA iOS (chưa ký)" --notes-file /tmp/ipa-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
           fi
           gh release view "$RELEASE_TAG" --json tagName,isDraft,assets --repo "$GITHUB_REPOSITORY" | tee /tmp/ipa-release.json
           echo "IPA tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$IPA_FILE" >> "$GITHUB_STEP_SUMMARY"

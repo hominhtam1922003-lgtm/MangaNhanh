@@ -59,30 +59,44 @@ jobs:
         run: |
           set -o pipefail
           WORKSPACE=$(ls -d ios/*.xcworkspace | head -1)
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" -json | python3 -c "import json,sys; data=json.load(sys.stdin); print(data['workspace']['schemes'][0])")
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" -json \
+            | python3 -c "import json,sys; schemes = json.load(sys.stdin)['workspace']['schemes']; print(next((s for s in schemes if 'Pod' not in s and 'EX' not in s), schemes[0]))")
           echo "Workspace: $WORKSPACE · Scheme: $SCHEME"
           xcodebuild \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphoneos \
-            -derivedDataPath ios/build \
+            -destination "generic/platform=iOS" \
+            -archivePath ios/build/HaiTraiTim.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_ENTITLEMENTS="" \
             EXPANDED_CODE_SIGN_IDENTITY="" \
-            build 2>&1 | tee ../ios-build.log | tail -40
+            archive 2>&1 | tee ../ios-build.log | tail -30
+          echo "--- Kết quả build ---"
+          find ios/build -maxdepth 5 -type d -name "*.app" -print || true
+          ls -la ios/build/HaiTraiTim.xcarchive/Products/Applications 2>/dev/null || true
       - name: Đóng gói .ipa chưa ký
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           exec > >(tee ../ipa-package.log) 2>&1
           VERSION=$(node -p "require('./app.config.js').expo.version")
           echo "Phiên bản: $VERSION"
-          find ios/build/Build/Products -maxdepth 2 -name "*.app" -print || true
-          APP=$(ls -d ios/build/Build/Products/Release-iphoneos/*.app | head -1)
+          APP=$(find ios/build -maxdepth 6 -type d -name "*.app" | head -1)
+          if [ -z "$APP" ]; then
+            APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -maxdepth 6 -type d -name "*.app" 2>/dev/null | head -1)
+          fi
+          if [ -z "$APP" ]; then
+            echo "Không tìm thấy .app. Cây thư mục sản phẩm:"
+            ls -la ios/build 2>/dev/null || true
+            ls -la ios/build/Build/Products 2>/dev/null || true
+            echo "40 dòng cuối nhật ký build:"
+            tail -40 ../ios-build.log 2>/dev/null || true
+            exit 1
+          fi
           echo "Ứng dụng: $APP"
-          test -d "$APP"
           rm -rf ios/Payload
           mkdir -p ios/Payload
           cp -R "$APP" ios/Payload/
@@ -91,7 +105,6 @@ jobs:
           cd ..
           ls -l "HaiTraiTim-$VERSION-unsigned.ipa"
           unzip -l "HaiTraiTim-$VERSION-unsigned.ipa" | head -12
-          # macOS không có sha256sum, dùng shasum -a 256 cho chắc.
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum "HaiTraiTim-$VERSION-unsigned.ipa"
           else

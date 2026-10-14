@@ -269,7 +269,26 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Mật Mã Yêu 1.16.0 (bản mới nhất) — nhắn tin kiểu Messenger/Zalo, sửa lỗi gửi ảnh, tim đập theo giọng nói
+## Mật Mã Yêu 1.17.0 (bản mới nhất) — gói tin nhắn đúng chuẩn, tim 3D đập theo giọng, TURN riêng cho 4G
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.17.0-test-068e170/MatMaYeu-1.17.0.apk · **78.566.174 byte** (kèm file kiểm tra `MatMaYeu-1.17.0.apk.sha256` trong Assets)
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.17.0-test-068e170/MatMaYeu-1.17.0-arm64.apk · **56.169.923 byte** (kèm file `MatMaYeu-1.17.0-arm64.sha256`)
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.17.0-test-82e33ac/MatMaYeu-1.17.0-unsigned.ipa · **17.134.185 byte** (kèm file `MatMaYeu-1.17.0-unsigned.ipa.sha256`)
+
+Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.17.0, bản dựng 19**. Dựng từ `068e170` (build `38596391427` cho APK; iOS dựng từ `82e33ac`, build `38598265419`). **Cài đè lên 1.16.0 được, không mất dữ liệu** (gói `vn.haitraitim.app`, slug và khóa ký giữ nguyên).
+
+Bản 1.17.0 làm đúng các việc bạn nêu:
+
+1. **Gói tin nhắn đúng chuẩn bạn đặt ra và tương thích hai chiều:** cảm xúc gửi `{type:"reaction", messageId, emotion}`, thu hồi gửi `{type:"unsend", messageId}` (xoá ở **cả hai** máy, để lại dòng “đã thu hồi”), đã xem gửi `{type:"read", lastMessageId}`, đang gõ gửi `{type:"typing", state:true}` (máy nhận tự tắt sau **3 giây**; bên gửi chỉ bắn một gói mỗi **1,2 giây**), đổi ảnh đại diện/tên gửi `{type:"profile"}`. App gửi kèm cả tên trường cũ (`chatReact`, `chatRecall`, `chatRead`) và máy 1.17 đọc được **cả hai** cách đặt tên, nên hai máy khác phiên bản vẫn nhắn tin được với nhau.
+2. **Đồng bộ ảnh đại diện tức thì:** vừa đổi ảnh ở máy A, app bắn ngay gói hồ sơ rồi gửi kèm **tệp ảnh (≤ 120 KB)**; máy B ghi tệp và `setState` giao diện ngay, không phải đợi gói dữ liệu định kỳ. Máy nào thiếu tệp thì tự `photoRequest` xin gửi lại.
+3. **Vuốt để trả lời bằng `react-native-gesture-handler` + `react-native-reanimated`** (đúng như bạn yêu cầu): cử chỉ chạy trên luồng UI, chỉ giành khi vuốt **ngang** quá 14 px nên cuộn dọc danh sách vẫn trơn; nhấn giữ vẫn mở bảng cảm xúc ❤️😂😮😢😡👍 với *Trả lời · Thu hồi · Lưu ảnh về máy · Xoá ở máy này*.
+4. **Trái tim 3D (WebGL) trong cuộc gọi đập theo giọng nói:** mức tiếng lấy từ track WebRTC mỗi **0,5 giây** (`audioLevel` thật, máy ảo không báo thì ước lượng theo byte tiếng vào/ra), làm mượt rồi đưa thẳng vào `scale` của trái tim 3D — nói to tim đập mạnh hơn (tối đa **+30%**). Máy yếu hoặc bật “giảm chuyển động” thì app tự dùng tim vẽ sẵn cho nhẹ máy. Nút **Cúp máy đỏ 80 px**, **tắt mic trắng/xám 68 px**, thu nhỏ 56 px ở nửa dưới màn hình.
+5. **Sửa rớt mạng 4G:** thêm **máy chủ trung chuyển riêng của bạn** (`couple-love.metered.live` cổng 80, 443 và TCP 443) đặt trước các bộ công cộng, giữ sẵn **6 địa chỉ mạng**, và **tự nối lại ICE (ICE restart)** ngay trong cuộc gọi khi 4G đổi trạm hoặc Wi-Fi ↔ 4G; chỉ khi vẫn không lên mới lùi về đường tiếng qua kênh ghép nối như cũ. Thang dự phòng giữ nguyên: PeerJS (2,5 giây) → WebRTC thuần → tiếng qua kênh ghép nối.
+6. **Chat nhẹ hơn:** thanh nhập liệu viên thuốc `[+]·[ô chữ]·[mic⇄Gửi]` nằm gọn trên bàn phím, mỗi dòng tin được **ghi nhớ (memo)** nên gõ chữ không vẽ lại cả danh sách, `FlatList` chỉ vẽ 10–12 dòng mỗi lượt (`windowSize` 9, `removeClippedSubviews`). Lần này **không thêm FlashList**: đó là thư viện native mới mà chưa thử được trên máy bạn, còn `FlatList` đã tối ưu thì an toàn hơn; khi nào bạn muốn thử FlashList tôi đổi.
+
+**120 bài kiểm thử đều xanh** (thêm 9 bài cho vòng này), TypeScript sạch, Prettier sạch, `expo export` ra bundle chứa đủ TURN riêng / `restartIce` / gesture-handler, `expo prebuild` ra `versionName 1.17.0` + `versionCode 19`, manifest có `configChanges` cho `MainActivity` (chống lỗi hộp chọn ảnh), dịch vụ chạy nổi `microphone|dataSync`, tên hiển thị iOS **Mật Mã Yêu**. **Chưa thử trên LDPlayer của bạn nên chưa dám nói là đã hết lỗi** — bạn thử: đổi ảnh đại diện ở máy B xem máy A có đổi ngay, vuốt một tin để trả lời, giữ vào tin để thả tim, thu hồi một tin xem máy kia có mất, rồi gọi thử khi máy đang dùng 4G xem tim có đập theo giọng và có rớt không.
+
+## Mật Mã Yêu 1.16.0 (bản trước) — nhắn tin kiểu Messenger/Zalo, sửa lỗi gửi ảnh, tim đập theo giọng nói
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.16.0-test-270c362/HaiTraiTim-1.16.0.apk · **77.974.318 byte** (kèm file kiểm tra `HaiTraiTim-1.16.0.apk.sha256` trong Assets)
 **APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.16.0-test-270c362/HaiTraiTim-1.16.0-arm64.apk · **55.660.069 byte** (kèm file `HaiTraiTim-1.16.0-arm64.sha256`)

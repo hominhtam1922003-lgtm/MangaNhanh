@@ -163,8 +163,8 @@ jobs:
         with:
           name: MatMaYeu-iOS-unsigned-IPA
           path: |
-            ${{ env.PROJECT_DIR }}/HaiTraiTim-*-unsigned.ipa
-            ${{ env.PROJECT_DIR }}/HaiTraiTim-*-unsigned.ipa.sha256
+            ${{ env.PROJECT_DIR }}/MatMaYeu-*-unsigned.ipa
+            ${{ env.PROJECT_DIR }}/MatMaYeu-*-unsigned.ipa.sha256
           if-no-files-found: error
           retention-days: 14
       - name: Đính kèm lỗi build iOS vào GitHub Checks

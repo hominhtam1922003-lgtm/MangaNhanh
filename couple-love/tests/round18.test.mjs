@@ -15,7 +15,7 @@ import {
   normalizePairCode,
   pairGate,
 } from "../src/logic/pairing.mjs";
-import { roomFromPair, roomFromQr } from "../src/services/relayProtocol.mjs";
+import { roomFromPair } from "../src/services/relayProtocol.mjs";
 import {
   ACCOUNT_PROJECT_KEY,
   ACCOUNT_PROJECT_URL,
@@ -103,17 +103,28 @@ test("phòng kết nối suy ra từ khoá ghép nối: cố định, riêng bi�
   assert.throws(() => roomFromPair(""), /khoá ghép nối/i);
 });
 
-test("mã 6 SỐ ngẫu nhiên không còn dùng để ghép nối", () => {
-  // Mã số vẫn còn trong giao thức cho tính năng quét QR cũ, nhưng màn hình ghép
-  // nối mới chỉ nhận mã chữ-số cố định gắn với tài khoản.
+test("mã 6 SỐ ngẫu nhiên đã bị xoá hẳn khỏi giao thức", () => {
+  // Màn hình ghép nối chỉ nhận mã cố định chữ–số gắn với tài khoản.
   assert.equal(isValidPairCode("123456"), false);
   assert.equal(
     normalizePairCode("123456"),
     "23456",
     "số bị bỏ vì ngoài bảng chữ",
   );
-  const qr = roomFromQr("HTT2:phong.key");
-  assert.equal(qr.mode, "qr");
+  // Dọn rác 1.18.0: giao thức không còn hàm sinh/đọc phòng theo mã 6 số hay QR.
+  const protocol = read("src/services/relayProtocol.mjs");
+  for (const gone of [
+    "roomFromCode",
+    "roomFromQr",
+    "roomToQr",
+    "createRoom",
+    "makeCode",
+  ])
+    assert.equal(
+      protocol.includes(gone),
+      false,
+      `relayProtocol.mjs không còn ${gone}`,
+    );
 });
 
 test("dữ liệu ghép nối: đặt hồ sơ người thương theo tài khoản, xoá là sạch", () => {
@@ -148,9 +159,14 @@ test("dữ liệu ghép nối: đặt hồ sơ người thương theo tài kho�
 test("App.tsx: không còn tự dựng phòng từ bộ nhớ máy (nguồn của kết nối ảo)", () => {
   assert.match(app, /roomFromPair\(account\.pairSecret\)/);
   assert.equal(
-    /roomFromState\(state\)/.test(app),
+    /roomFromState/.test(app),
     false,
     "phải bỏ hẳn roomFromState(state) trong luồng kết nối",
+  );
+  assert.equal(
+    /roomFromState/.test(read("src/services/relay.ts")),
+    false,
+    "hàm dựng phòng từ bộ nhớ máy đã bị xoá hẳn (nguồn của kết nối ảo)",
   );
   assert.match(
     app,

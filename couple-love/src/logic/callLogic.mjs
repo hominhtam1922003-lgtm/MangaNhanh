@@ -6,7 +6,6 @@ export const CALL_RING_TIMEOUT_MS = 45 * 1000;
  *  thúc — máy A tắt thì máy B cũng tắt theo, không còn cảnh treo cuộc gọi. */
 export const CALL_ALIVE_MS = 1500;
 export const CALL_SILENT_END_MS = 5000;
-const PHASES = ["ringing", "active", "ended"];
 export function newCall({ id, role, name, at = Date.now() }) {
   if (!id) throw new Error("Cuộc gọi thiếu mã.");
   return {
@@ -93,13 +92,3 @@ export function callClock(seconds) {
   const rest = total % 60;
   return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
-export function callStatusText(call, now = Date.now()) {
-  if (!call) return "";
-  if (call.phase === "ringing")
-    return call.role === "caller" ? "Đang đổ chuông…" : "Đang gọi cho bạn";
-  if (call.phase === "active")
-    return `Đang gọi · ${callClock(callSeconds(call, now))}`;
-  return call.reason || "Cuộc gọi đã kết thúc";
-}
-export const isCallPhase = (call, phase) =>
-  Boolean(call && PHASES.includes(phase) && call.phase === phase);

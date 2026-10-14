@@ -1,4 +1,6 @@
 import { test } from "node:test";
+
+import { testRoom } from "./helpers/rooms.mjs";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { Aedes } from "aedes";
@@ -7,7 +9,6 @@ import { emptyState, reduce } from "../src/logic/localState.mjs";
 import {
   buildRelayPayload,
   RelayClient,
-  roomFromCode,
 } from "../src/services/relayProtocol.mjs";
 import {
   PhotoAssembler,
@@ -185,7 +186,7 @@ test("Broker MQTT thật: nhắn tin và tin thoại sang máy kia, xin gửi l�
   globalThis.WebSocket = WebSocket;
   const clients = [];
   try {
-    const room = roomFromCode("246810");
+    const room = testRoom("246810");
     let received = null;
     let audio = null;
     let asked = null;

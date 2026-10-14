@@ -17,7 +17,7 @@
 import "react-native-url-polyfill/auto";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createClient, Session, User } from "@supabase/supabase-js";
+import { createClient, Session } from "@supabase/supabase-js";
 import * as WebBrowser from "expo-web-browser";
 import { AppState, Platform } from "react-native";
 
@@ -172,12 +172,6 @@ export async function getSavedSession(): Promise<Session | null> {
   } catch {
     return null;
   }
-}
-
-/** Người dùng hiện tại (null nếu chưa đăng nhập). */
-export async function getCurrentUser(): Promise<User | null> {
-  const session = await getSavedSession();
-  return session?.user ?? null;
 }
 
 /** Đăng xuất và xoá phiên trong AsyncStorage. */

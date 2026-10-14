@@ -21,17 +21,6 @@ export function isQuietTime(when) {
   return hour >= QUIET_FROM_HOUR || hour < QUIET_TO_HOUR;
 }
 /** Thời điểm tin nhắn gần nhất của mình và của người thương. */
-export function lastMessageTimes(messages) {
-  let mine = 0;
-  let theirs = 0;
-  for (const message of Array.isArray(messages) ? messages : []) {
-    const at = Date.parse(message?.createdAt ?? "") || 0;
-    if (!at) continue;
-    if (message.authorId === "partner") theirs = Math.max(theirs, at);
-    else if (message.authorId === "me") mine = Math.max(mine, at);
-  }
-  return { mine, theirs };
-}
 /** Tin cuối cùng của người thương mà mình chưa trả lời (null nếu mình đã trả lời). */
 export function unansweredMessage(messages) {
   const list = (Array.isArray(messages) ? messages : [])

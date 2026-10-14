@@ -4,7 +4,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Snapshot } from "../services/sync";
 import { Card, Title, Note, Input, Button, confirm } from "../components/UI";
-import { cycleForecast, dateOnly, addDays } from "../logic/time.mjs";
+import { cycleForecast, dateOnly } from "../logic/time.mjs";
 import { explain } from "../services/backend";
 const pretty = (d: string) => d.split("-").reverse().join("/");
 function Calendar({

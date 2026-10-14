@@ -40,11 +40,3 @@ export declare function callSeconds(
   now?: number,
 ): number;
 export declare function callClock(seconds: number): string;
-export declare function callStatusText(
-  call: CallInfo | null,
-  now?: number,
-): string;
-export declare function isCallPhase(
-  call: CallInfo | null,
-  phase: "ringing" | "active" | "ended",
-): boolean;

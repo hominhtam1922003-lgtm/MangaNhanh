@@ -3,15 +3,10 @@ import {
   BROKERS,
   RelayClient,
   buildRelayPayload,
-  createRoom,
   installRandomBytes,
-  makeCode,
   open,
   randomSourceReady,
-  roomFromCode,
   roomFromPair,
-  roomFromQr,
-  roomToQr,
   seal,
 } from "./relayProtocol.mjs";
 import type { State } from "./localdb";
@@ -22,23 +17,7 @@ export type Room = {
   code?: string | null;
   role?: string | null;
 };
-export type RelayStatus = {
-  state: string;
-  broker: string | null;
-  partnerOnline: boolean;
-  partnerName?: string | null;
-  readyCount?: number;
-  summary?: { host: string; state: string }[];
-};
-export {
-  BROKERS,
-  createRoom,
-  makeCode,
-  roomFromCode,
-  roomFromPair,
-  roomFromQr,
-  roomToQr,
-};
+export { BROKERS, roomFromPair };
 // React Native không có crypto.getRandomValues, nên lấy nguồn ngẫu nhiên an toàn
 // từ expo-crypto. Nếu việc này lỗi thì KHÔNG ném ra ngoài (tránh làm văng app),
 // chỉ ghi lại để màn hình Ghép nối báo cho người dùng biết.
@@ -53,20 +32,6 @@ try {
 }
 export function randomBytesReady() {
   return randomProblem === "" && randomSourceReady();
-}
-export function randomBytesProblem() {
-  return randomProblem;
-}
-export function roomFromState(state: State): Room | null {
-  const relay = (state as State & { relay?: Room | null }).relay;
-  if (!relay?.id || !relay?.key) return null;
-  return {
-    id: relay.id,
-    key: relay.key,
-    mode: relay.mode ?? "qr",
-    code: (relay as { code?: string | null }).code ?? null,
-    role: (relay as { role?: string | null }).role ?? "host",
-  };
 }
 export function relayPayloadFor(
   state: State,
@@ -89,7 +54,9 @@ export function relaySelfTest() {
       : randomProblem || "máy chưa cấp được nguồn ngẫu nhiên",
   });
   try {
-    const room = createRoom();
+    // Phòng tạm để thử mã hóa/giải mã: suy ra từ một khoá cố định ngay trong hàm
+    // (không cần sinh phòng ngẫu nhiên nữa).
+    const room = roomFromPair("tu-kiem-tra-ma-hoa-cua-mat-ma-yeu-1");
     const payload = { hello: "xin chào 💞 nhớ em" };
     const back = open(room, seal(room, payload));
     const same = JSON.stringify(back) === JSON.stringify(payload);

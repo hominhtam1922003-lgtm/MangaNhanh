@@ -23,16 +23,11 @@ import { StatusBar } from "expo-status-bar";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
-import { SupabaseClient, Session } from "@supabase/supabase-js";
-import {
-  Config,
-  readConfig,
-  makeBackend,
-  explain,
-} from "./src/services/backend";
+import { readConfig } from "./src/services/backend";
 import { secureStorage } from "./src/services/storage";
-import { Snapshot, SyncService, emptySnapshot } from "./src/services/sync";
-import { Setup, Login } from "./src/screens/Setup";
+import CloudApp from "./src/screens/CloudApp";
+import ModeChooser from "./src/screens/ModeChooser";
+import LockScreen from "./src/components/LockScreen";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { emptyState, reduce } from "./src/logic/localState.mjs";
 import {
@@ -86,7 +81,6 @@ import type { CallInfo } from "./src/logic/callLogic.mjs";
 import {
   CALL_CLOSE_MS,
   CALL_FRAME_MS,
-  CALL_PREBUFFER,
   callLogText,
   frameUsable,
   newAudioQueue,
@@ -103,7 +97,6 @@ import {
 // Giữ kết nối khi app ở nền / tắt màn hình để tin nhắn vẫn nổi thông báo.
 import {
   onRelayServiceStop,
-  relayServiceSupport,
   startRelayService,
   stopRelayService,
 } from "./src/services/relayService";
@@ -152,11 +145,6 @@ import DiaryLocal from "./src/screens/local/DiaryLocal";
 import PairLocal from "./src/screens/local/PairLocal";
 import PairGate from "./src/screens/local/PairGate";
 import SettingsLocal from "./src/screens/local/SettingsLocal";
-import Home from "./src/screens/Home";
-import Cycle from "./src/screens/Cycle";
-import Diary from "./src/screens/Diary";
-import Mood from "./src/screens/Mood";
-import Settings from "./src/screens/Settings";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   Button,
@@ -173,330 +161,6 @@ const localTabs = [
   { id: "diary", label: "Nhật ký", icon: "▤" },
   { id: "settings", label: "Cài đặt", icon: "⚙" },
 ];
-const tabs = [
-  { id: "home", label: "Bên nhau", icon: "♡" },
-  { id: "cycle", label: "Chăm sóc", icon: "✿" },
-  { id: "diary", label: "Nhật ký", icon: "▤" },
-  { id: "mood", label: "Cảm xúc", icon: "☺" },
-  { id: "settings", label: "Cài đặt", icon: "⚙" },
-];
-function CloudApp({ onSwitchMode }: { onSwitchMode: () => void }) {
-  const [config, setConfig] = useState<Config | null>(null),
-    [db, setDb] = useState<SupabaseClient | null>(null),
-    [session, setSession] = useState<Session | null>(null),
-    [loading, setLoading] = useState(true),
-    [data, setData] = useState<Snapshot>(emptySnapshot),
-    [error, setError] = useState(""),
-    [tab, setTab] = useState("home"),
-    [alertPage, setAlertPage] = useState(false),
-    [lockEnabled, setLockEnabled] = useState(false),
-    [locked, setLocked] = useState(true),
-    [unlocking, setUnlocking] = useState(false);
-  const sync = useRef<SyncService | null>(null);
-  const authenticating = useRef(false);
-  useEffect(() => {
-    let alive = true;
-    Promise.all([readConfig(), secureStorage.getItem("biometric-lock")])
-      .then(([c, l]) => {
-        if (alive) {
-          setConfig(c);
-          setLockEnabled(l === "yes");
-          setLocked(l === "yes");
-        }
-      })
-      .catch(() => setError("Không đọc được cấu hình lưu trên máy."))
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  useEffect(() => {
-    if (!config) {
-      setDb(null);
-      setSession(null);
-      return;
-    }
-    const client = makeBackend(config);
-    setDb(client);
-    let alive = true;
-    void client.auth.getSession().then(({ data, error }) => {
-      if (alive) {
-        setSession(data.session);
-        if (error) setError(explain(error));
-      }
-    });
-    const { data: listener } = client.auth.onAuthStateChange((_event, s) => {
-      if (alive) setSession(s);
-    });
-    return () => {
-      alive = false;
-      listener.subscription.unsubscribe();
-      client.auth.stopAutoRefresh();
-      void client.removeAllChannels();
-    };
-  }, [config]);
-  useEffect(() => {
-    setData(emptySnapshot);
-    setError("");
-    if (!db || !session) return;
-    const service = new SyncService(
-      db,
-      session.user.id,
-      (s) => {
-        setData(s);
-        setError("");
-      },
-      (e) => {
-        setData((s) => ({ ...s, online: false }));
-        setError(explain(e));
-      },
-    );
-    sync.current = service;
-    service.start();
-    return () => {
-      service.stop();
-      sync.current = null;
-    };
-  }, [db, session?.user.id]);
-  useEffect(() => {
-    if (!db) return;
-    const change = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        db.auth.startAutoRefresh();
-        void sync.current?.load();
-      } else {
-        db.auth.stopAutoRefresh();
-        if (lockEnabled && (state === "background" || !authenticating.current))
-          setLocked(true);
-      }
-    });
-    if (AppState.currentState === "active") db.auth.startAutoRefresh();
-    return () => change.remove();
-  }, [db, lockEnabled]);
-  useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener(() => {
-      setAlertPage(true);
-      void sync.current?.load();
-    });
-    void Notifications.getLastNotificationResponseAsync().then((r) => {
-      if (r) setAlertPage(true);
-    });
-    return () => sub.remove();
-  }, []);
-  async function authenticate() {
-    if (authenticating.current) return false;
-    authenticating.current = true;
-    setUnlocking(true);
-    try {
-      const r = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Mở Mật Mã Yêu",
-        cancelLabel: "Để sau",
-        disableDeviceFallback: true,
-        biometricsSecurityLevel: "strong",
-        fallbackLabel: "",
-      });
-      return r.success && AppState.currentState === "active";
-    } finally {
-      authenticating.current = false;
-      setUnlocking(false);
-    }
-  }
-  async function toggleLock(value: boolean) {
-    if (
-      value &&
-      (!(await LocalAuthentication.hasHardwareAsync()) ||
-        !(await LocalAuthentication.isEnrolledAsync()))
-    )
-      throw new Error("Máy cần hỗ trợ và đã đăng ký Face ID hoặc vân tay.");
-    if (!(await authenticate()))
-      throw new Error("Chưa xác thực sinh trắc học.");
-    await secureStorage.setItem("biometric-lock", value ? "yes" : "no");
-    setLockEnabled(value);
-    setLocked(false);
-  }
-  const refresh = () => void sync.current?.load();
-  if (loading)
-    return (
-      <View className="flex-1 bg-pink-50 items-center justify-center">
-        <ActivityIndicator color="#e64980" />
-        <Text className="text-love mt-4">Đang mở góc yêu thương…</Text>
-      </View>
-    );
-  if (lockEnabled && locked)
-    return (
-      <View className="flex-1 bg-pink-50 justify-center px-8">
-        <Text className="text-7xl text-center mb-7">🔐</Text>
-        <Title>Không gian riêng của bạn</Title>
-        <Note>
-          Xác thực Face ID hoặc vân tay để xem dữ liệu. Nếu cảm biến không hoạt
-          động, hãy khôi phục sinh trắc học trong cài đặt hệ thống.
-        </Note>
-        <Button
-          label="Mở bằng sinh trắc học"
-          busy={unlocking}
-          onPress={() =>
-            void authenticate()
-              .then((ok) => {
-                if (ok) setLocked(false);
-                else
-                  Alert.alert(
-                    "Chưa mở khóa",
-                    "Xác thực chưa thành công. Bạn có thể thử lại.",
-                  );
-              })
-              .catch(() =>
-                Alert.alert(
-                  "Chưa mở khóa",
-                  "Không dùng được sinh trắc học lúc này.",
-                ),
-              )
-          }
-        />
-      </View>
-    );
-  if (!config) return <Setup onReady={setConfig} />;
-  if (!db) return <ActivityIndicator color="#e64980" />;
-  if (!session)
-    return (
-      <Login
-        db={db}
-        onReset={() =>
-          void secureStorage
-            .removeItem("backend-config")
-            .then(() => setConfig(null))
-        }
-      />
-    );
-  const props = { db, data, uid: session.user.id, refresh };
-  const unread = data.alerts.filter((a) => !a.read_at).length;
-  return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-pink-50"
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <View className="flex-row px-5 py-4 items-center justify-between">
-        <View>
-          <Text className="text-xl font-bold text-ink">
-            Mật Mã Yêu <Text className="text-love">♡</Text>
-          </Text>
-          <Text className="text-xs text-stone-500 mt-1">
-            {data.online
-              ? "Đã kết nối không gian của hai bạn"
-              : "Đang nối lại máy chủ…"}
-          </Text>
-        </View>
-        <Pressable
-          accessibilityLabel="Lời nhắc"
-          onPress={() => setAlertPage(!alertPage)}
-          className="px-3 py-2 rounded-full bg-white border border-pink-100"
-        >
-          <Text className="text-love">
-            {alertPage ? "Đóng" : "Lời nhắc"}
-            {unread ? " · " + unread : ""}
-          </Text>
-        </Pressable>
-      </View>
-      {error && (
-        <View className="mx-4 mb-2 p-3 rounded-xl bg-amber-50">
-          <Text className="text-xs text-amber-900">{error}</Text>
-          <Pressable onPress={refresh}>
-            <Text className="text-sm text-love mt-1">Thử đồng bộ lại</Text>
-          </Pressable>
-        </View>
-      )}
-      <ScrollView
-        key={alertPage ? "alerts" : tab}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ padding: 18, paddingBottom: 32 }}
-      >
-        {alertPage ? (
-          <>
-            <Title>Lời nhắc yêu thương</Title>
-            {data.alerts.length === 0 && (
-              <Card>
-                <Note>
-                  Chưa có lời nhắc. Các lời nhắc được lưu cả khi chưa bật thông
-                  báo đẩy.
-                </Note>
-              </Card>
-            )}
-            {data.alerts.map((a) => (
-              <Card key={a.id}>
-                <Title small>{a.title}</Title>
-                <Note>{a.body}</Note>
-                <Text className="text-xs text-stone-400 mt-2">
-                  {new Date(a.created_at).toLocaleString("vi-VN")}
-                </Text>
-                {!a.read_at && (
-                  <Button
-                    label="Đã đọc"
-                    secondary
-                    onPress={() =>
-                      void db
-                        .from("alerts")
-                        .update({ read_at: new Date().toISOString() })
-                        .eq("id", a.id)
-                        .then((r) => {
-                          if (r.error)
-                            Alert.alert("Chưa cập nhật", explain(r.error));
-                          else refresh();
-                        })
-                    }
-                  />
-                )}
-              </Card>
-            ))}
-          </>
-        ) : tab === "home" ? (
-          <Home {...props} />
-        ) : tab === "cycle" ? (
-          <Cycle {...props} />
-        ) : tab === "diary" ? (
-          <Diary {...props} />
-        ) : tab === "mood" ? (
-          <Mood {...props} />
-        ) : (
-          <Settings
-            {...props}
-            user={session.user}
-            config={config}
-            locked={lockEnabled}
-            onSwitchMode={onSwitchMode}
-            onToggleLock={toggleLock}
-          />
-        )}
-      </ScrollView>
-      <View className="flex-row bg-white border-t border-pink-100 pt-2 pb-3">
-        {tabs.map((t) => (
-          <Pressable
-            key={t.id}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: tab === t.id && !alertPage }}
-            accessibilityLabel={t.label}
-            onPress={() => {
-              setTab(t.id);
-              setAlertPage(false);
-            }}
-            className="flex-1 items-center py-2"
-          >
-            <Text
-              className={`text-2xl ${tab === t.id ? "text-love" : "text-stone-400"}`}
-            >
-              {t.icon}
-            </Text>
-            <Text
-              className={`text-xs mt-1 ${tab === t.id ? "text-love font-bold" : "text-stone-500"}`}
-            >
-              {t.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </KeyboardAvoidingView>
-  );
-}
 function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   const [state, setState] = useState<State | null>(null);
   const [error, setError] = useState("");
@@ -655,8 +319,6 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       return null;
     }
   })();
-  // Nhận biết máy kia vừa ngắt kết nối: khoá ghép nối đổi là phải vào lại phòng mới.
-  const lastRoomKeyRef = useRef("");
   const pairRoomKey = relayRoom ? `${relayRoom.id}|${relayRoom.key}` : "";
   // Bắt mọi lỗi JavaScript: ghi lại để hiển thị trong app thay vì văng im lặng.
   useEffect(() => {
@@ -2901,6 +2563,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         onUnpair={pairActions.onUnpair}
         onSignOutAccount={pairActions.onSignOut}
         call={call}
+        // Chỉ để màn hình gọi vẽ lại mỗi giây khi đang gọi (không đọc giá trị).
         callTick={callTick}
         onStartCall={startCall}
         onPickRingtone={pickRingtone}
@@ -2932,28 +2595,6 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         }
       />
     </ThemeProvider>
-  );
-}
-function LockScreen({
-  unlocking,
-  onUnlock,
-}: {
-  unlocking: boolean;
-  onUnlock: () => void;
-}) {
-  const { theme } = useTheme();
-  return (
-    <View className="flex-1 justify-center px-8">
-      <LinearGradient colors={theme.bg} style={StyleSheet.absoluteFill} />
-      <Text className="text-7xl text-center mb-7">🔐</Text>
-      <Title>Không gian riêng của bạn</Title>
-      <Note>Xác thực Face ID hoặc vân tay để xem dữ liệu trên máy này.</Note>
-      <Button
-        label="Mở bằng sinh trắc học"
-        busy={unlocking}
-        onPress={onUnlock}
-      />
-    </View>
   );
 }
 function LocalShell({
@@ -3053,6 +2694,7 @@ function LocalShell({
   notifyState: "unknown" | "granted" | "denied";
   onEnableNotifications: () => void;
   call: CallInfo | null;
+  /** Nhịp 1 giây: chỉ để màn hình gọi vẽ lại, giá trị không được đọc. */
   callTick: number;
   callQueueRef: React.MutableRefObject<AudioFrame[]>;
   callPlayingRef: React.MutableRefObject<boolean>;
@@ -3458,53 +3100,6 @@ function LocalShell({
         </View>
       </KeyboardAvoidingView>
     </View>
-  );
-}
-function ModeChooser({
-  onPick,
-}: {
-  onPick: (mode: "local" | "cloud") => void;
-}) {
-  return (
-    <ScrollView
-      className="flex-1 bg-pink-50"
-      contentContainerStyle={{ padding: 24, paddingTop: 60 }}
-    >
-      <Text className="text-5xl mb-6">💕</Text>
-      <Title>Mật Mã Yêu</Title>
-      <Note>
-        Một góc riêng để hai bạn giữ những ngày yêu thương. Chọn cách chạy phù
-        hợp — có thể đổi lại trong Cài đặt.
-      </Note>
-      <View className="h-6" />
-      <Card>
-        <Title small>Trên máy này · không cần máy chủ</Title>
-        <Note>
-          Đếm ngày yêu, trái tim 3D, chu kỳ, nhật ký, cảm xúc và lời nhắc đều
-          chạy trên máy. Hai bạn nối nhau bằng mã QR hoặc tệp dữ liệu. Không cần
-          tài khoản, không cần Internet, nhưng không có cập nhật tức thời giữa
-          hai máy và không nhắc hộ được người thương.
-        </Note>
-        <Button label="Dùng trên máy này" onPress={() => onPick("local")} />
-      </Card>
-      <Card>
-        <Title small>Đồng bộ hai máy · cần dự án Supabase</Title>
-        <Note>
-          Dữ liệu cập nhật tức thời giữa Android và iPhone và có thể nhắc hộ
-          người thương, nhưng bạn phải tự tạo một dự án Supabase miễn phí rồi
-          nhập URL và khóa công khai.
-        </Note>
-        <Button
-          label="Dùng chế độ đồng bộ"
-          secondary
-          onPress={() => onPick("cloud")}
-        />
-      </Card>
-      <Note>
-        Tôi không thể tạo tài khoản hay máy chủ thay bạn vì việc đó cần email
-        của bạn. Chế độ trên máy là cách chạy đầy đủ mà không cần đăng ký gì.
-      </Note>
-    </ScrollView>
   );
 }
 function Root() {

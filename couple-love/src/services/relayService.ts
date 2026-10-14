@@ -86,10 +86,6 @@ export async function stopRelayService() {
   } catch {}
 }
 
-export function relayServiceNotificationId() {
-  return NOTIFICATION;
-}
-
 /** Người dùng bấm nút "Tắt" trên thông báo giữ kết nối → app tắt công tắc. */
 export function onRelayServiceStop(handler: () => void) {
   onNotifeeAction(({ actionId }) => {

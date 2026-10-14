@@ -110,15 +110,23 @@ test("Vuốt để trả lời dùng react-native-gesture-handler + reanimated",
   const pkg = JSON.parse(read("package.json"));
   assert.equal(pkg.dependencies["react-native-gesture-handler"], "~2.28.0");
   assert.equal(pkg.dependencies["react-native-reanimated"], "~4.1.1");
+  // Từ bản dọn dẹp 1.18.0, phần cử chỉ vuốt nằm trong components/SwipeRow.tsx
+  // (ChatLocal chỉ còn dùng lại) — kiểm tra đúng tệp đang chạy.
+  const swipe = read("src/components/SwipeRow.tsx");
+  assert.match(swipe, /from "react-native-gesture-handler"/);
+  assert.match(swipe, /from "react-native-reanimated"/);
+  assert.match(swipe, /Gesture\.Pan\(\)/);
+  assert.match(swipe, /GestureDetector/);
+  assert.match(swipe, /useSharedValue\(0\)/);
+  assert.match(swipe, /useAnimatedStyle/);
+  assert.match(swipe, /activeOffsetX\(14\)/, "chỉ giành cử chỉ khi vuốt ngang");
+  assert.match(swipe, /REPLY_SWIPE_PX/);
   const chat = read("src/screens/local/ChatLocal.tsx");
-  assert.match(chat, /from "react-native-gesture-handler"/);
-  assert.match(chat, /from "react-native-reanimated"/);
-  assert.match(chat, /Gesture\.Pan\(\)/);
-  assert.match(chat, /GestureDetector/);
-  assert.match(chat, /useSharedValue\(0\)/);
-  assert.match(chat, /useAnimatedStyle/);
-  assert.match(chat, /activeOffsetX\(14\)/, "chỉ giành cử chỉ khi vuốt ngang");
-  assert.match(chat, /REPLY_SWIPE_PX/);
+  assert.match(
+    chat,
+    /from "\.\.\/\.\.\/components\/SwipeRow"/,
+    "ChatLocal dùng lại SwipeRow",
+  );
   const app = read("App.tsx");
   assert.match(app, /import "react-native-gesture-handler";/);
   assert.match(app, /<GestureHandlerRootView style=\{\{ flex: 1 \}\}>/);

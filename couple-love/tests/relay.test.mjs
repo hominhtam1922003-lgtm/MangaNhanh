@@ -1,11 +1,12 @@
 import { test } from "node:test";
+
+import { testRoom } from "./helpers/rooms.mjs";
 import assert from "node:assert/strict";
 import nacl from "tweetnacl";
 import {
   BROKERS,
   RelayClient,
   buildRelayPayload,
-  createRoom,
   decodePackets,
   encodeConnect,
   encodeDisconnect,
@@ -14,12 +15,9 @@ import {
   encodeSubscribe,
   fromBase64Url,
   installRandomBytes,
-  makeCode,
   open,
   randomSourceReady,
-  roomFromCode,
-  roomFromQr,
-  roomToQr,
+  roomFromPair,
   seal,
   topicFor,
   toBase64Url,
@@ -42,44 +40,39 @@ const stateWith = (nickname, extra = []) => {
   return state;
 };
 test("Kết nối tức thời: mã hóa đầu-cuối, sai khóa thì không đọc được", () => {
-  const room = createRoom();
+  const room = testRoom("phong-a");
   assert.equal(fromBase64Url(room.key).length, 32);
   assert.equal(fromBase64Url(room.id).length, 16);
   const sealed = seal(room, { kind: "state", name: "Minh", payload: { a: 1 } });
   assert.equal(open(room, sealed).name, "Minh");
-  assert.throws(() => open(createRoom(), sealed), /giải mã/);
+  assert.throws(() => open(testRoom("phong-b"), sealed), /giải mã/);
   const tampered =
     sealed.slice(0, 10) + (sealed[10] === "A" ? "B" : "A") + sealed.slice(11);
   assert.throws(() => open(room, tampered));
   assert.equal(toBase64Url(fromBase64Url(sealed)), sealed);
 });
-test("Kết nối tức thời: mã 6 số là mật khẩu phòng, hai máy vào đúng một phòng", () => {
-  const code = "482913";
-  const a = roomFromCode(code);
-  const b = roomFromQr(code);
-  assert.equal(a.mode, "code");
-  assert.equal(a.code, code);
-  assert.equal(
-    topicFor(b),
-    topicFor(a),
-    "nhập đúng 6 số là vào đúng phòng của nhau",
-  );
-  assert.deepEqual(b, a);
-  assert.notEqual(roomFromCode("111111").id, roomFromCode("222222").id);
-  assert.equal(makeCode().length, 6);
-  assert.match(makeCode(), /^\d{6}$/);
+test("Kết nối tức thời: khoá ghép nối của tài khoản quyết định phòng", () => {
+  // Từ 1.18.0 phòng suy ra từ `pair_secret` mà máy chủ sinh khi hai người ghép
+  // đôi: hai máy cùng khoá thì vào đúng một phòng, khác khoá thì khác phòng.
+  const secret = "khoa-ghep-noi-cua-hai-nguoi-thuong-1";
+  const a = roomFromPair(secret);
+  const b = roomFromPair(secret);
+  assert.equal(a.mode, "pair");
+  assert.equal(a.code, null, "không còn mã 6 số nào để lộ");
+  assert.deepEqual(a, b);
+  assert.equal(topicFor(b), topicFor(a), "cùng khoá là cùng phòng của nhau");
   const heard = seal(a, { kind: "state", name: "Minh", payload: { v: 3 } });
   assert.equal(
     open(b, heard).name,
     "Minh",
-    "máy nhập mã đọc được dữ liệu máy tạo mã",
+    "máy kia đọc được dữ liệu bằng cùng khoá",
   );
-  assert.throws(() => roomFromCode("12345"), /6 chữ số/);
-  assert.throws(() => roomFromQr("HTT2:abc"), /thiếu thông tin/);
-  assert.throws(() => roomFromQr("linh tinh"), /định dạng/);
-  const qr = roomToQr(createRoom());
-  const back = roomFromQr(qr);
-  assert.equal(roomToQr(back), qr);
+  assert.notEqual(
+    roomFromPair("khoa-khac-cua-mot-nguoi-la-2").id,
+    a.id,
+    "khoá khác thì phòng khác",
+  );
+  assert.throws(() => roomFromPair("ngan-qua"), /khoá ghép nối/i);
 });
 test("Kết nối tức thời: gói MQTT đúng chuẩn và ghép được dữ liệu về từng byte", () => {
   const connect = encodeConnect("htt-test", 45);
@@ -213,7 +206,7 @@ test("Kết nối tức thời: gói tin lớn được cắt bớt nhưng vẫn
 test("Kết nối tức thời: trạng thái có tên người thương và chỉ báo khi có thay đổi", () => {
   const statuses = [];
   const client = new RelayClient({
-    room: roomFromCode("482913"),
+    room: testRoom("482913"),
     onStatus: (status) => statuses.push(status),
     onPayload: () => {},
     onLog: () => {},
@@ -298,8 +291,8 @@ test("Kết nối tức thời: hai máy nhập cùng mã 6 số thì CẢ HAI c
   };
   const clients = [];
   try {
-    const created = roomFromCode("482913");
-    const joined = roomFromCode("482913");
+    const created = testRoom("482913");
+    const joined = testRoom("482913");
     const gotA = [];
     const gotB = [];
     const statusA = [];
@@ -403,7 +396,7 @@ test("Kết nối tức thời: hai máy nhập cùng mã 6 số thì CẢ HAI c
     );
     // Máy ở một mình trong phòng thì không được coi bản tin dội lại là người thương.
     const solo = new RelayClient({
-      room: createRoom(),
+      room: testRoom("mot-minh"),
       deviceId: "mayMot",
       onPayload: () => {},
       onLog: () => {},
@@ -433,7 +426,7 @@ test("Kết nối tức thời: chạy được khi máy KHÔNG có TextEncoder/
     const module = await import(
       `../src/services/relayProtocol.mjs?khong-encoder=${Date.now()}`
     );
-    const room = module.createRoom();
+    const room = module.roomFromPair("phong-khong-encoder-cua-hai-nguoi");
     const message = {
       kind: "state",
       name: "Ngọc Ánh",
@@ -443,10 +436,11 @@ test("Kết nối tức thời: chạy được khi máy KHÔNG có TextEncoder/
       module.open(room, module.seal(room, message)).name,
       "Ngọc Ánh",
     );
+    const sameSecret = "phong-khong-encoder-cua-hai-nguoi-thuong";
     assert.equal(
-      module.roomFromCode("123456").id,
-      roomFromCode("123456").id,
-      "phòng theo mã 6 số vẫn suy ra y hệt",
+      module.roomFromPair(sameSecret).id,
+      roomFromPair(sameSecret).id,
+      "phòng suy ra y hệt khi máy thiếu TextEncoder/TextDecoder",
     );
     const publish = module.encodePublish(
       "haitraitim/v3/abc",
@@ -463,7 +457,7 @@ test("Kết nối tức thời: chạy được khi máy KHÔNG có TextEncoder/
   }
 });
 test("Kết nối tức thời: UTF-8 tự viết đúng chuẩn (so từng byte với Node)", () => {
-  const room = createRoom();
+  const room = testRoom("utf8");
   const samples = [
     "xin chào 💞",
     "Ngọc Ánh nhớ Minh",
@@ -509,23 +503,23 @@ test("Kết nối tức thời: cài nguồn ngẫu nhiên từ máy và báo l�
       Uint8Array.from({ length: size }, () => counter++ % 256),
     );
     assert.equal(randomSourceReady(), true, "cài xong thì báo đã sẵn sàng");
-    const room = createRoom();
-    assert.equal(fromBase64Url(room.id).length, 16);
+    const room = testRoom("nguon-ngau-nhien");
+    // Gói tin dùng nonce 24 byte lấy từ nguồn ngẫu nhiên của máy → phải thấy đúng
+    // các byte mà máy cấp, chứng minh nguồn đã được cài thật.
+    const sealedBytes = fromBase64Url(seal(room, { kind: "ping" }));
     assert.deepEqual(
-      Array.from(fromBase64Url(room.id)).slice(0, 4),
+      Array.from(sealedBytes.slice(0, 4)),
       [0, 1, 2, 3],
-      "phòng dùng đúng byte do máy cấp",
+      "nonce dùng đúng byte do máy cấp",
     );
     assert.throws(() => installRandomBytes(null), /nguồn ngẫu nhiên/);
     installRandomBytes(() => new Uint8Array(1));
-    assert.throws(() => createRoom(), /ngẫu nhiên|Nguồn/);
     assert.throws(() => seal(room, { kind: "ping" }), /ngẫu nhiên|Nguồn/);
   } finally {
     installRandomBytes(standard);
   }
-  assert.equal(
-    createRoom().id.length > 0,
-    true,
-    "sau khi trả lại nguồn chuẩn vẫn tạo được phòng",
+  assert.ok(
+    seal(testRoom("nguon-ngau-nhien"), { kind: "ping" }).length > 0,
+    "sau khi trả lại nguồn chuẩn vẫn mã hóa được",
   );
 });

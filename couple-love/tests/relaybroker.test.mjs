@@ -3,6 +3,8 @@
 // của app (WebSocket → MQTT CONNECT/SUBSCRIBE/PUBLISH), để chắc chắn gói tự viết
 // được broker thật chấp nhận và hai máy cùng nhận dữ liệu.
 import { test } from "node:test";
+
+import { testRoom } from "./helpers/rooms.mjs";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { Aedes } from "aedes";
@@ -10,7 +12,6 @@ import { WebSocketServer, createWebSocketStream, WebSocket } from "ws";
 import {
   RelayClient,
   buildRelayPayload,
-  roomFromCode,
 } from "../src/services/relayProtocol.mjs";
 import {
   PhotoAssembler,
@@ -50,7 +51,7 @@ const stateWith = (nickname, diaryTitle) => {
   });
   return state;
 };
-test("Broker MQTT thật: hai máy nhập cùng mã 6 số thì cả hai cùng nhận dữ liệu", async () => {
+test("Broker MQTT thật: hai máy cùng khoá ghép nối thì cả hai cùng nhận dữ liệu", async () => {
   const broker = await Aedes.createBroker();
   const http = createServer();
   const sockets = new WebSocketServer({ server: http });
@@ -63,20 +64,21 @@ test("Broker MQTT thật: hai máy nhập cùng mã 6 số thì cả hai cùng n
   globalThis.WebSocket = WebSocket;
   const clients = [];
   try {
-    const code = "593184";
+    // Hai máy của cùng một cặp đôi dùng CÙNG khoá ghép nối → cùng phòng.
+    const secret = "khoa-ghep-noi-cua-cap-doi-kiem-thu-1";
     const statusA = [];
     const statusB = [];
     const gotA = [];
     const gotB = [];
     const mayA = new RelayClient({
-      room: roomFromCode(code),
+      room: testRoom(secret),
       brokers: [`ws://127.0.0.1:${port}/`],
       deviceId: "may-A",
       onPayload: (payload) => gotA.push(payload),
       onStatus: (status) => statusA.push(status),
     });
     const mayB = new RelayClient({
-      room: roomFromCode(code),
+      room: testRoom(secret),
       brokers: [`ws://127.0.0.1:${port}/`],
       deviceId: "may-B",
       onPayload: (payload) => gotB.push(payload),
@@ -154,7 +156,7 @@ test("Broker MQTT thật: hai máy nhập cùng mã 6 số thì cả hai cùng n
     );
     // Máy thứ ba nhập sai mã 6 số thì không thấy gì của hai bạn.
     const mayLa = new RelayClient({
-      room: roomFromCode("000111"),
+      room: testRoom("000111"),
       brokers: [`ws://127.0.0.1:${port}/`],
       deviceId: "may-C",
       onPayload: () => {},
@@ -196,7 +198,7 @@ test("Broker MQTT thật: gửi ảnh khoảnh khắc từ máy A sang máy B r�
   globalThis.WebSocket = WebSocket;
   const clients = [];
   try {
-    const room = roomFromCode("778811");
+    const room = testRoom("778811");
     const assembler = new PhotoAssembler();
     let received = null;
     const mayA = new RelayClient({

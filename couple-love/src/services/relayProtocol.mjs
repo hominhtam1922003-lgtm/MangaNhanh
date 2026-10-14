@@ -165,9 +165,6 @@ function roomFromSeed(seed) {
     mode: "code",
   };
 }
-// Mã 6 số là mật khẩu phòng: cùng 6 số thì hai máy tự vào đúng một phòng,
-// không cần trao đổi gì thêm ngoài con số đó.
-const codePattern = /^\d{6}$/;
 /**
  * Phòng kết nối suy ra từ `pair_secret` — khoá bí mật mà máy chủ sinh khi hai
  * người ghép đôi và chỉ hai hàng hồ sơ của hai người đọc được. Ưu điểm so với mã
@@ -183,39 +180,9 @@ export function roomFromPair(secret) {
     mode: "pair",
   };
 }
-export function createRoom() {
-  return {
-    id: toBase64Url(secureBytes(16)),
-    key: toBase64Url(secureBytes(32)),
-    mode: "qr",
-    code: null,
-  };
-}
-export function roomFromCode(code) {
-  const digits = String(code ?? "").replace(/\D/g, "");
-  if (!codePattern.test(digits))
-    throw new Error("Mã kết nối phải gồm đúng 6 chữ số.");
-  return { ...roomFromSeed("haitraitim-code-v3|" + digits), code: digits };
-}
-export function makeCode() {
-  return String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
-}
 export function topicFor(room) {
   if (!room?.id || !room?.key) throw new Error("Phòng kết nối không hợp lệ.");
   return TOPIC_PREFIX + room.id;
-}
-export function roomToQr(room) {
-  return `HTT2:${room.id}.${room.key}`;
-}
-export function roomFromQr(text) {
-  const value = String(text ?? "").trim();
-  if (value.startsWith("HTT2:")) {
-    const [id, key] = value.slice(5).split(".");
-    if (!id || !key) throw new Error("Mã QR thiếu thông tin phòng.");
-    return { id, key, mode: "qr", code: null };
-  }
-  if (codePattern.test(value)) return roomFromCode(value);
-  throw new Error("Mã không đúng định dạng phòng kết nối.");
 }
 export function seal(room, value) {
   const key = fromBase64Url(room.key);

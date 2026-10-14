@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, Image, Alert } from "react-native";
+import { Text, Image, Alert } from "react-native";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Card, Title, Note, Input, Button, confirm } from "../components/UI";
 import { Snapshot, Diary } from "../services/sync";

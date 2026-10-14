@@ -60,12 +60,6 @@ function CallButton({
           : active
             ? theme.deep[0]
             : theme.soft;
-  const color =
-    tone === "soft" && !active
-      ? theme.ink
-      : tone === "deep"
-        ? theme.onDeep
-        : "#ffffff";
   return (
     <View className="items-center mx-2">
       <Pressable

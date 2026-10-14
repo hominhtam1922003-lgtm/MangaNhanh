@@ -160,9 +160,10 @@ test("Nhật ký cuộc gọi là một loại tin nhắn thật, hiện giữa 
   const message = state.messages[state.messages.length - 1];
   assert.equal(message.kind, "call");
   assert.equal(message.body, "Cuộc gọi đi · 00:12");
-  const chat = read("src/screens/local/ChatLocal.tsx");
-  assert.match(chat, /message\.kind === "call"/);
-  assert.match(chat, /📞 \{message\.body\}/);
+  // Dòng tin được vẽ trong components/MessageRow.tsx từ bản dọn dẹp 1.18.0.
+  const row = read("src/components/MessageRow.tsx");
+  assert.match(row, /message\.kind === "call"/);
+  assert.match(row, /📞 \{message\.body\}/);
   const relay = read("src/services/relayProtocol.mjs");
   assert.match(relay, /"call",\n\s*\].includes\(message\.kind\)/);
 });
@@ -238,7 +239,11 @@ test("Nhắn tin nhanh hơn: không đẩy cả gói dữ liệu lớn vì một
   assert.match(app, /lastSlowRef/, "vẫn có nhịp an toàn 20 giây");
   assert.match(app, /persistSoon\(next\)/, "gộp ghi dữ liệu xuống máy");
   const chat = read("src/screens/local/ChatLocal.tsx");
-  assert.match(chat, /const MessageRow = React\.memo/, "mỗi dòng tin vẽ riêng");
+  assert.match(
+    read("src/components/MessageRow.tsx"),
+    /export const MessageRow = React\.memo/,
+    "mỗi dòng tin vẽ riêng (đã tách sang components/MessageRow.tsx)",
+  );
   assert.match(
     chat,
     /const renderItem = useCallback/,
@@ -252,9 +257,11 @@ test("Nhắn tin nhanh hơn: không đẩy cả gói dữ liệu lớn vì một
 
 test("Bỏ tab Cảm xúc khỏi chế độ trên máy", () => {
   const app = read("App.tsx");
+  // `localTabs` vẫn nằm ở App.tsx; bảng tab của chế độ đồng bộ đã chuyển sang
+  // src/screens/CloudApp.tsx từ bản dọn dẹp 1.18.0 nên chỉ cần cắt tới hết mảng.
   const tabs = app.slice(
     app.indexOf("const localTabs = ["),
-    app.indexOf("const tabs = ["),
+    app.indexOf("];", app.indexOf("const localTabs = [")) + 2,
   );
   assert.doesNotMatch(tabs, /Cảm xúc/, "không còn mục Cảm xúc trên thanh dưới");
   assert.match(tabs, /Nhật ký/, "vẫn giữ Nhật ký");
@@ -263,5 +270,12 @@ test("Bỏ tab Cảm xúc khỏi chế độ trên máy", () => {
     app,
     /<MoodLocal/,
     "không còn màn Cảm xúc của chế độ trên máy",
+  );
+  // Dọn rác 1.18.0: tệp màn hình Cảm xúc của chế độ trên máy đã bị xoá hẳn
+  // (không còn ai import từ khi bỏ mục "Cảm xúc" khỏi thanh dưới).
+  assert.equal(
+    existsSync(new URL("../src/screens/local/MoodLocal.tsx", import.meta.url)),
+    false,
+    "không giữ lại tệp màn hình không còn đường tới",
   );
 });

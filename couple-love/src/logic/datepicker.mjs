@@ -102,13 +102,6 @@ export function parseTypedDate(dayText, monthText, yearText, now = new Date()) {
     throw new Error("Ngày bắt đầu không được ở tương lai.");
   return date;
 }
-export function sameDay(a, b) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
 export function partsOf(value) {
   const date = new Date(value);
   return {

@@ -13,10 +13,6 @@ export declare const WAIT_HOUR_MS: number;
 export declare const WAIT_NUDGE_TEXT: string;
 export declare const WAIT_NUDGE_TITLE: string;
 export declare function isQuietTime(when: number | Date): boolean;
-export declare function lastMessageTimes(messages: unknown[]): {
-  mine: number;
-  theirs: number;
-};
 export declare function unansweredMessage(messages: unknown[]): {
   id: string;
   createdAt: string;

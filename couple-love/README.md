@@ -21,6 +21,15 @@ Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo
 - **Không dùng `TextEncoder`/`TextDecoder` hay `crypto.getRandomValues`** (React Native không cấp): phần chuyển chữ ↔ byte được tự viết trong `relayProtocol.mjs` (đối chiếu từng byte với chuẩn UTF-8 của Node trong `tests/relay.test.mjs`, có bài chạy khi đã xóa hai lớp đó) và nguồn ngẫu nhiên an toàn lấy từ `expo-crypto` qua `installRandomBytes`. Mọi lỗi JavaScript được ghi vào **“Lỗi gần nhất”** trong Cài đặt thay vì làm văng app.
 - Giới hạn thật: cần Internet ở **cả hai** máy; dữ liệu mới chỉ sang nhau khi hai bên cùng mở app (một bên đóng app thì lần mở sau gửi bù); mã 6 số chỉ có 1.000.000 khả năng nên đừng dán công khai ở nơi nhiều người thấy.
 
+### Có gì mới ở 1.12.0 — hết đơ màn hình, mở được Tin nhắn, cầu tình yêu 3D ăn khớp chủ đề
+
+**Tải APK 1.12.0 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.12.0-test-65aafef/HaiTraiTim-1.12.0.apk · 58.941.701 byte · SHA256 `48c9a576b713726c3df35af2db54a72e103f39e92e96107379a04d6f680d22dd`. **Bản nhẹ (chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.12.0-test-65aafef/HaiTraiTim-1.12.0-arm64.apk · 43.312.216 byte · SHA256 `572b81d62312cd4c0ae94bbb108031eb2babf8670fe4091a97c5007236ff92a8`. Trong app mở **Cài đặt** xem dòng cuối: phải là **1.12.0, bản dựng 14**.
+
+- **Chỉ một vùng WebGL trên màn hình.** `LoveBridge` không còn tự mở `Canvas`; nó xuất `BridgeGroup` và được dựng bên trong canvas của `ThreeHeart` (`withBridge`). Hai canvas cùng lúc làm LDPlayer treo khung hình cũ → không bấm được gì; nay hết.
+- **Tin nhắn tách hẳn khỏi khung cuộn chung:** `{!alertPage && tab === "chat" ? <View key="chat" style={{flex:1}}>…} : null}` và ScrollView chỉ dựng khi **không** ở tab Tin nhắn → bấm tab là mở ngay, ô nhắn tin đứng yên.
+- **Nhịp 1 giây chỉ chạy khi đang gọi** (`useEffect(..., [call?.id])`), hết giật khi dùng bình thường.
+- **Cầu 3D nhẹ và ăn khớp chủ đề:** `BRIDGE_CURVE` (QuadraticBezierCurve3) + `tubeGeometry` cho mặt cầu, hai ống lan can, ván/cột bằng `instancedMesh` (1 draw call mỗi loại), 6 chim Ô Thước, trăng tròn, cô dâu/chú rể chibi có dải lụa; màu lấy từ `theme` (`palette` trong `ThreeHeart`). Canvas dùng `antialias: false`, `alpha`, `powerPreference: "high-performance"`, ít hạt sáng hơn (70 thay vì 110).
+
 ### Có gì mới ở 1.11.0 — gọi nói liên tục, nhạc chuông trong máy, cầu tình yêu 3D
 
 **Tải APK 1.11.0 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.11.0-test-8d9ef2e/HaiTraiTim-1.11.0.apk · 58.942.065 byte · SHA256 `ba6fa99c0e8e2770a126865be92e181a091d001514a9e88a7929022589aa3f14` · dựng từ `8d9ef2e` (build 38559252404). **iOS (.ipa chưa ký):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.11.0-test-8d9ef2e/HaiTraiTim-1.11.0-unsigned.ipa · 11.651.636 byte · SHA256 `2521e74bf022065c7a5ba110f7a022c53654e6a8d462ea709020de7a817b677f` (build 38559252507). Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.11.0, bản dựng 13**.

@@ -269,7 +269,24 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Hai Trái Tim 1.11.0 (bản mới nhất) — gọi nói liên tục, nhạc chuông trong máy, cầu tình yêu 3D
+## Hai Trái Tim 1.12.0 (bản mới nhất) — hết đơ màn hình, mở được Tin nhắn, cầu tình yêu 3D ăn khớp chủ đề
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.12.0-test-65aafef/HaiTraiTim-1.12.0.apk · **58.941.701 byte** · SHA256 `48c9a576b713726c3df35af2db54a72e103f39e92e96107379a04d6f680d22dd`
+**APK Android (bản NHẸ, tải nhanh hơn ~26%):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.12.0-test-65aafef/HaiTraiTim-1.12.0-arm64.apk · **43.312.216 byte** · SHA256 `572b81d62312cd4c0ae94bbb108031eb2babf8670fe4091a97c5007236ff92a8`
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.12.0-test-65aafef/HaiTraiTim-1.12.0-unsigned.ipa · **11.652.260 byte** · SHA256 `57d0870bdad67fc259b5aa572b2a889a169fea06ed749ad5d40dc88bf5d00360`
+
+Trong app mở **Cài đặt**, dòng cuối phải là **1.12.0, bản dựng 14**. Dựng từ `65aafef` (build 38562494291 / 38562494369).
+
+Bản 1.12.0 sửa hai lỗi nặng bạn gặp và làm lại cầu tình yêu:
+
+1. **Hết đơ/dính màn hình.** Nguyên nhân: màn Yêu nhau mở **hai vùng WebGL cùng lúc** (trái tim 3D và cầu 3D riêng) — máy ảo LDPlayer không hợp lược nhiều vùng GL nên app treo khung hình cũ và không bấm được. Nay **chỉ còn MỘT canvas**, cầu được vẽ bên trong chính canvas của trái tim.
+2. **Vào được mục Tin nhắn.** Khung Tin nhắn và khung cuộn chung trước đây cùng co giãn nên màn hình cũ dính lại; nay hai khối **loại trừ nhau** (`tab === "chat" ? null : <ScrollView>`), khung Tin nhắn chiếm trọn chiều cao, ô nhắn tin luôn ở đáy.
+3. **Bớt giật khi không gọi:** bỏ nhịp tự vẽ lại giao diện **mỗi giây** (chỉ chạy khi đang có cuộc gọi).
+4. **Cầu tình yêu 3D làm lại, ăn khớp chủ đề:** mặt cầu là **một ống cong** uốn theo vòm, lan can hai bên, ván và cột dựng theo lô (`instancedMesh`) nên rất nhẹ; **trăng tròn**, **đàn Ô Thước 6 con** bay vòng; **cô dâu áo xanh ngọc + khăn đỏ + dải lụa bay** và **chú rể áo lam** chạy từ hai đầu vào giữa cầu rồi gặp nhau; **bảng màu lấy trực tiếp từ chủ đề** đang chọn (không còn khối nền xanh đen lạc lõng). Hạ tải đồ hoạ: tắt khử răng cưa, giới hạn độ phân giải, ít hạt sáng hơn.
+
+71 bài kiểm thử đều xanh, TypeScript sạch, `expo export` cho Android thành công.
+
+## Hai Trái Tim 1.11.0 — gọi nói liên tục, nhạc chuông trong máy, cầu tình yêu 3D
 
 **APK Android (cài trực tiếp, không cần ZIP):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.11.0-test-8d9ef2e/HaiTraiTim-1.11.0.apk · **58.942.065 byte** · SHA256 `ba6fa99c0e8e2770a126865be92e181a091d001514a9e88a7929022589aa3f14` · dựng từ `8d9ef2e` (lần build 38559252404, đăng bằng workflow 38560853145). Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.11.0, bản dựng 13**.
 

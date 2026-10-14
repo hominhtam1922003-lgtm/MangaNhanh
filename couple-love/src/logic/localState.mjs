@@ -29,6 +29,9 @@ const profile = (raw, id, name, fallback = "") => ({
   mood: moodIds.includes(raw?.mood) ? raw.mood : "calm",
   moodNote: text(raw?.moodNote, 300),
   avatar: typeof raw?.avatar === "string" ? raw.avatar : null,
+  // Bản app của máy này (ví dụ "1.9.0/10") — để máy kia biết có phải bản cũ
+  // không và nhắc cài lại, vì bản cũ không hiểu tin nhắn.
+  appVersion: text(raw?.appVersion, 24),
   updatedAt: iso(raw?.updatedAt, fallback),
 });
 export function emptyState(now = new Date().toISOString()) {
@@ -161,6 +164,7 @@ export function migrate(raw, now = new Date().toISOString()) {
       ),
       createdAt: iso(message.createdAt, now),
       sentAt: message.sentAt ? iso(message.sentAt, now) : null,
+      deliveredAt: message.deliveredAt ? iso(message.deliveredAt, now) : null,
       receivedAt: message.receivedAt ? iso(message.receivedAt, now) : null,
       readAt: message.readAt ? iso(message.readAt, now) : null,
     }))
@@ -438,6 +442,7 @@ export function reduce(state, action) {
         ),
         createdAt: new Date().toISOString(),
         sentAt: null,
+        deliveredAt: null,
         receivedAt: null,
         readAt: null,
       },
@@ -479,6 +484,7 @@ export function reduce(state, action) {
           ),
           createdAt: iso(action.createdAt, new Date().toISOString()),
           sentAt: null,
+          deliveredAt: null,
           receivedAt: new Date().toISOString(),
           readAt: null,
         },
@@ -499,6 +505,20 @@ export function reduce(state, action) {
     next.messages = next.messages.map((message) =>
       message.id === id
         ? { ...message, sentAt: new Date().toISOString() }
+        : message,
+    );
+  } else if (type === "message.delivered") {
+    // Máy người thương vừa xác nhận đã nhận: tin hiện "đã tới máy kia".
+    const ids = Array.isArray(action.ids)
+      ? action.ids.map((id) => text(id, 40)).filter(Boolean)
+      : [];
+    if (!ids.length) return next;
+    const at = new Date().toISOString();
+    next.messages = next.messages.map((message) =>
+      message.authorId === "me" &&
+      ids.includes(message.id) &&
+      !message.deliveredAt
+        ? { ...message, deliveredAt: at }
         : message,
     );
   } else if (type === "message.read") {

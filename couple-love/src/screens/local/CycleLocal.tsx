@@ -89,11 +89,26 @@ function Calendar({
               style={{ width: "14.2857%", height: 40, padding: 2 }}
             >
               <View
-                className={`flex-1 rounded-full items-center justify-center ${forecast?.inPeriod ? "bg-pink-200" : forecast?.fertile ? "bg-violet-100" : date === today ? "bg-stone-100" : ""}`}
+                className="flex-1 rounded-full items-center justify-center"
+                style={{
+                  backgroundColor: forecast?.inPeriod
+                    ? theme.deep[0]
+                    : forecast?.fertile
+                      ? theme.glow
+                      : date === today
+                        ? theme.soft
+                        : "transparent",
+                }}
               >
                 <Text
                   className={`text-sm ${date === today ? "font-bold" : ""}`}
-                  style={{ color: date === today ? theme.text : theme.ink }}
+                  style={{
+                    color: forecast?.inPeriod
+                      ? theme.onDeep
+                      : date === today
+                        ? theme.text
+                        : theme.ink,
+                  }}
                 >
                   {day > 0 ? day : ""}
                 </Text>

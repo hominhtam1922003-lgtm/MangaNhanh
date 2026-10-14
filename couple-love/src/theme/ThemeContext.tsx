@@ -6,6 +6,8 @@ export type Theme = {
   id: string;
   name: string;
   emoji: string[];
+  /** Hoạ tiết rải ở nền (hoa, mèo, sóng…) — theme không chỉ đổi màu. */
+  deco: string[];
   dark: boolean;
   bg: [string, string, string];
   hero: [string, string];

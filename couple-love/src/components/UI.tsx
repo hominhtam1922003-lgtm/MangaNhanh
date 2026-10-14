@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   Image,
   Alert,
+  StyleSheet,
+  DimensionValue,
 } from "react-native";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { LinearGradient } from "expo-linear-gradient";
@@ -135,6 +137,48 @@ export function Note({ children }: { children: React.ReactNode }) {
     <Text style={{ color: theme.sub }} className="text-sm leading-6">
       {children}
     </Text>
+  );
+}
+/** Hoạ tiết nền theo chủ đề: hoa, mèo, sóng… rải mờ phía sau nội dung nên
+ *  đổi chủ đề là đổi cả không khí, không chỉ đổi màu chữ. */
+const DECO_SPOTS: {
+  left?: DimensionValue;
+  right?: DimensionValue;
+  top?: DimensionValue;
+  bottom?: DimensionValue;
+  size: number;
+  rotate: string;
+}[] = [
+  { left: "5%", top: "9%", size: 34, rotate: "-14deg" },
+  { right: "7%", top: "5%", size: 28, rotate: "12deg" },
+  { left: "16%", top: "38%", size: 24, rotate: "8deg" },
+  { right: "11%", top: "34%", size: 32, rotate: "-10deg" },
+  { left: "8%", bottom: "16%", size: 30, rotate: "16deg" },
+  { right: "6%", bottom: "22%", size: 26, rotate: "-8deg" },
+];
+export function ThemeDeco({ dim = false }: { dim?: boolean }) {
+  const { theme } = useTheme();
+  const deco = theme.deco?.length ? theme.deco : theme.emoji;
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {DECO_SPOTS.map((spot, index) => (
+        <Text
+          key={`${theme.id}-${index}`}
+          style={{
+            position: "absolute",
+            left: spot.left,
+            right: spot.right,
+            top: spot.top,
+            bottom: spot.bottom,
+            fontSize: spot.size,
+            opacity: dim ? 0.16 : 0.3,
+            transform: [{ rotate: spot.rotate }],
+          }}
+        >
+          {deco[index % deco.length]}
+        </Text>
+      ))}
+    </View>
   );
 }
 /** Nhãn nhỏ dạng viên thuốc, dùng cho trạng thái kết nối, ngày tháng… */

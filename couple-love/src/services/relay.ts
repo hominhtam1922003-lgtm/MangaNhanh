@@ -59,8 +59,12 @@ export function roomFromState(state: State): Room | null {
     role: (relay as { role?: string | null }).role ?? "host",
   };
 }
-export function relayPayloadFor(state: State, deviceId: string) {
-  return buildRelayPayload(state, 60000, deviceId);
+export function relayPayloadFor(
+  state: State,
+  deviceId: string,
+  appVersion = "",
+) {
+  return buildRelayPayload(state, 60000, deviceId, appVersion);
 }
 export function payloadKey(payload: unknown) {
   return JSON.stringify(payload);

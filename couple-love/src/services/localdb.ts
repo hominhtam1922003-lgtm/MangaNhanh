@@ -8,6 +8,7 @@ export type Profile = {
   moodNote: string;
   avatar: string | null;
   updatedAt: string;
+  appVersion?: string;
 };
 export type CycleRecord = {
   lastPeriod: string;
@@ -76,6 +77,7 @@ export type State = {
     durationMs: number;
     createdAt: string;
     sentAt: string | null;
+    deliveredAt: string | null;
     receivedAt: string | null;
     readAt: string | null;
   }[];

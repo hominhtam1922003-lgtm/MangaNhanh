@@ -160,7 +160,7 @@ const DatePicker = memo(function DatePicker({
                   : cell.inMonth
                     ? theme.ink
                     : theme.sub,
-                opacity: cell.inMonth ? 1 : 0.5,
+                opacity: cell.inMonth ? 1 : 0.8,
               }}
             >
               {cell.day}

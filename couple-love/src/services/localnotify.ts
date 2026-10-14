@@ -1,4 +1,5 @@
 import * as Notifications from "expo-notifications";
+import { Linking } from "react-native";
 import type { State } from "./localdb";
 import {
   anniversaryEvents,
@@ -7,14 +8,68 @@ import {
 } from "../logic/localState.mjs";
 import { dateOnly } from "../logic/time.mjs";
 import { loveLineFor, loveLineKey } from "../logic/lovelines.mjs";
+// Thông báo phải nổi lên NGAY CẢ KHI app đang mở (giống Messenger/Zalo): nếu
+// không đặt handler này thì Android/iOS sẽ nuốt thông báo lúc app đang chạy.
+try {
+  Notifications.setNotificationHandler?.({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+} catch {}
 export async function ensureChannel() {
   if (Notifications.getPermissionsAsync === undefined) return false;
+  // Kênh tin nhắn: mức cao nhất để hiện băng-rôn và kêu như tin nhắn.
+  await Notifications.setNotificationChannelAsync("love-messages", {
+    name: "Tin nhắn của người thương",
+    importance: Notifications.AndroidImportance.MAX,
+    sound: "default",
+    vibrationPattern: [0, 250, 150, 250],
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+  });
   await Notifications.setNotificationChannelAsync("love-reminders", {
     name: "Lời nhắc yêu thương",
     importance: Notifications.AndroidImportance.HIGH,
+    sound: "default",
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
   });
   return true;
+}
+/** Trạng thái quyền thông báo: "granted" | "denied" | "unknown". */
+export async function notificationPermission() {
+  try {
+    if (Notifications.getPermissionsAsync === undefined) return "unknown";
+    const permission = await Notifications.getPermissionsAsync();
+    if (permission.status === "granted") return "granted";
+    return permission.status === "undetermined" ? "unknown" : "denied";
+  } catch {
+    return "unknown";
+  }
+}
+/** Hỏi quyền ngay khi mở app (Android 13+ mặc định chặn nếu chưa hỏi) — trước
+ *  đây chỉ hỏi khi người dùng tự bật công tắc nên không có thông báo nào. */
+export async function askNotificationPermission() {
+  await ensureChannel();
+  const before = await notificationPermission();
+  if (before === "granted") return "granted";
+  if (before === "unknown") {
+    const granted = await requestNotifications();
+    return granted ? "granted" : "denied";
+  }
+  return "denied";
+}
+/** Đã từ chối thì chỉ bật lại được trong Cài đặt của điện thoại. */
+export async function openNotificationSettings() {
+  try {
+    await Linking.openSettings();
+    return true;
+  } catch {
+    return false;
+  }
 }
 export async function requestNotifications() {
   await ensureChannel();
@@ -26,7 +81,7 @@ export async function requestNotifications() {
 /** Báo ngay lập tức (tin nhắn mới, nhật ký mới, cảm xúc mới) — kiểu thông báo
  * tin nhắn: hiện ngay cả khi app đang mở ở màn hình khác. Chưa cấp quyền thì bỏ
  * qua, người dùng vẫn thấy trong mục “Lời nhắc”. */
-export async function notifyNow(title: string, body: string) {
+export async function notifyNow(title: string, body: string, chat = false) {
   try {
     if (Notifications.getPermissionsAsync === undefined) return false;
     const permission = await Notifications.getPermissionsAsync();
@@ -39,7 +94,9 @@ export async function notifyNow(title: string, body: string) {
         sound: "default",
         data: { key: `now-${Date.now()}` },
       },
-      trigger: null,
+      trigger: chat
+        ? { channelId: "love-messages" }
+        : { channelId: "love-reminders" },
     });
     return true;
   } catch {

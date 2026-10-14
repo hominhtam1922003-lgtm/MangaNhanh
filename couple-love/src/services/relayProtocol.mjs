@@ -227,7 +227,12 @@ export function open(room, text) {
     );
   return JSON.parse(utf8Decode(box));
 }
-export function buildRelayPayload(state, limit = 60000, deviceId = "me") {
+export function buildRelayPayload(
+  state,
+  limit = 60000,
+  deviceId = "me",
+  appVersion = "",
+) {
   // Chỉ gửi dữ liệu CỦA MÌNH: nhật ký do mình viết, chu kỳ, kỷ niệm, lời nhắc, hồ sơ.
   // Nhờ vậy hai máy không gửi trả lại dữ liệu của nhau (không lặp vô tận),
   // và dữ liệu nhận được luôn gộp đúng về phía người thương.
@@ -243,6 +248,10 @@ export function buildRelayPayload(state, limit = 60000, deviceId = "me") {
       mood: state.me?.mood ?? "calm",
       moodNote: state.me?.moodNote ?? "",
       avatar: null,
+      appVersion: String(appVersion || state.settings?.appVersion || "").slice(
+        0,
+        24,
+      ),
       updatedAt: state.me?.updatedAt ?? new Date().toISOString(),
     },
     anniversary: state.anniversary,

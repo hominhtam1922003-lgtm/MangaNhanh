@@ -6,6 +6,9 @@ export const MAX_PHOTO_CHUNKS = 200;
 export const PHOTO_LIMIT_BYTES = 120 * 1024;
 /** Ảnh nền cần rộng hơn ảnh khoảnh khắc nên cho phép gói lớn hơn một chút. */
 export const WALLPAPER_LIMIT_BYTES = 420 * 1024;
+/** Tin thoại 25 giây (AAC) thường dưới 300 KB — cho hạn mức riêng để không bị
+ * cắt như ảnh khoảnh khắc. */
+export const VOICE_LIMIT_BYTES = 420 * 1024;
 /** Cắt ảnh base64 thành các gói tin gửi qua kênh kết nối. */
 export function photoMessages(photo, chunkSize = CHUNK_SIZE) {
   const base64 = String(photo?.base64 ?? "").replace(/\s+/g, "");

@@ -65,6 +65,7 @@ jobs:
           cat ../ios-schemes.json | head -30 || true
           # Scheme của app chính là tên project Expo sinh ra; nếu không có thì lọc bỏ
           # các scheme của thư viện (Pods, Expo, React, hermes, Yoga...).
+          export PROJECT_NAME
           SCHEME=$(python3 -c "
           import json, os, sys
           path = '../ios-schemes.json'

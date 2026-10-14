@@ -67,9 +67,9 @@ test("Chủ đề: chữ luôn đủ tương phản nên không bị mờ/mất 
     );
   }
 });
-test("Chủ đề: 12 bảng màu đầy đủ, mọi màn hình lấy đủ màu để hài hoà", () => {
-  assert.equal(THEMES.length, 12);
-  assert.equal(new Set(THEMES.map((theme) => theme.id)).size, 12);
+test("Chủ đề: bảng màu đầy đủ, có hoạ tiết nền, mọi màn hình lấy đủ màu", () => {
+  assert.equal(THEMES.length, 14);
+  assert.equal(new Set(THEMES.map((theme) => theme.id)).size, 14);
   assert.equal(isTheme(DEFAULT_THEME), true);
   assert.equal(themeById("hong").name, "Hồng kẹo");
   assert.equal(themeById("khong-co").id, DEFAULT_THEME);
@@ -86,6 +86,22 @@ test("Chủ đề: 12 bảng màu đầy đủ, mọi màn hình lấy đủ mà
     "dem",
   ])
     assert.equal(isTheme(legacy), true, `thiếu chủ đề cũ ${legacy}`);
+  // Chủ đề phải có hoạ tiết thật (hoa, mèo, sóng…), không chỉ đổi màu chữ.
+  for (const theme of THEMES) {
+    assert.equal(
+      Array.isArray(theme.deco) && theme.deco.length >= 3,
+      true,
+      `${theme.id}: thiếu hoạ tiết nền`,
+    );
+    for (const item of theme.deco)
+      assert.equal(
+        typeof item === "string" && item.length > 0,
+        true,
+        `${theme.id}: hoạ tiết không hợp lệ`,
+      );
+  }
+  assert.equal(themeById("meo").name, "Mèo con");
+  assert.equal(themeById("vuonhoa").name, "Vườn hoa");
   for (const theme of THEMES) {
     assert.equal(theme.bg.length, 3, `${theme.id}: cần 3 màu nền`);
     assert.equal(theme.hero.length, 2);

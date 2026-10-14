@@ -144,7 +144,9 @@ export default function SettingsLocal({
       <Card>
         <Title small>Riêng tư trên máy này</Title>
         <View className="flex-row justify-between items-center my-3">
-          <Text className="text-ink flex-1">Khóa bằng Face ID / vân tay</Text>
+          <Text className="flex-1" style={{ color: theme.ink }}>
+            Khóa bằng Face ID / vân tay
+          </Text>
           <Switch
             accessibilityLabel="Khóa sinh trắc học"
             value={locked}
@@ -166,7 +168,9 @@ export default function SettingsLocal({
           lý trong cài đặt sinh trắc học của hệ thống.
         </Note>
         <View className="flex-row justify-between items-center my-3">
-          <Text className="text-ink flex-1">Lời nhắc trên máy này</Text>
+          <Text className="flex-1" style={{ color: theme.ink }}>
+            Lời nhắc trên máy này
+          </Text>
           <Switch
             accessibilityLabel="Lời nhắc trên máy"
             value={state.settings.notify}
@@ -197,7 +201,7 @@ export default function SettingsLocal({
           đây không phải báo thức reo như chuông.
         </Note>
         <View className="flex-row justify-between items-center my-3">
-          <Text className="text-ink flex-1">
+          <Text className="flex-1" style={{ color: theme.ink }}>
             Kết nối tức thời với người thương
           </Text>
           <Switch
@@ -310,8 +314,31 @@ export default function SettingsLocal({
                       backgroundColor: item.surface,
                       justifyContent: "space-between",
                       padding: 7,
+                      overflow: "hidden",
                     }}
                   >
+                    <Text
+                      style={{
+                        position: "absolute",
+                        right: -4,
+                        bottom: -6,
+                        fontSize: 30,
+                        opacity: 0.35,
+                      }}
+                    >
+                      {item.deco?.[0] ?? item.emoji[0]}
+                    </Text>
+                    <Text
+                      style={{
+                        position: "absolute",
+                        left: -6,
+                        top: 26,
+                        fontSize: 22,
+                        opacity: 0.3,
+                      }}
+                    >
+                      {item.deco?.[1] ?? item.emoji[1]}
+                    </Text>
                     <View className="flex-row justify-between">
                       <View
                         style={{
@@ -448,7 +475,7 @@ export default function SettingsLocal({
       </Card>
       <Card>
         <View className="flex-row justify-between items-center my-3">
-          <Text className="text-ink flex-1">
+          <Text className="flex-1" style={{ color: theme.ink }}>
             Lời yêu thương mỗi ngày (09:00 và 21:00)
           </Text>
           <Switch
@@ -522,8 +549,8 @@ export default function SettingsLocal({
         </Card>
       ) : null}
       <Note>
-        Hai Trái Tim {Constants.expoConfig?.version ?? "1.7.0"} (chế độ trên
-        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 8}) — ghi
+        Hai Trái Tim {Constants.expoConfig?.version ?? "1.9.0"} (chế độ trên
+        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 10}) — ghi
         lại số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục
         riêng của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ
         liệu, nên hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch,

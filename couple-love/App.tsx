@@ -17,6 +17,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
 import { SupabaseClient, Session } from "@supabase/supabase-js";
 import {
   Config,
@@ -36,8 +37,12 @@ import {
 } from "./src/services/localdb";
 import type { State } from "./src/services/localdb";
 import {
+  askNotificationPermission,
   dueAlertActions,
   notifyNow,
+  notificationPermission,
+  openNotificationSettings,
+  requestNotifications,
   rescheduleEverything,
 } from "./src/services/localnotify";
 import {
@@ -58,6 +63,7 @@ import {
   missingPhotoIds,
   missingVoiceIds,
   photoMessages,
+  VOICE_LIMIT_BYTES,
   WALLPAPER_LIMIT_BYTES,
 } from "./src/services/momentTransfer.mjs";
 import ChatLocal from "./src/screens/local/ChatLocal";
@@ -81,7 +87,14 @@ import Diary from "./src/screens/Diary";
 import Mood from "./src/screens/Mood";
 import Settings from "./src/screens/Settings";
 import { LinearGradient } from "expo-linear-gradient";
-import { Button, Card, Note, Title, confirm } from "./src/components/UI";
+import {
+  Button,
+  Card,
+  Note,
+  ThemeDeco,
+  Title,
+  confirm,
+} from "./src/components/UI";
 const localTabs = [
   { id: "home", label: "Yêu nhau", icon: "♡" },
   { id: "chat", label: "Tin nhắn", icon: "✉" },
@@ -433,7 +446,16 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   const [relayLog, setRelayLog] = useState<string[]>([]);
   const assemblerRef = useRef(new PhotoAssembler());
   const appStartRef = useRef(Date.now());
-  const askedPhotosRef = useRef<Set<string>>(new Set());
+  // Mã ảnh/tin thoại đã xin gửi lại, kèm lúc xin: vẫn thiếu tệp thì xin lại sau
+  // 45 giây (trước đây xin một lần rồi thôi nên tin thoại mất là mất luôn).
+  const askedPhotosRef = useRef<Map<string, number>>(new Map());
+  const shouldAsk = (id: string, waitMs = 45000) => {
+    const askedAt = askedPhotosRef.current.get(id) ?? 0;
+    return Date.now() - askedAt > waitMs;
+  };
+  const [notifyState, setNotifyState] = useState<
+    "unknown" | "granted" | "denied"
+  >("unknown");
   const momentQueueRef = useRef(false);
   const messageQueueRef = useRef(false);
   const [lastError, setLastError] = useState("");
@@ -445,6 +467,14 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   const stateRef = useRef<State | null>(null);
   const relayRef = useRef<RelayClient | null>(null);
   const publishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Bản app đang chạy, gửi kèm trong gói dữ liệu để máy kia biết có phải bản cũ.
+  const appVersionRef = useRef(
+    (() => {
+      const version = Constants.expoConfig?.version ?? "?";
+      const build = Constants.expoConfig?.android?.versionCode;
+      return build ? `${version}/${build}` : version;
+    })(),
+  );
   const deviceIdRef = useRef(
     "d" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36),
   );
@@ -488,7 +518,17 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       stateRef.current = next;
       setState(next);
       if (next !== loaded) void persistState(next);
-      void rescheduleEverything(next).catch(() => {});
+      // Hỏi quyền thông báo ngay từ lần mở đầu (Android 13+ chặn nếu chưa hỏi).
+      void (async () => {
+        const permission = await askNotificationPermission();
+        if (!alive) return;
+        setNotifyState(permission);
+        if (permission === "granted")
+          void rescheduleEverything(next).catch(() => {});
+      })();
+      void notificationPermission().then((permission) => {
+        if (alive) setNotifyState(permission);
+      });
       setSelfTest(relaySelfTest());
       const previous = await readCrash();
       if (previous) {
@@ -600,7 +640,11 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     const current = stateRef.current;
     const client = relayRef.current;
     if (!current || !client) return;
-    const payload = relayPayloadFor(current, deviceIdRef.current);
+    const payload = relayPayloadFor(
+      current,
+      deviceIdRef.current,
+      appVersionRef.current,
+    );
     const key = payloadKey(payload);
     if (!force && key === lastSentRef.current) return;
     if (client.publishState(payload, current.me.nickname)) {
@@ -684,7 +728,9 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     messageQueueRef.current = true;
     void (async () => {
       try {
-        client.publish({
+        // Chưa nối được trạm nào thì KHÔNG đánh dấu đã gửi: để tin nằm chờ và
+        // gửi lại khi có kết nối (trước đây đánh dấu sớm nên tin bị mất).
+        const published = client.publish({
           kind: "chat",
           message: {
             id: message.id,
@@ -696,9 +742,18 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           },
           name: current.me.nickname,
         });
+        if (!published) {
+          setRelayLog((lines) =>
+            [
+              ...lines,
+              "Chưa nối được trạm nên tin nhắn đang chờ, sẽ tự gửi lại.",
+            ].slice(-12),
+          );
+          return;
+        }
         await new Promise((resolve) => setTimeout(resolve, 60));
         if (message.kind === "voice" && message.audio) {
-          const base64 = imageBase64(message.audio, WALLPAPER_LIMIT_BYTES);
+          const base64 = imageBase64(message.audio, VOICE_LIMIT_BYTES);
           if (base64) {
             for (const packet of photoMessages({
               id: message.id,
@@ -711,6 +766,19 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               client.publish(packet);
               await new Promise((resolve) => setTimeout(resolve, 60));
             }
+            setRelayLog((lines) =>
+              [
+                ...lines,
+                `Đã gửi tin thoại ${message.durationMs / 1000}s`,
+              ].slice(-12),
+            );
+          } else {
+            setRelayLog((lines) =>
+              [
+                ...lines,
+                "Tin thoại quá dài nên chưa gửi được tệp — hãy ghi ngắn hơn (dưới 25 giây).",
+              ].slice(-12),
+            );
           }
         }
         update({ type: "message.sent", id: message.id });
@@ -731,11 +799,18 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   }
   // Thông báo kiểu tin nhắn: hiện ngay khi người thương vừa nhắn / viết nhật
   // ký / đổi cảm xúc, kèm một dòng trong mục “Lời nhắc”.
-  function noticeFromPartner(title: string, body: string, key: string) {
+  function noticeFromPartner(
+    title: string,
+    body: string,
+    key: string,
+    chat = true,
+  ) {
     try {
       update({ type: "alerts.add", title, body, key, category: "love" });
     } catch {}
-    void notifyNow(title, body);
+    // chat = true: dùng kênh mức cao nhất nên thông báo nổi như Messenger, kể
+    // cả khi app đang mở.
+    void notifyNow(title, body, chat);
   }
   // Ảnh nền dùng chung: máy đang có ảnh gửi lại khi máy kia xin.
   function sendWallpaper(id: string) {
@@ -770,14 +845,14 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       current.moments ?? [],
       (moment: State["moments"][number]) =>
         Boolean(moment.file && imageExists(moment.file)),
-    ).filter((id: string) => !askedPhotosRef.current.has(id));
+    ).filter((id: string) => shouldAsk(id));
     const wallpaperId = current.appearance?.wallpaperId;
     if (
       wallpaperId &&
       !imageExists(wallpaperFile(wallpaperId)) &&
-      !askedPhotosRef.current.has(wallpaperId)
+      shouldAsk(wallpaperId)
     ) {
-      askedPhotosRef.current.add(wallpaperId);
+      askedPhotosRef.current.set(wallpaperId, Date.now());
       ids.push(wallpaperId);
     }
     for (const voiceId of missingVoiceIds(
@@ -785,12 +860,11 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       (message: State["messages"][number]) =>
         Boolean(message.audio && imageExists(message.audio)),
     ))
-      if (!askedPhotosRef.current.has(String(voiceId))) {
-        askedPhotosRef.current.add(String(voiceId));
+      if (shouldAsk(String(voiceId))) {
+        askedPhotosRef.current.set(String(voiceId), Date.now());
         ids.push(String(voiceId));
       }
     if (!ids.length) return;
-    for (const id of ids) askedPhotosRef.current.add(id);
     client.publish({ kind: "photoRequest", ids });
   }
   useEffect(() => {
@@ -867,9 +941,9 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           if (
             wanted &&
             !imageExists(wallpaperFile(wanted)) &&
-            !askedPhotosRef.current.has(wanted)
+            shouldAsk(wanted)
           ) {
-            askedPhotosRef.current.add(wanted);
+            askedPhotosRef.current.set(wanted, Date.now());
             relayRef.current?.publish({ kind: "photoRequest", ids: [wanted] });
           }
         } catch (mergeError) {
@@ -915,7 +989,19 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
                   : String(incoming.body ?? "");
               noticeFromPartner(`${nickname} 💌`, label, `chat-${incoming.id}`);
             }
+            // Xác nhận cho máy kia biết tin đã tới nơi (hiện "đã tới máy kia").
+            relayRef.current?.publish({
+              kind: "chatAck",
+              ids: [incoming.id],
+            });
           }
+          return;
+        }
+        if (kind === "chatAck") {
+          const ids = Array.isArray(message.ids)
+            ? (message.ids as unknown[]).map((id) => String(id)).slice(0, 20)
+            : [];
+          if (ids.length) update({ type: "message.delivered", ids });
           return;
         }
         if (kind === "photo") {
@@ -1011,7 +1097,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             if (voiceMessage) {
               const base64 = imageBase64(
                 voiceMessage.audio as string,
-                WALLPAPER_LIMIT_BYTES,
+                VOICE_LIMIT_BYTES,
               );
               if (base64) {
                 void (async () => {
@@ -1217,6 +1303,16 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         tab={tab}
         setTab={setTab}
         wallpaperUri={hasWallpaper ? imageUri(storedWallpaper) : null}
+        notifyState={notifyState}
+        onEnableNotifications={() =>
+          void (async () => {
+            const granted = await requestNotifications();
+            setNotifyState(granted ? "granted" : "denied");
+            if (granted && stateRef.current)
+              void rescheduleEverything(stateRef.current).catch(() => {});
+            if (!granted) await openNotificationSettings();
+          })()
+        }
       />
     </ThemeProvider>
   );
@@ -1271,6 +1367,8 @@ function LocalShell({
   tab,
   setTab,
   wallpaperUri,
+  notifyState,
+  onEnableNotifications,
 }: {
   state: State;
   update: (action: Record<string, unknown>) => void;
@@ -1306,6 +1404,8 @@ function LocalShell({
   tab: string;
   setTab: (value: string) => void;
   wallpaperUri: string | null;
+  notifyState: "unknown" | "granted" | "denied";
+  onEnableNotifications: () => void;
 }) {
   const { theme } = useTheme();
   const unreadMessages = state.messages.filter(
@@ -1326,6 +1426,7 @@ function LocalShell({
           />
         </>
       ) : null}
+      <ThemeDeco dim={Boolean(wallpaperUri)} />
       <KeyboardAvoidingView
         className="flex-1"
         style={{ backgroundColor: "transparent" }}
@@ -1391,6 +1492,35 @@ function LocalShell({
             </Text>
           </Pressable>
         </View>
+        {notifyState === "denied" && !alertPage ? (
+          <View
+            className="mx-4 mb-2 p-3 rounded-xl flex-row items-center"
+            style={{
+              backgroundColor: theme.soft,
+              borderWidth: 1,
+              borderColor: theme.border,
+            }}
+          >
+            <Text className="text-xs flex-1" style={{ color: theme.ink }}>
+              Thông báo đang bị tắt nên tin nhắn của người thương không nổi lên
+              được. Bấm “Bật thông báo” rồi chọn Cho phép.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Bật thông báo"
+              onPress={onEnableNotifications}
+              className="ml-2 px-3 py-2 rounded-full"
+              style={{ backgroundColor: theme.deep[0] }}
+            >
+              <Text
+                className="text-xs font-bold"
+                style={{ color: theme.onDeep }}
+              >
+                Bật thông báo
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
         {error !== "" && (
           <View
             className="mx-4 mb-2 p-3 rounded-xl"
@@ -1416,7 +1546,12 @@ function LocalShell({
         <ScrollView
           key={alertPage ? "alerts" : tab}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 18, paddingBottom: 32 }}
+          scrollEnabled={alertPage || tab !== "chat"}
+          contentContainerStyle={
+            !alertPage && tab === "chat"
+              ? { flexGrow: 1, paddingHorizontal: 18, paddingTop: 10 }
+              : { padding: 18, paddingBottom: 32 }
+          }
         >
           {alertPage ? (
             <>

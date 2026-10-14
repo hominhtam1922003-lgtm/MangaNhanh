@@ -1,6 +1,7 @@
 export declare const CALL_FRAME_MS: number;
 export declare const CALL_QUEUE_MAX: number;
 export declare const CALL_SILENT_BYTES: number;
+export declare const CALL_PREBUFFER: number;
 export declare const CALL_PLAY_GAP_MS: number;
 export declare const CALL_CLOSE_MS: number;
 export type AudioFrame = {

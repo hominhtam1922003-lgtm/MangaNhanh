@@ -69,12 +69,19 @@ import {
 } from "./src/services/momentTransfer.mjs";
 import ChatLocal from "./src/screens/local/ChatLocal";
 import CallLocal from "./src/screens/local/CallLocal";
-import { callEvent, newCall, ringTimedOut } from "./src/logic/callLogic.mjs";
+import {
+  CALL_ALIVE_MS,
+  callEvent,
+  callTimedOut,
+  newCall,
+  ringTimedOut,
+} from "./src/logic/callLogic.mjs";
 import type { CallInfo } from "./src/logic/callLogic.mjs";
 // Tiếng nói trong cuộc gọi: từng mảnh ngắn, nói liên tục không cần giữ nút.
 import {
   CALL_CLOSE_MS,
   CALL_FRAME_MS,
+  CALL_PREBUFFER,
   callLogText,
   frameUsable,
   newAudioQueue,
@@ -98,7 +105,6 @@ import * as Location from "expo-location";
 import HomeLocal from "./src/screens/local/HomeLocal";
 import CycleLocal from "./src/screens/local/CycleLocal";
 import DiaryLocal from "./src/screens/local/DiaryLocal";
-import MoodLocal from "./src/screens/local/MoodLocal";
 import PairLocal from "./src/screens/local/PairLocal";
 import SettingsLocal from "./src/screens/local/SettingsLocal";
 import Home from "./src/screens/Home";
@@ -120,7 +126,6 @@ const localTabs = [
   { id: "chat", label: "Tin nhắn", icon: "✉" },
   { id: "cycle", label: "Chăm sóc", icon: "✿" },
   { id: "diary", label: "Nhật ký", icon: "▤" },
-  { id: "mood", label: "Cảm xúc", icon: "☺" },
   { id: "settings", label: "Cài đặt", icon: "⚙" },
 ];
 const tabs = [
@@ -505,6 +510,10 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   const callQueueRef = useRef<AudioFrame[]>(newAudioQueue());
   const callSeqRef = useRef(0);
   const callLoggedRef = useRef("");
+  // Đang phát tiếng của người thương thì tạm không ghi âm: tránh vọng tiếng loa
+  // vào mic (gây ù và làm câu chuyện đứt quãng).
+  const callPlayingRef = useRef(false);
+  const lastAliveSentRef = useRef(0);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistPending = useRef<State | null>(null);
   const lastLiteRef = useRef("");
@@ -777,13 +786,22 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       event.type === "accept" ||
       event.type === "reject" ||
       event.type === "hangup"
-    )
-      client?.publish({
+    ) {
+      const packet = {
         kind: "call",
         event: event.type,
         callId: active.id,
         name,
-      });
+      };
+      client?.publish(packet);
+      // Tín hiệu nghe/từ chối/kết thúc gửi lại 3 lần cách nhau 250 ms: kênh công
+      // cộng thỉnh thoảng mất gói, gửi lại để máy kia tắt cuộc gọi chắc chắn.
+      if (event.type !== "accept") {
+        [250, 500].forEach((delay) =>
+          setTimeout(() => relayRef.current?.publish(packet), delay),
+        );
+      }
+    }
     if (
       event.type === "hangup" &&
       !active.startedAt &&
@@ -1375,6 +1393,12 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             } catch {}
             return;
           }
+          if (event === "alive") {
+            // Người thương còn trong cuộc gọi: ghi lại mốc để biết đường mà dừng.
+            if (active.phase === "active")
+              applyCall(callEvent(active, { type: "alive" }));
+            return;
+          }
           if (event === "accept")
             applyCall(callEvent(active, { type: "accept" }));
           else if (event === "reject")
@@ -1627,6 +1651,24 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       setCallTick((value) => value + 1);
       const active = callRef.current;
       if (!active) return;
+      if (active.phase === "active") {
+        // Nhịp "còn đây": máy nào tắt app/mất mạng thì máy kia tự kết thúc sau
+        // 5 giây, không còn cảnh một bên đã tắt mà bên này vẫn hiện đang gọi.
+        const now = Date.now();
+        if (now - lastAliveSentRef.current >= CALL_ALIVE_MS) {
+          lastAliveSentRef.current = now;
+          relayRef.current?.publish({
+            kind: "call",
+            event: "alive",
+            callId: active.id,
+            name: stateRef.current?.me.nickname ?? "",
+          });
+        }
+        if (callTimedOut(active, now)) {
+          applyCall(callEvent(active, { type: "lost" }, now));
+          return;
+        }
+      }
       if (ringTimedOut(active)) {
         if (active.role === "caller")
           relayRef.current?.publish({
@@ -1663,8 +1705,9 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         const current = callRef.current;
         if (!current || current.id !== callId || current.phase !== "active")
           break;
-        if (!current.micOn) {
-          await new Promise((resolve) => setTimeout(resolve, 300));
+        // Mic tắt, hoặc đang nghe tiếng người thương: chờ một nhịp ngắn rồi thử lại.
+        if (!current.micOn || callPlayingRef.current) {
+          await new Promise((resolve) => setTimeout(resolve, 120));
           continue;
         }
         try {
@@ -1676,25 +1719,26 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           const seq = callSeqRef.current + 1;
           callSeqRef.current = seq;
           if (!uri) continue;
-          // Xoay vòng 4 tệp: máy kia phát xong mảnh cũ trước khi tệp bị ghi đè.
-          const name = `callout-${callId}-${seq % 4}.m4a`;
+          // Xoay vòng 6 tệp: máy kia phát xong mảnh cũ trước khi tệp bị ghi đè.
+          const name = `callout-${callId}-${seq % 6}.m4a`;
           saveImage(uri, name);
-          const base64 = imageBase64(name, 120 * 1024);
-          if (!base64) continue;
-          const bytes = base64.length;
-          if (!frameUsable(bytes, true)) continue;
-          relayRef.current?.publish({
-            kind: "call",
-            event: "audio",
-            callId,
-            seq,
-            ms: CALL_FRAME_MS,
-            data: base64,
-            bytes,
-            name: stateRef.current?.me.nickname ?? "",
-          });
+          const base64 = imageBase64(name, 160 * 1024);
+          if (base64 && frameUsable(base64.length, true)) {
+            // KHÔNG chờ gửi xong: vòng lặp quay lại ghi mảnh kế ngay nên câu
+            // chuyện liền mạch hơn hẳn (trước đây mỗi mảnh phải chờ gửi).
+            relayRef.current?.publish({
+              kind: "call",
+              event: "audio",
+              callId,
+              seq,
+              ms: CALL_FRAME_MS,
+              data: base64,
+              bytes: base64.length,
+              name: stateRef.current?.me.nickname ?? "",
+            });
+          }
         } catch {
-          await new Promise((resolve) => setTimeout(resolve, 400));
+          await new Promise((resolve) => setTimeout(resolve, 300));
         }
       }
     })();
@@ -1913,6 +1957,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         onPickRingtone={pickRingtone}
         onResetRingtone={resetRingtone}
         callQueueRef={callQueueRef}
+        callPlayingRef={callPlayingRef}
         onSendPhoto={sendChatPhoto}
         onSendLocation={() => void sendLocation()}
         callAction={callAction}
@@ -1986,6 +2031,7 @@ function LocalShell({
   call,
   callTick,
   callQueueRef,
+  callPlayingRef,
   onPickRingtone,
   onResetRingtone,
   onStartCall,
@@ -2033,6 +2079,7 @@ function LocalShell({
   call: CallInfo | null;
   callTick: number;
   callQueueRef: React.MutableRefObject<AudioFrame[]>;
+  callPlayingRef: React.MutableRefObject<boolean>;
   onPickRingtone: () => void;
   onResetRingtone: () => void;
   onStartCall: () => void;
@@ -2302,8 +2349,6 @@ function LocalShell({
               <CycleLocal {...props} />
             ) : tab === "diary" ? (
               <DiaryLocal {...props} />
-            ) : tab === "mood" ? (
-              <MoodLocal {...props} />
             ) : (
               <SettingsLocal
                 {...props}
@@ -2337,6 +2382,7 @@ function LocalShell({
                 : null
             }
             queueRef={callQueueRef}
+            playingRef={callPlayingRef}
             onToggleMic={() =>
               callAction({ type: "mic", on: !callRef.current?.micOn })
             }

@@ -10,8 +10,12 @@ export type CallInfo = {
   reason: string;
   minimized: boolean;
   micOn: boolean;
+  /** Mốc cuối cùng còn nghe được nhịp "còn đây" của máy kia. */
+  lastSeen: number;
 };
 export declare const CALL_RING_TIMEOUT_MS: number;
+export declare const CALL_ALIVE_MS: number;
+export declare const CALL_SILENT_END_MS: number;
 export declare function newCall(input: {
   id: string;
   role: "caller" | "callee";
@@ -23,6 +27,10 @@ export declare function callEvent(
   event: { type: string; on?: boolean; min?: boolean },
   now?: number,
 ): CallInfo | null;
+export declare function callTimedOut(
+  call: CallInfo | null,
+  now?: number,
+): boolean;
 export declare function ringTimedOut(
   call: CallInfo | null,
   now?: number,

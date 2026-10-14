@@ -16,6 +16,7 @@ import type { CallInfo } from "../../logic/callLogic.mjs";
 import {
   CALL_CLOSE_MS,
   CALL_PLAY_GAP_MS,
+  CALL_PREBUFFER,
   callBarText,
   callLogText,
   queueSize,
@@ -28,7 +29,7 @@ const RINGTONE = require("../../../assets/ringtone.wav");
 /** Hồi chuông cho bên GỌI — cả hai máy cùng nghe chuông như gọi thường. */
 const RINGBACK = require("../../../assets/ringback.wav");
 /** Nhịp phát lại tiếng của người thương. */
-const PLAY_TICK_MS = 180;
+const PLAY_TICK_MS = 90;
 
 /** Nút tròn trên màn hình gọi. */
 function CallButton({
@@ -138,6 +139,7 @@ export default function CallLocal({
   partnerAvatar,
   ringtoneUri,
   queueRef,
+  playingRef,
   onToggleMic,
   onMinimize,
   onRestore,
@@ -151,6 +153,8 @@ export default function CallLocal({
   partnerAvatar: string | null;
   ringtoneUri: string | null;
   queueRef: React.MutableRefObject<AudioFrame[]>;
+  /** Bật lên khi loa đang phát tiếng người thương (để máy này tạm ngừng ghi âm). */
+  playingRef: React.MutableRefObject<boolean>;
   onToggleMic: () => void;
   onMinimize: () => void;
   onRestore: () => void;
@@ -167,6 +171,7 @@ export default function CallLocal({
   const [elapsed, setElapsed] = useState(0);
   const [buffered, setBuffered] = useState(0);
   const lastPlayRef = useRef(0);
+  const startedRef = useRef(false);
   const pulse = useRef(new Animated.Value(0)).current;
   const active = call.phase === "active";
   const ringing = call.phase === "ringing";
@@ -231,6 +236,13 @@ export default function CallLocal({
     return () => loop.stop();
   }, [active, pulse]);
 
+  useEffect(() => {
+    if (active) return;
+    playingRef.current = false;
+    startedRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
   // Đồng hồ cuộc gọi.
   useEffect(() => {
     if (!active) {
@@ -254,8 +266,15 @@ export default function CallLocal({
       return;
     }
     const timer = setInterval(() => {
+      // Báo cho phần ghi âm biết loa đang phát tiếng của người thương để tạm
+      // ngừng ghi — tránh vọng tiếng loa vào mic (nghe ù và đứt quãng).
+      playingRef.current = Boolean(incoming.playing);
       setBuffered(queueSize(queueRef.current));
       if (incoming.playing) return;
+      // Chờ đủ vài mảnh rồi mới bắt đầu phát: nghe liền mạch hơn hẳn so với
+      // phát ngay mảnh đầu tiên rồi hụt giữa chừng.
+      if (!startedRef.current && queueSize(queueRef.current) < CALL_PREBUFFER)
+        return;
       const now = Date.now();
       const { frame, queue } = takeFrame(
         queueRef.current,
@@ -263,7 +282,11 @@ export default function CallLocal({
         lastPlayRef.current,
         CALL_PLAY_GAP_MS,
       );
-      if (!frame?.uri) return;
+      if (!frame?.uri) {
+        startedRef.current = false;
+        return;
+      }
+      startedRef.current = true;
       queueRef.current = queue;
       lastPlayRef.current = now;
       try {

@@ -19,7 +19,13 @@ import {
   queueSize,
   takeFrame,
 } from "../src/logic/callAudio.mjs";
-import { callEvent, newCall } from "../src/logic/callLogic.mjs";
+import {
+  CALL_ALIVE_MS,
+  CALL_SILENT_END_MS,
+  callEvent,
+  callTimedOut,
+  newCall,
+} from "../src/logic/callLogic.mjs";
 import { MESSAGE_KINDS, emptyState, reduce } from "../src/logic/localState.mjs";
 
 const read = (path) =>
@@ -29,7 +35,7 @@ const at = (hour, minute = 0, second = 0) =>
 
 test("Tiếng nói: mảnh ngắn, xếp hàng theo số thứ tự, phát cách nhau", () => {
   assert.equal(CALL_FRAME_MS <= 1000, true, "mảnh ngắn để trễ thấp");
-  const bytes = frameBytesFor(24000, CALL_FRAME_MS);
+  const bytes = frameBytesFor(32000, CALL_FRAME_MS);
   assert.equal(bytes > 1000 && bytes < 8000, true, `mảnh ~${bytes} byte`);
   let queue = newAudioQueue();
   queue = pushFrame(queue, { seq: 3, uri: "f3" });
@@ -54,10 +60,10 @@ test("Tiếng nói: mảnh ngắn, xếp hàng theo số thứ tự, phát cách
   assert.equal(tooSoon.frame, null);
   // Hàng quá dài thì bỏ mảnh cũ nhất để không trễ.
   let long = newAudioQueue();
-  for (let seq = 1; seq <= 9; seq++)
+  for (let seq = 1; seq <= 12; seq++)
     long = pushFrame(long, { seq, uri: `f${seq}` });
-  assert.equal(queueSize(long), 6);
-  assert.equal(long[0].seq, 4);
+  assert.equal(queueSize(long), 8);
+  assert.equal(long[0].seq, 5);
   assert.equal(frameUsable(2000, true), true);
   assert.equal(frameUsable(2000, false), false, "mic tắt thì không gửi tiếng");
   assert.equal(frameUsable(0, true), false);
@@ -161,31 +167,63 @@ test("Nhật ký cuộc gọi là một loại tin nhắn thật, hiện giữa 
   assert.match(relay, /"call",\n\s*\].includes\(message\.kind\)/);
 });
 
-test("Cầu tình yêu 3D dùng chung một canvas với trái tim", () => {
-  const bridge = read("src/components/LoveBridge.tsx");
-  assert.match(bridge, /useFrame/, "hoạt ảnh chạy lại gần nhau");
-  assert.match(bridge, /BRIDGE_CURVE/, "vòm cầu theo đường cong");
-  assert.match(bridge, /Bride/, "cô dâu");
-  assert.match(bridge, /Groom/, "chú rể");
-  assert.match(bridge, /Magpie/, "chim Ô Thước");
-  assert.match(bridge, /instancedMesh/, "ván cầu và cột dựng theo lô, nhẹ máy");
-  assert.match(bridge, /octahedronGeometry/, "trái tim khi gặp nhau");
-  assert.match(bridge, /palette/, "màu cầu lấy theo chủ đề đang dùng");
-  // Chỉ MỘT vùng WebGL trên màn hình: hai canvas cùng lúc làm máy ảo đơ.
-  assert.doesNotMatch(
-    bridge,
-    /<Canvas/,
-    "cầu không được tự mở canvas riêng (gây dính màn hình trên máy ảo)",
-  );
+test("Cầu tình yêu là tranh vector theo ảnh người dùng gửi", () => {
+  const art = read("src/components/LoveBridgeArt.tsx");
+  assert.match(art, /react-native-svg/, "vẽ bằng vector");
+  assert.match(art, /WaveOrnament/, "hoa văn sóng hai góc như tranh");
+  assert.match(art, /moonGlow/, "vầng trăng vàng có quầng");
+  assert.match(art, /Cloud/, "mây trắng cuộn");
+  assert.match(art, /dressPink/, "tà áo hồng của cô dâu");
+  assert.match(art, /robeBlue/, "áo lam của chú rể");
+  assert.match(art, /Bird/, "chim Ô Thước xếp thành cầu");
+  assert.match(art, /Animated\.loop/, "hoạt ảnh nhẹ, không cần WebGL");
+  assert.doesNotMatch(art, /<Canvas/, "tranh không mở vùng WebGL nào");
+  // Chỉ còn MỘT vùng WebGL: trái tim. Hai canvas cùng lúc làm máy ảo đơ.
   const heart = read("src/components/ThreeHeart.tsx");
-  assert.match(heart, /BridgeGroup/, "cầu nằm trong canvas của trái tim");
+  assert.doesNotMatch(
+    heart,
+    /BridgeGroup/,
+    "trái tim không còn vẽ cầu trong GL",
+  );
   assert.match(heart, /antialias: false/, "hạ tải đồ hoạ cho máy yếu");
   const home = read("src/screens/local/HomeLocal.tsx");
-  assert.match(
-    home,
-    /<ThreeHeart reduced=\{reduced\} height=\{360\} withBridge \/>/,
+  assert.match(home, /<LoveBridgeArt height=\{226\} reduced=\{reduced\} \/>/);
+  assert.match(home, /<ThreeHeart reduced=\{reduced\} height=\{272\} \/>/);
+  assert.equal(
+    existsSync(new URL("../src/components/LoveBridge.tsx", import.meta.url)),
+    false,
+    "mô hình đồ chơi cũ đã bỏ",
   );
-  assert.doesNotMatch(home, /LoveBridge/, "không còn canvas cầu riêng");
+});
+
+test("Máy này tắt thì máy kia cũng tắt cuộc gọi", () => {
+  assert.equal(
+    CALL_SILENT_END_MS <= 6000,
+    true,
+    "chỉ chờ vài giây, không treo",
+  );
+  const t0 = at(15, 0);
+  let call = newCall({ id: "c9", role: "caller", name: "Ngọc", at: t0 });
+  call = callEvent(call, { type: "accept" }, t0);
+  assert.equal(callTimedOut(call, t0 + CALL_SILENT_END_MS - 100), false);
+  assert.equal(callTimedOut(call, t0 + CALL_SILENT_END_MS + 100), true);
+  call = callEvent(call, { type: "alive" }, t0 + 3000);
+  assert.equal(
+    callTimedOut(call, t0 + 4000),
+    false,
+    "có nhịp thì tiếp tục gọi",
+  );
+  const lost = callEvent(call, { type: "lost" }, t0 + 4000);
+  assert.equal(lost.phase, "ended");
+  assert.equal(lost.reason, "Người thương đã kết thúc cuộc gọi");
+  const app = read("App.tsx");
+  assert.match(app, /callTimedOut\(/, "mỗi giây kiểm tra nhịp sống");
+  assert.match(app, /event: "alive"/, "hai bên gửi nhịp còn sống");
+  assert.match(
+    app,
+    /\[250, 500\]\.forEach/,
+    "tín hiệu kết thúc gửi lại để không mất gói",
+  );
 });
 
 test("Nhắn tin nhanh hơn: không đẩy cả gói dữ liệu lớn vì một tin nhắn", () => {
@@ -209,4 +247,20 @@ test("Nhắn tin nhanh hơn: không đẩy cả gói dữ liệu lớn vì một
   assert.match(chat, /removeClippedSubviews/);
   const relay = read("src/services/relayProtocol.mjs");
   assert.match(relay, /\.slice\(0, 40\)/, "gói dữ liệu vẫn giới hạn số tin");
+});
+
+test("Bỏ tab Cảm xúc khỏi chế độ trên máy", () => {
+  const app = read("App.tsx");
+  const tabs = app.slice(
+    app.indexOf("const localTabs = ["),
+    app.indexOf("const tabs = ["),
+  );
+  assert.doesNotMatch(tabs, /Cảm xúc/, "không còn mục Cảm xúc trên thanh dưới");
+  assert.match(tabs, /Nhật ký/, "vẫn giữ Nhật ký");
+  assert.match(tabs, /Cài đặt/, "vẫn giữ Cài đặt");
+  assert.doesNotMatch(
+    app,
+    /<MoodLocal/,
+    "không còn màn Cảm xúc của chế độ trên máy",
+  );
 });

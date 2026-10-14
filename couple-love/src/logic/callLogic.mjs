@@ -2,6 +2,10 @@
 // Cuộc gọi đi qua chính kênh ghép nối (không cần máy chủ): bên gọi gửi tín hiệu
 // "ring", bên kia "accept"/"reject", ai cũng có thể "hangup".
 export const CALL_RING_TIMEOUT_MS = 45 * 1000;
+/** Hai bên gửi nhịp "còn đây" cách nhau từng này; quá lâu không thấy thì tự kết
+ *  thúc — máy A tắt thì máy B cũng tắt theo, không còn cảnh treo cuộc gọi. */
+export const CALL_ALIVE_MS = 1500;
+export const CALL_SILENT_END_MS = 5000;
 const PHASES = ["ringing", "active", "ended"];
 export function newCall({ id, role, name, at = Date.now() }) {
   if (!id) throw new Error("Cuộc gọi thiếu mã.");
@@ -16,14 +20,23 @@ export function newCall({ id, role, name, at = Date.now() }) {
     reason: "",
     minimized: false,
     micOn: true,
+    lastSeen: at,
   };
 }
 /** Áp một sự kiện lên cuộc gọi; trả về null nghĩa là cuộc gọi đã kết thúc hẳn. */
 export function callEvent(call, event, now = Date.now()) {
   if (!call) return null;
   const type = String(event?.type ?? "");
+  // Nhịp "còn đây" của máy kia — cập nhật mốc để biết máy kia còn trong cuộc gọi.
+  if (type === "alive") return { ...call, lastSeen: now };
   if (type === "accept" && call.phase === "ringing")
-    return { ...call, phase: "active", startedAt: now, minimized: false };
+    return {
+      ...call,
+      phase: "active",
+      startedAt: now,
+      minimized: false,
+      lastSeen: now,
+    };
   if (type === "reject")
     return {
       ...call,
@@ -45,10 +58,25 @@ export function callEvent(call, event, now = Date.now()) {
       endedAt: now,
       reason: "Người thương không trả lời",
     };
+  if (type === "lost")
+    return {
+      ...call,
+      phase: "ended",
+      endedAt: now,
+      reason: "Người thương đã kết thúc cuộc gọi",
+    };
   if (type === "mic") return { ...call, micOn: event.on === true };
   if (type === "minimize") return { ...call, minimized: event.min === true };
   return call;
 }
+/** Máy kia thôi trả lời nhịp (tắt app, mất mạng, hoặc đã kết thúc) thì tự kết thúc. */
+export function callTimedOut(call, now = Date.now()) {
+  if (!call || call.phase !== "active") return false;
+  return (
+    now - (call.lastSeen || call.startedAt || call.at) >= CALL_SILENT_END_MS
+  );
+}
+
 /** Cuộc gọi reo quá lâu mà không ai nghe thì tự kết thúc. */
 export function ringTimedOut(call, now = Date.now()) {
   return Boolean(

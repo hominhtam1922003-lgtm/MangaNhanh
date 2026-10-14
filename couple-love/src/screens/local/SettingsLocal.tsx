@@ -716,7 +716,7 @@ export default function SettingsLocal({
         </Card>
       ) : null}
       <Note>
-        Hai Trái Tim {Constants.expoConfig?.version ?? "1.12.0"} (chế độ trên
+        Hai Trái Tim {Constants.expoConfig?.version ?? "1.13.0"} (chế độ trên
         máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 12}) — ghi
         lại số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục
         riêng của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ

@@ -2,15 +2,17 @@
 // Máy ghi âm liên tục thành từng mảnh ngắn (mặc định 0,7 giây) rồi gửi ngay:
 // không cần giữ nút, hai bên nói liên tục như gọi thường. Hàm ở đây thuần
 // (không import React Native) nên kiểm thử được bằng Node.
-export const CALL_FRAME_MS = 700;
+export const CALL_FRAME_MS = 900;
 /** Giữ tối đa bao nhiêu mảnh chờ phát — quá dài thì bỏ mảnh cũ để không trễ. */
-export const CALL_QUEUE_MAX = 6;
+export const CALL_QUEUE_MAX = 8;
 /** Mảnh nhỏ hơn mức này coi như im lặng: vẫn gửi nhưng không xếp hàng dài. */
 export const CALL_SILENT_BYTES = 600;
+/** Phải có từng này mảnh trong tay rồi mới bắt đầu phát: nghe liền mạch hơn. */
+export const CALL_PREBUFFER = 2;
 /** Khoảng cách ngắn nhất giữa hai mảnh phát ra loa (tránh dồn cục). */
-export const CALL_PLAY_GAP_MS = 120;
+export const CALL_PLAY_GAP_MS = 40;
 /** Cuộc gọi kết thúc thì cửa sổ tự đóng sau từng này. */
-export const CALL_CLOSE_MS = 2200;
+export const CALL_CLOSE_MS = 2500;
 
 /** Bộ đệm phát của một cuộc gọi. */
 export function newAudioQueue() {

@@ -23,7 +23,7 @@ Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo
 
 ### Có gì mới ở 1.11.0 — gọi nói liên tục, nhạc chuông trong máy, cầu tình yêu 3D
 
-**Tải APK 1.11.0 (Android 7.0+, API 24):** xem mục **Releases** của kho (tệp `HaiTraiTim-1.11.0.apk`) — Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.11.0, bản dựng 13**.
+**Tải APK 1.11.0 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.11.0-test-8d9ef2e/HaiTraiTim-1.11.0.apk · 58.942.065 byte · SHA256 `ba6fa99c0e8e2770a126865be92e181a091d001514a9e88a7929022589aa3f14` · dựng từ `8d9ef2e` (build 38559252404). **iOS (.ipa chưa ký):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.11.0-test-8d9ef2e/HaiTraiTim-1.11.0-unsigned.ipa · 11.651.636 byte · SHA256 `2521e74bf022065c7a5ba110f7a022c53654e6a8d462ea709020de7a817b677f` (build 38559252507). Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.11.0, bản dựng 13**.
 
 - **Gọi nói liên tục, không còn giữ nút.** Tiếng nói được ghi thành từng mảnh **0,7 giây** (16 kHz mono, 24 kbit/s) rồi gửi ngay qua kênh ghép nối; máy kia lưu mảnh lại và phát lên loa (`src/logic/callAudio.mjs`: `pushFrame`, `takeFrame`, hàng đợi 6 mảnh, bỏ mảnh cũ để giữ độ trễ thấp). Bạn nói bình thường như Zalo/Messenger — không phải bấm giữ. _Nói thẳng:_ vẫn là tiếng gửi qua kênh ghép nối nên trễ khoảng một giây và có thể ngắt quãng vài chỗ; muốn chất lượng như cuộc gọi điện thoại thật thì phải thêm WebRTC và build lại phần native.
 - **Cả hai máy cùng nghe chuông.** Bên nhận nghe **nhạc chuông** (`assets/ringtone.wav`, hoặc nhạc riêng của bạn) và rung; bên gọi nghe **hồi chuông** (`assets/ringback.wav`) như tổng đài.

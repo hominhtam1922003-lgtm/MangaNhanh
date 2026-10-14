@@ -271,9 +271,9 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ## Hai Trái Tim 1.11.0 (bản mới nhất) — gọi nói liên tục, nhạc chuông trong máy, cầu tình yêu 3D
 
-**APK Android (cài trực tiếp, không cần ZIP):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.11.0-test-d987c52/HaiTraiTim-1.11.0.apk · dựng từ `d987c52`. Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.11.0, bản dựng 13**.
+**APK Android (cài trực tiếp, không cần ZIP):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.11.0-test-8d9ef2e/HaiTraiTim-1.11.0.apk · **58.942.065 byte** · SHA256 `ba6fa99c0e8e2770a126865be92e181a091d001514a9e88a7929022589aa3f14` · dựng từ `8d9ef2e` (lần build 38559252404, đăng bằng workflow 38560853145). Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.11.0, bản dựng 13**.
 
-**iPhone (file .ipa chưa ký, phải tự ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.11.0-test-d987c52/HaiTraiTim-1.11.0-unsigned.ipa
+**iPhone (file .ipa chưa ký, phải tự ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.11.0-test-8d9ef2e/HaiTraiTim-1.11.0-unsigned.ipa · **11.651.636 byte** · SHA256 `2521e74bf022065c7a5ba110f7a022c53654e6a8d462ea709020de7a817b677f` · dựng từ `8d9ef2e` (lần build 38559252507, đăng bằng workflow 38560853117)
 
 Bản 1.11.0 sửa đúng những việc bạn nêu:
 

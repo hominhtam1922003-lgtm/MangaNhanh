@@ -52,7 +52,15 @@ export type State = {
     theme: string;
     /** Độ đậm lớp phủ trên ảnh nền: 0,3 = ảnh rõ · 0,75 = chữ rõ. */
     wallpaperTint?: number;
+    /** Cho người thương biết mình đã xem tin chưa. */
+    readReceipts?: boolean;
+    /** Tự gửi lời yêu/thơ mỗi 2 tiếng (07:00–22:00). */
+    autoLove?: boolean;
+    /** Nhắc khi mình chưa trả lời người thương. */
+    replyNudge?: boolean;
   };
+  /** Mốc lần cuối tự gửi lời yêu, để không gửi dồn. */
+  autoLoveAt?: number;
   moments: {
     id: string;
     authorId: string;
@@ -75,6 +83,11 @@ export type State = {
     authorId: string;
     kind: string;
     body: string;
+    /** Ảnh gửi trong đoạn chat (tên tệp trong thư mục riêng của app). */
+    photo?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    place?: string;
     audio: string | null;
     durationMs: number;
     createdAt: string;

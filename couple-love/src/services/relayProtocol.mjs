@@ -278,12 +278,24 @@ export function buildRelayPayload(
       .slice(0, 40)
       .map((message) => ({
         id: String(message.id),
-        kind: ["text", "emoji", "voice", "nudge"].includes(message.kind)
+        kind: [
+          "text",
+          "emoji",
+          "voice",
+          "nudge",
+          "sticker",
+          "photo",
+          "location",
+        ].includes(message.kind)
           ? message.kind
           : "text",
         body: String(message.body ?? "").slice(0, 600),
         createdAt: String(message.createdAt ?? ""),
         hasAudio: Boolean(message.audio),
+        hasPhoto: Boolean(message.photo),
+        lat: Number.isFinite(Number(message.lat)) ? Number(message.lat) : null,
+        lng: Number.isFinite(Number(message.lng)) ? Number(message.lng) : null,
+        place: String(message.place ?? "").slice(0, 120),
         durationMs: Number(message.durationMs) || 0,
       })),
     alerts: (Array.isArray(state.alerts) ? state.alerts : []).slice(0, 60),
@@ -703,7 +715,10 @@ export class RelayClient {
             message?.kind === "state" ||
             message?.kind === "photo" ||
             message?.kind === "photoRequest" ||
-            message?.kind === "chat"
+            message?.kind === "chat" ||
+            // Tín hiệu cuộc gọi (đổ chuông, nghe, từ chối, kết thúc) và báo đã xem.
+            message?.kind === "call" ||
+            message?.kind === "chatRead"
           ) {
             const firstContact = !this.partnerOnline;
             this.partnerSeen = Date.now();

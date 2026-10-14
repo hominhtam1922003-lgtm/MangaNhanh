@@ -84,6 +84,8 @@ function Session({
   const glow = useRef<THREE.Mesh>(null);
   const sparkles = useRef<THREE.Points>(null);
   const shell = useRef<THREE.Mesh>(null);
+  const orbit = useRef<THREE.Group>(null);
+  const { theme } = useTheme();
   const geometry = useHeartGeometry();
   const sparkleGeometry = useSparkles();
   const satellites = useMemo(() => [0, 2.1, 4.2], []);
@@ -101,6 +103,11 @@ function Session({
     }
     if (shell.current && !reduced) {
       shell.current.rotation.y -= step * 0.18;
+    }
+    if (orbit.current && !reduced) {
+      // Vòng tim nhỏ quay quanh trái tim lớn.
+      orbit.current.rotation.y += step * 0.32;
+      orbit.current.rotation.z = Math.sin(t * 0.3) * 0.12;
     }
     if (glow.current) {
       const pulse = reduced ? 1 : 1 + Math.sin(t * 1.6) * 0.05;
@@ -133,13 +140,35 @@ function Session({
       <group ref={group}>
         <mesh geometry={geometry}>
           <meshPhysicalMaterial
-            color="#ec397b"
-            roughness={0.2}
-            metalness={0.25}
+            color="#f22f74"
+            roughness={0.16}
+            metalness={0.3}
             clearcoat={1}
-            clearcoatRoughness={0.12}
-            emissive="#a80743"
-            emissiveIntensity={0.2}
+            clearcoatRoughness={0.08}
+            reflectivity={1}
+            sheen={1}
+            sheenColor="#ffd0e4"
+            emissive="#b4074a"
+            emissiveIntensity={0.22}
+          />
+        </mesh>
+        {/* vệt sáng bóng chạy trên mặt tim cho ra dáng 3D */}
+        <mesh position={[-0.62, 0.62, 1.02]} rotation={[0.1, -0.2, 0.5]}>
+          <sphereGeometry args={[0.36, 32, 32]} />
+          <meshBasicMaterial
+            color="#ffffff"
+            transparent
+            opacity={0.22}
+            depthWrite={false}
+          />
+        </mesh>
+        <mesh position={[0.5, -0.7, 1.0]} rotation={[0.2, 0.3, -0.4]}>
+          <sphereGeometry args={[0.16, 24, 24]} />
+          <meshBasicMaterial
+            color={theme.glow}
+            transparent
+            opacity={0.35}
+            depthWrite={false}
           />
         </mesh>
         <mesh geometry={geometry} scale={1.05}>
@@ -155,24 +184,26 @@ function Session({
           <torusGeometry args={[1.95, 0.012, 8, 96]} />
           <meshBasicMaterial color="#ffb3d1" transparent opacity={0.55} />
         </mesh>
-        {satellites.map((offset, index) => (
-          <mesh
-            key={index}
-            geometry={geometry}
-            position={[
-              Math.cos(offset) * 2.1,
-              Math.sin(offset * 1.3) * 1.1,
-              Math.sin(offset) * 0.6,
-            ]}
-            scale={0.16}
-            rotation={[0.2, offset, -0.1]}
-          >
-            <meshStandardMaterial
-              color={index % 2 ? "#ffb3d1" : "#ff5c9d"}
-              roughness={0.35}
-            />
-          </mesh>
-        ))}
+        <group ref={orbit}>
+          {satellites.map((offset, index) => (
+            <mesh
+              key={index}
+              geometry={geometry}
+              position={[
+                Math.cos(offset) * 2.1,
+                Math.sin(offset * 1.3) * 1.1,
+                Math.sin(offset) * 0.6,
+              ]}
+              scale={0.16}
+              rotation={[0.2, offset, -0.1]}
+            >
+              <meshStandardMaterial
+                color={index % 2 ? "#ffd0e4" : theme.glow}
+                roughness={0.28}
+              />
+            </mesh>
+          ))}
+        </group>
       </group>
       <points ref={sparkles} geometry={sparkleGeometry}>
         <pointsMaterial
@@ -190,8 +221,10 @@ function Session({
 
 export default memo(function ThreeHeart({
   reduced = false,
+  height = 320,
 }: {
   reduced?: boolean;
+  height?: number;
 }) {
   const [drag, setDrag] = useState({ x: 0, y: 0 });
   const [pressed, setPressed] = useState(false);
@@ -226,7 +259,7 @@ export default memo(function ThreeHeart({
     <Boundary color={theme.text}>
       <View
         accessibilityLabel="Trái tim 3D, chạm giữ để thấy nhịp đập và vuốt để xoay"
-        style={{ height: 320 }}
+        style={{ height }}
         {...responder.panHandlers}
       >
         <Canvas

@@ -14,6 +14,7 @@ import * as ImagePicker from "expo-image-picker";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
 import ThreeHeart from "../../components/ThreeHeart";
+import LoveBridge from "../../components/LoveBridge";
 import DatePicker from "../../components/DatePicker";
 import {
   Button,
@@ -225,38 +226,96 @@ export default function HomeLocal({
             {symbol}
           </Text>
         ))}
-        <View className="flex-row items-center justify-around mb-1">
-          <View className="items-center" style={{ maxWidth: 132 }}>
-            <LocalAvatar
-              name={state.me.nickname}
-              image={state.me.avatar}
-              size={62}
-            />
-            <Text
-              className="font-bold mt-2 text-center"
-              style={{ color: theme.ink }}
+        {/* Hai bạn: ảnh tròn có viền chuyển sắc, tên nằm trong viên thuốc */}
+        <View className="flex-row items-center justify-between mb-2">
+          <View className="items-center flex-1">
+            <LinearGradient
+              colors={theme.deep}
+              style={{ borderRadius: 46, padding: 3 }}
             >
-              {state.me.nickname}
+              <View
+                style={{
+                  borderRadius: 42,
+                  backgroundColor: theme.surface,
+                  padding: 2,
+                }}
+              >
+                <LocalAvatar
+                  name={state.me.nickname}
+                  image={state.me.avatar}
+                  size={66}
+                />
+              </View>
+            </LinearGradient>
+            <View
+              className="px-3 py-1 mt-2"
+              style={{
+                backgroundColor: theme.glass,
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: theme.border,
+                maxWidth: 140,
+              }}
+            >
+              <Text
+                className="font-bold text-center"
+                style={{ color: theme.ink }}
+                numberOfLines={1}
+              >
+                {state.me.nickname}
+              </Text>
+            </View>
+          </View>
+          <View className="items-center px-2">
+            <Text className="text-3xl" style={{ color: theme.text }}>
+              ♥
+            </Text>
+            <Text className="text-xs" style={{ color: theme.sub }}>
+              yêu nhau
             </Text>
           </View>
-          <Text className="text-2xl" style={{ color: theme.text }}>
-            ♥
-          </Text>
-          <View className="items-center" style={{ maxWidth: 132 }}>
-            <LocalAvatar
-              name={state.partner?.nickname || "Người thương"}
-              image={state.partner?.avatar ?? null}
-              size={62}
-            />
-            <Text
-              className="font-bold mt-2 text-center"
-              style={{ color: theme.ink }}
+          <View className="items-center flex-1">
+            <LinearGradient
+              colors={theme.deep}
+              style={{ borderRadius: 46, padding: 3 }}
             >
-              {state.partner?.nickname || "Chưa ghép nối"}
-            </Text>
+              <View
+                style={{
+                  borderRadius: 42,
+                  backgroundColor: theme.surface,
+                  padding: 2,
+                }}
+              >
+                <LocalAvatar
+                  name={state.partner?.nickname || "Người thương"}
+                  image={state.partner?.avatar ?? null}
+                  size={66}
+                />
+              </View>
+            </LinearGradient>
+            <View
+              className="px-3 py-1 mt-2"
+              style={{
+                backgroundColor: theme.glass,
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: theme.border,
+                maxWidth: 140,
+              }}
+            >
+              <Text
+                className="font-bold text-center"
+                style={{ color: theme.ink }}
+                numberOfLines={1}
+              >
+                {state.partner?.nickname || "Chưa ghép nối"}
+              </Text>
+            </View>
           </View>
         </View>
-        <ThreeHeart reduced={reduced} />
+        {/* Cầu tình yêu: hai bạn chibi chạy từ hai đầu vào giữa cầu */}
+        <LoveBridge height={150} />
+        <ThreeHeart reduced={reduced} height={250} />
         <View className="items-center mb-4">
           <Text
             className="text-xs uppercase"

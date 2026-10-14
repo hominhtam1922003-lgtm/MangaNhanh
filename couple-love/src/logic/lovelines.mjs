@@ -92,3 +92,135 @@ export function loveLineFor(day) {
 export function loveLineKey(day) {
   return `love-line-${String(day ?? "").slice(0, 10)}`;
 }
+
+// Thơ ngắn: tự gửi mỗi 2 tiếng nếu chọn gửi thơ, xen kẽ với lời yêu.
+export const LOVE_POEMS = [
+  {
+    emoji: "🌷",
+    lines: [
+      "Anh gom nắng sớm nay lại",
+      "Gửi em một chút cho ngày dịu hơn",
+      "Nếu em thấy lòng chùng xuống",
+      "Thì coi tin nhắn này là anh đang cười.",
+    ],
+  },
+  {
+    emoji: "🌙",
+    lines: [
+      "Đêm nay trăng sáng ngoài hiên",
+      "Anh ngồi đếm thử mấy lần nhớ em",
+      "Đếm hoài mà chẳng hết thêm",
+      "Thôi thì nhắn trước, để em ngủ ngon.",
+    ],
+  },
+  {
+    emoji: "🌾",
+    lines: [
+      "Mình đi qua mấy mùa rồi",
+      "Mùa nào cũng có em ngồi cạnh anh",
+      "Đường còn dài, chẳng sao đâu",
+      "Miễn là bước chậm, cùng nhau là về.",
+    ],
+  },
+  {
+    emoji: "☕",
+    lines: [
+      "Sáng nay em uống gì chưa",
+      "Anh pha giùm một câu hỏi thật thà",
+      "Em nhớ ăn sáng đấy nha",
+      "Đừng để bụng đói, anh lo.",
+    ],
+  },
+  {
+    emoji: "🌧️",
+    lines: [
+      "Trời mưa thì mặc áo vào",
+      "Đi xe chậm lại, đường trơn em à",
+      "Anh ở xa, chẳng che được",
+      "Nên gửi câu này giữ em ấm phần nào.",
+    ],
+  },
+  {
+    emoji: "🏮",
+    lines: [
+      "Anh không hứa chuyện lớn lao",
+      "Chỉ hứa sáng dậy vẫn còn thương em",
+      "Ngày dài, tối muộn, mệt thêm",
+      "Thì câu thương ấy vẫn nguyên vẹn hoài.",
+    ],
+  },
+  {
+    emoji: "🍊",
+    lines: [
+      "Em là quả ngọt mùa này",
+      "Anh là người đứng dưới cây đợi chờ",
+      "Chờ lâu cũng chẳng sao đâu",
+      "Miễn là em rụng vào tay anh lành.",
+    ],
+  },
+  {
+    emoji: "🕊️",
+    lines: [
+      "Giận nhau thì giận một hôm",
+      "Đừng mang theo tới giấc êm của mình",
+      "Sáng mai trời lại trong xanh",
+      "Mình nói với nhau câu nhẹ nhàng thôi.",
+    ],
+  },
+  {
+    emoji: "🌻",
+    lines: [
+      "Hướng dương luôn ngó mặt trời",
+      "Còn anh thì cứ ngó hoài về em",
+      "Xa bao nhiêu cũng chẳng quên",
+      "Ngày nào cũng vậy, đều thêm một phần.",
+    ],
+  },
+  {
+    emoji: "🎐",
+    lines: [
+      "Gió khuya lùa nhẹ qua song",
+      "Mang câu này tới chỗ em đang nằm",
+      "Ngủ đi, nhắm mắt, thở sâu",
+      "Anh ở đây, ngay khi em cần.",
+    ],
+  },
+  {
+    emoji: "🧵",
+    lines: [
+      "Chuyện mình khâu từng mũi kim",
+      "Mũi nào cũng có tên em, tên anh",
+      "Vải thô, chỉ mảnh cũng thành",
+      "Tấm êm che cả những ngày gió mưa.",
+    ],
+  },
+  {
+    emoji: "🍀",
+    lines: [
+      "Cảm ơn em đã chọn anh",
+      "Giữa bao nhiêu lựa chọn bon chen ngoài kia",
+      "Anh giữ vầng may mắn này",
+      "Cẩn thận, từng ngày, chẳng để rơi.",
+    ],
+  },
+];
+export function lovePoemIndex(seed) {
+  const value = Number(seed) || 0;
+  return Math.abs(Math.floor(value)) % LOVE_POEMS.length;
+}
+export function lovePoemFor(seed) {
+  return LOVE_POEMS[lovePoemIndex(seed)];
+}
+/** Một lời nhắn tự động: xen kẽ lời yêu và thơ, chọn theo mốc thời gian. */
+export function loveNoteFor(when, turn = 0) {
+  const at = when instanceof Date ? when : new Date(when ?? Date.now());
+  const stamp = Number.isFinite(at.getTime()) ? at.getTime() : Date.now();
+  const slot = Math.floor(stamp / (2 * 60 * 60 * 1000)) + (Number(turn) || 0);
+  if (Math.abs(slot) % 2 === 1) {
+    const poem = lovePoemFor(slot);
+    return { emoji: poem.emoji, text: poem.lines.join("\n") };
+  }
+  const day = at.toISOString().slice(0, 10);
+  const line = loveLineFor(day);
+  return { emoji: line.emoji, text: line.text };
+}

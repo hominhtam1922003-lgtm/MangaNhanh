@@ -21,6 +21,20 @@ Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo
 - **Không dùng `TextEncoder`/`TextDecoder` hay `crypto.getRandomValues`** (React Native không cấp): phần chuyển chữ ↔ byte được tự viết trong `relayProtocol.mjs` (đối chiếu từng byte với chuẩn UTF-8 của Node trong `tests/relay.test.mjs`, có bài chạy khi đã xóa hai lớp đó) và nguồn ngẫu nhiên an toàn lấy từ `expo-crypto` qua `installRandomBytes`. Mọi lỗi JavaScript được ghi vào **“Lỗi gần nhất”** trong Cài đặt thay vì làm văng app.
 - Giới hạn thật: cần Internet ở **cả hai** máy; dữ liệu mới chỉ sang nhau khi hai bên cùng mở app (một bên đóng app thì lần mở sau gửi bù); mã 6 số chỉ có 1.000.000 khả năng nên đừng dán công khai ở nơi nhiều người thấy.
 
+### Có gì mới ở 1.10.0 — hết chữ ngược, gọi điện, sticker, cầu tình yêu
+
+- **Hết chữ bị ngược trong khung chat.** Nguyên nhân: bảng tin trước đây dùng `FlatList inverted`; trên Android kiểu này chạy bằng `transform: [{ scale: -1 }]` nên **ô trống và cả chữ trong đó cũng bị soi gương**. Nay danh sách không lật: `const ordered = [...messages].reverse()` hiển thị cũ → mới, có `scrollToEnd` (và `followRef` theo dõi khi bạn đang ở gần đáy) để tin mới tự hiện ở dưới.
+- **Ô nhắn tin được kéo lên** khỏi thanh chuyển mục (`marginBottom`), không còn dính liền.
+- **Nhiều sticker hơn:** 4 bộ × 12 sticker (Yêu thương, Vui vẻ, Nhớ nhung, Dễ thương) + bảng 48 emoji chèn thẳng vào câu chữ.
+- **Trái tim 3D đẹp hơn** và **2 avatar + tên** nằm trong viên gradient nổi, có nhãn tên riêng.
+- **Cầu tình yêu:** cô dâu & chú rể chibi ở hai đầu cầu 3D, tự chạy lại gần nhau rồi gặp nhau ở giữa cầu (`src/components/LoveBridge.tsx`).
+- **Gọi điện như Messenger/Zalo:** bấm gọi → máy kia **đổ chuông** → **Nghe/Từ chối** → **giữ nút để nói** (mỗi lần ≤ 25 giây), **bật/tắt mic**, **thu nhỏ cửa sổ** khi đang gọi, kết thúc thì tự ẩn sau 4,5 giây. _Nói thẳng:_ cuộc gọi đi qua kênh ghép nối sẵn có, tính năng như **bộ đàm** (chuông + giữ để nói), **chưa phải thoại hai chiều liên tục** — muốn vậy phải thêm WebRTC và build lại native.
+- **Cách 2 tiếng tự gửi lời yêu / thơ** (07:00–22:00, xen kẽ lời yêu và thơ, hai máy cùng mốc thì cùng câu), tắt được trong Cài đặt.
+- **Nhắc khi chưa trả lời:** người thương nhắn mà mình chưa rep quá **3 phút** → “Người ấy vẫn đang đợi tin nhắn từ bạn 💌”; quá **1 tiếng** thì kèm một lời yêu; **im lặng từ 22:00–07:00**.
+- **Bật/tắt “đã xem”** trong Cài đặt (`settings.readReceipts`).
+- **Gửi ảnh và vị trí ngay trong đoạn chat:** chụp ảnh / chọn ảnh trong máy (nén 720 px, ≤ 160 KB) và gửi **vị trí đang ở** kèm nút mở bản đồ (`expo-location`).
+- 64 bài kiểm thử đều xanh, TypeScript sạch, `expo export` cho Android thành công.
+
 ### Có gì mới ở 1.9.1 — ảnh nền kiểu Zalo
 
 **Tải APK 1.9.1 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.9.1-test-ef2dc57/HaiTraiTim-1.9.1.apk · 57.934.306 byte · SHA256 `15d43a165d853b67a0889b8dd45cb9aff832c6686f14023932c0b605fa38ad94` · dựng từ `ef2dc57` (build 38543908536). **iOS (.ipa chưa ký):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.9.1-test-ef2dc57/HaiTraiTim-1.9.1-unsigned.ipa · 11.309.849 byte · SHA256 `a313cbb484c9ac5a640d832d861f5b4c24c1f76d40b959038aacf8a8f7d14e08` (build 38543908210).

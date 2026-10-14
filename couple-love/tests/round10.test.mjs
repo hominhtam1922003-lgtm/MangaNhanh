@@ -13,8 +13,13 @@ const read = (path) =>
 test("Bảng tin nhắn cố định: tin mới trôi lên, kéo xem lại như Messenger/Zalo", () => {
   const source = read("src/screens/local/ChatLocal.tsx");
   assert.match(source, /<FlatList/, "bảng tin phải là danh sách cuộn riêng");
-  assert.match(source, /\binverted\b/, "tin mới nhất nằm dưới cùng");
-  assert.match(source, /scrollToOffset/, "có tin mới thì tự cuộn xuống");
+  assert.doesNotMatch(
+    source,
+    /\binverted\b/,
+    "không lật danh sách (Android lật cả chữ trong ô rỗng)",
+  );
+  assert.match(source, /scrollToEnd/, "có tin mới thì tự cuộn xuống cuối");
+  assert.match(source, /const ordered/, "hiển thị theo thứ tự cũ → mới");
   assert.doesNotMatch(
     source,
     /messages\.map\(/,

@@ -9,6 +9,8 @@ export const WALLPAPER_LIMIT_BYTES = 420 * 1024;
 /** Tin thoại 25 giây (AAC) thường dưới 300 KB — cho hạn mức riêng để không bị
  * cắt như ảnh khoảnh khắc. */
 export const VOICE_LIMIT_BYTES = 420 * 1024;
+/** Ảnh gửi trong đoạn chat: nén như ảnh khoảnh khắc cho nhẹ đường truyền. */
+export const CHAT_PHOTO_LIMIT_BYTES = 160 * 1024;
 /** Cắt ảnh base64 thành các gói tin gửi qua kênh kết nối. */
 export function photoMessages(photo, chunkSize = CHUNK_SIZE) {
   const base64 = String(photo?.base64 ?? "").replace(/\s+/g, "");
@@ -38,7 +40,10 @@ export function photoMessages(photo, chunkSize = CHUNK_SIZE) {
             ? "wallpaper"
             : photo.role === "voice"
               ? "voice"
-              : "moment",
+              : photo.role === "chat"
+                ? "chat"
+                : "moment",
+        chatId: String(photo.chatId ?? "").slice(0, 40),
         wallpaperId: String(photo.wallpaperId ?? "").slice(0, 60),
         voiceId: String(photo.voiceId ?? "").slice(0, 60),
         durationMs: Math.min(

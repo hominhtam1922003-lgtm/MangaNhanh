@@ -517,6 +517,84 @@ export default function SettingsLocal({
         ) : null}
       </Card>
       <Card>
+        <Title small>Nhắc nhở &amp; lời yêu tự động</Title>
+        <View className="flex-row justify-between items-center my-3">
+          <View className="flex-1 pr-2">
+            <Text style={{ color: theme.ink }}>
+              Cho người thương biết mình đã xem tin
+            </Text>
+            <Note>
+              Tắt thì máy bạn không báo “đã xem” và cũng không hiện “đã xem” của
+              máy kia — đọc tin vẫn bình thường.
+            </Note>
+          </View>
+          <Switch
+            accessibilityLabel="Cho biết đã xem tin nhắn"
+            value={state.settings.readReceipts !== false}
+            onValueChange={(value) =>
+              update({
+                type: "settings.set",
+                notify: state.settings.notify,
+                relay: state.settings.relay,
+                loveNotes: state.settings.loveNotes,
+                theme: state.settings.theme,
+                readReceipts: value,
+              })
+            }
+          />
+        </View>
+        <View className="flex-row justify-between items-center my-3">
+          <View className="flex-1 pr-2">
+            <Text style={{ color: theme.ink }}>
+              Tự gửi lời yêu hoặc thơ mỗi 2 tiếng
+            </Text>
+            <Note>
+              Chỉ gửi trong khung 07:00–22:00, ban đêm không làm phiền. Vào mục
+              Tin nhắn xem lần gửi gần nhất.
+            </Note>
+          </View>
+          <Switch
+            accessibilityLabel="Tự gửi lời yêu mỗi 2 tiếng"
+            value={state.settings.autoLove !== false}
+            onValueChange={(value) =>
+              update({
+                type: "settings.set",
+                notify: state.settings.notify,
+                relay: state.settings.relay,
+                loveNotes: state.settings.loveNotes,
+                theme: state.settings.theme,
+                autoLove: value,
+              })
+            }
+          />
+        </View>
+        <View className="flex-row justify-between items-center my-3">
+          <View className="flex-1 pr-2">
+            <Text style={{ color: theme.ink }}>
+              Nhắc khi mình chưa trả lời người thương
+            </Text>
+            <Note>
+              Quá 3 phút chưa trả lời: “Người ấy vẫn đang đợi tin nhắn từ bạn”.
+              Quá 1 tiếng nhắc thêm một lời yêu. Không nhắc từ 22:00 đến 07:00.
+            </Note>
+          </View>
+          <Switch
+            accessibilityLabel="Nhắc khi chưa trả lời"
+            value={state.settings.replyNudge !== false}
+            onValueChange={(value) =>
+              update({
+                type: "settings.set",
+                notify: state.settings.notify,
+                relay: state.settings.relay,
+                loveNotes: state.settings.loveNotes,
+                theme: state.settings.theme,
+                replyNudge: value,
+              })
+            }
+          />
+        </View>
+      </Card>
+      <Card>
         <View className="flex-row justify-between items-center my-3">
           <Text className="flex-1" style={{ color: theme.ink }}>
             Lời yêu thương mỗi ngày (09:00 và 21:00)
@@ -592,8 +670,8 @@ export default function SettingsLocal({
         </Card>
       ) : null}
       <Note>
-        Hai Trái Tim {Constants.expoConfig?.version ?? "1.9.1"} (chế độ trên
-        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 11}) — ghi
+        Hai Trái Tim {Constants.expoConfig?.version ?? "1.10.0"} (chế độ trên
+        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 12}) — ghi
         lại số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục
         riêng của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ
         liệu, nên hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch,

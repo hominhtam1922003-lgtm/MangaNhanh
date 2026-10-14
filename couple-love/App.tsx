@@ -63,18 +63,26 @@ import {
   missingPhotoIds,
   missingVoiceIds,
   photoMessages,
+  CHAT_PHOTO_LIMIT_BYTES,
   VOICE_LIMIT_BYTES,
   WALLPAPER_LIMIT_BYTES,
 } from "./src/services/momentTransfer.mjs";
 import ChatLocal from "./src/screens/local/ChatLocal";
+import CallLocal from "./src/screens/local/CallLocal";
+import { callEvent, newCall, ringTimedOut } from "./src/logic/callLogic.mjs";
+import type { CallInfo } from "./src/logic/callLogic.mjs";
+import { dueLoveNote, waitingNotice } from "./src/logic/autoLove.mjs";
+import { loveNoteFor } from "./src/logic/lovelines.mjs";
 import { wallpaperFile } from "./src/logic/localState.mjs";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeContext";
 import {
   imageBase64,
   imageExists,
   imageUri,
+  saveImage,
   writeBase64,
 } from "./src/services/localdb";
+import * as Location from "expo-location";
 import HomeLocal from "./src/screens/local/HomeLocal";
 import CycleLocal from "./src/screens/local/CycleLocal";
 import DiaryLocal from "./src/screens/local/DiaryLocal";
@@ -456,6 +464,18 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   const [notifyState, setNotifyState] = useState<
     "unknown" | "granted" | "denied"
   >("unknown");
+  // Cuộc gọi: trạng thái thật nằm trong ref để tín hiệu qua kênh luôn đọc được
+  // bản mới nhất, state chỉ để vẽ lại giao diện.
+  const [call, setCall] = useState<CallInfo | null>(null);
+  const callRef = useRef<CallInfo | null>(null);
+  const applyCall = (next: CallInfo | null) => {
+    callRef.current = next;
+    setCall(next);
+  };
+  const [callTick, setCallTick] = useState(0);
+  const noticeRef = useRef<{ key: string; stage: string; at: number } | null>(
+    null,
+  );
   const momentQueueRef = useRef(false);
   const messageQueueRef = useRef(false);
   const [lastError, setLastError] = useState("");
@@ -603,6 +623,159 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     ) {
       void rescheduleEverything(next).catch(() => {});
     }
+    // Đọc tin của người thương thì báo cho họ biết (nếu cả hai không tắt).
+    if (String(action.type) === "message.read") {
+      const fresh = (current.messages ?? [])
+        .filter(
+          (message) =>
+            message.authorId === "partner" && !message.readAt && message.id,
+        )
+        .map((message) => message.id)
+        .slice(0, 20);
+      if (fresh.length && next.settings?.readReceipts !== false)
+        relayRef.current?.publish({ kind: "chatRead", ids: fresh });
+    }
+  }
+
+  // ---------- Cuộc gọi ----------
+  // Bấm Gọi: gửi tín hiệu đổ chuông sang máy người thương rồi hiện màn hình gọi.
+  function startCall() {
+    const current = stateRef.current;
+    const client = relayRef.current;
+    const name = current?.partner?.nickname || "Người thương";
+    if (!current) return;
+    if (!current.partner) {
+      Alert.alert(
+        "Chưa ghép nối",
+        "Hai bạn cần ghép nối bằng mã 6 số trước khi gọi cho nhau.",
+      );
+      return;
+    }
+    if (!client || !client.connected) {
+      Alert.alert(
+        "Chưa nối được",
+        "Hai máy cần cùng mở app và cùng có mạng mới gọi được. Kiểm tra mạng (máy ảo cũng phải bật mạng) rồi thử lại nhé.",
+      );
+      return;
+    }
+    const id = "c" + Date.now().toString(36);
+    const sent = client.publish({
+      kind: "call",
+      event: "ring",
+      callId: id,
+      name: current.me.nickname,
+    });
+    applyCall(newCall({ id, role: "caller", name }));
+    setRelayLog((lines) =>
+      [
+        ...lines,
+        sent ? `Đang gọi ${name}…` : "Chưa gửi được tín hiệu gọi, thử lại nhé.",
+      ].slice(-12),
+    );
+  }
+  // Nghe / Từ chối / Kết thúc / thu nhỏ / bật tắt mic.
+  function callAction(event: { type: string; on?: boolean; min?: boolean }) {
+    const active = callRef.current;
+    if (!active) return;
+    const client = relayRef.current;
+    const name = stateRef.current?.me.nickname ?? "";
+    if (
+      event.type === "accept" ||
+      event.type === "reject" ||
+      event.type === "hangup"
+    )
+      client?.publish({
+        kind: "call",
+        event: event.type,
+        callId: active.id,
+        name,
+      });
+    if (
+      event.type === "hangup" &&
+      !active.startedAt &&
+      active.role === "callee"
+    ) {
+      // Từ chối cuộc gọi: không cần hiện màn hình "đã kết thúc".
+      applyCall(null);
+      return;
+    }
+    applyCall(callEvent(active, event));
+  }
+  function sendCallVoice(uri: string, durationMs: number) {
+    try {
+      const id =
+        "v" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+      const file = saveImage(uri, `voice-${id}.m4a`);
+      update({
+        type: "message.add",
+        id,
+        kind: "voice",
+        body: "",
+        audio: file,
+        durationMs,
+      });
+      setTimeout(() => flushMessages(), 120);
+    } catch (error) {
+      Alert.alert(
+        "Chưa gửi được tiếng nói",
+        error instanceof Error ? error.message : "Ghi âm bị lỗi.",
+      );
+    }
+  }
+  // Gửi ảnh trong đoạn chat (chụp hoặc chọn từ thư viện).
+  function sendChatPhoto(uri: string, caption: string) {
+    try {
+      const id =
+        "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+      const file = saveImage(uri, `chatpix-${id}.jpg`);
+      update({
+        type: "message.add",
+        id,
+        kind: "photo",
+        body: caption,
+        photo: file,
+      });
+      setTimeout(() => flushMessages(), 120);
+    } catch (error) {
+      Alert.alert(
+        "Chưa gửi được ảnh",
+        error instanceof Error ? error.message : "Ảnh bị lỗi.",
+      );
+    }
+  }
+  // Gửi vị trí đang ở: lấy toạ độ GPS hiện tại rồi gửi kèm tin nhắn.
+  async function sendLocation() {
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          "Cần quyền vị trí",
+          "Hãy cho phép lấy vị trí để gửi cho người thương biết bạn đang ở đâu.",
+        );
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      update({
+        type: "message.add",
+        kind: "location",
+        body: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+        lat,
+        lng,
+      });
+      setTimeout(() => flushMessages(), 120);
+      setRelayLog((lines) => [...lines, "Đã gửi vị trí đang ở"].slice(-12));
+    } catch (error) {
+      Alert.alert(
+        "Chưa lấy được vị trí",
+        error instanceof Error
+          ? error.message
+          : "Máy chưa lấy được toạ độ. Thử bật GPS rồi lại nhé.",
+      );
+    }
   }
   function replaceState(next: State) {
     stateRef.current = next;
@@ -739,6 +912,10 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             createdAt: message.createdAt,
             durationMs: message.durationMs,
             hasAudio: Boolean(message.audio),
+            hasPhoto: Boolean(message.photo),
+            lat: message.lat ?? null,
+            lng: message.lng ?? null,
+            place: message.place ?? "",
           },
           name: current.me.nickname,
         });
@@ -777,6 +954,34 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               [
                 ...lines,
                 "Tin thoại quá dài nên chưa gửi được tệp — hãy ghi ngắn hơn (dưới 25 giây).",
+              ].slice(-12),
+            );
+          }
+        }
+        // Ảnh trong đoạn chat: gửi tệp bằng nhiều gói như ảnh khoảnh khắc.
+        if (message.kind === "photo" && message.photo) {
+          const base64 = imageBase64(message.photo, CHAT_PHOTO_LIMIT_BYTES);
+          if (base64) {
+            for (const packet of photoMessages({
+              id: message.id,
+              base64,
+              caption: message.body,
+              createdAt: message.createdAt,
+              nickname: current.me.nickname,
+              role: "chat",
+              chatId: message.id,
+            })) {
+              client.publish(packet);
+              await new Promise((resolve) => setTimeout(resolve, 60));
+            }
+            setRelayLog((lines) =>
+              [...lines, "Đã gửi một ảnh trong đoạn chat"].slice(-12),
+            );
+          } else {
+            setRelayLog((lines) =>
+              [
+                ...lines,
+                "Ảnh hơi nặng nên chưa gửi được tệp — thử chọn ảnh khác nhỏ hơn nhé.",
               ].slice(-12),
             );
           }
@@ -964,6 +1169,10 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
                 body?: string;
                 createdAt?: string;
                 durationMs?: number;
+                hasPhoto?: boolean;
+                lat?: number | null;
+                lng?: number | null;
+                place?: string;
               }
             | undefined;
           if (incoming?.id) {
@@ -977,6 +1186,9 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               body: incoming.body,
               createdAt: incoming.createdAt,
               durationMs: incoming.durationMs,
+              lat: incoming.lat,
+              lng: incoming.lng,
+              place: incoming.place,
             });
             if (isNew) {
               const nickname =
@@ -986,8 +1198,31 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               const label =
                 incoming.kind === "voice"
                   ? "đã gửi một tin thoại 🎙"
-                  : String(incoming.body ?? "");
+                  : incoming.kind === "photo"
+                    ? "đã gửi một tấm ảnh 📷"
+                    : incoming.kind === "sticker"
+                      ? "đã gửi một sticker"
+                      : incoming.kind === "location"
+                        ? "đã chia sẻ vị trí 📍"
+                        : String(incoming.body ?? "");
               noticeFromPartner(`${nickname} 💌`, label, `chat-${incoming.id}`);
+            }
+            // Ảnh của tin này chưa có trên máy thì xin gửi lại.
+            if (
+              incoming.hasPhoto &&
+              incoming.kind === "photo" &&
+              shouldAsk(String(incoming.id))
+            ) {
+              const have = (stateRef.current?.messages ?? []).some(
+                (item) => item.id === incoming.id && item.photo,
+              );
+              if (!have) {
+                askedPhotosRef.current.set(String(incoming.id), Date.now());
+                relayRef.current?.publish({
+                  kind: "photoRequest",
+                  ids: [String(incoming.id)],
+                });
+              }
             }
             // Xác nhận cho máy kia biết tin đã tới nơi (hiện "đã tới máy kia").
             relayRef.current?.publish({
@@ -995,6 +1230,51 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               ids: [incoming.id],
             });
           }
+          return;
+        }
+        if (kind === "chatRead") {
+          // Người thương báo đã xem tin của mình (chỉ khi họ bật “cho biết đã xem”).
+          const ids = Array.isArray(message.ids)
+            ? (message.ids as unknown[]).map((id) => String(id)).slice(0, 20)
+            : [];
+          if (ids.length) update({ type: "message.seen", ids });
+          return;
+        }
+        if (kind === "call") {
+          const event = String(message.event ?? "");
+          const callId = String(message.callId ?? "");
+          if (!callId) return;
+          const who =
+            String(message.name ?? "") ||
+            stateRef.current?.partner?.nickname ||
+            "Người thương";
+          if (event === "ring") {
+            const busy = callRef.current && callRef.current.phase !== "ended";
+            if (busy) {
+              relayRef.current?.publish({
+                kind: "call",
+                event: "reject",
+                callId,
+                name: stateRef.current?.me.nickname ?? "",
+              });
+              return;
+            }
+            applyCall(newCall({ id: callId, role: "callee", name: who }));
+            void notifyNow(
+              `${who} đang gọi cho bạn 📞`,
+              "Mở app để nghe máy.",
+              true,
+            );
+            return;
+          }
+          const active = callRef.current;
+          if (!active || active.id !== callId) return;
+          if (event === "accept")
+            applyCall(callEvent(active, { type: "accept" }));
+          else if (event === "reject")
+            applyCall(callEvent(active, { type: "reject" }));
+          else if (event === "hangup")
+            applyCall(callEvent(active, { type: "hangup" }));
           return;
         }
         if (kind === "chatAck") {
@@ -1020,6 +1300,32 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
                 [
                   ...lines,
                   `Nhận tin thoại nhưng chưa lưu được: ${
+                    error instanceof Error ? error.message : "lỗi không rõ"
+                  }`,
+                ].slice(-12),
+              );
+            }
+            return;
+          }
+          if (photo && photo.meta?.role === "chat") {
+            try {
+              const id = String(photo.meta?.chatId || photo.id);
+              const name = `chatpix-${id}.jpg`;
+              writeBase64(name, photo.base64);
+              update({ type: "message.photo", id, file: name });
+              setRelayLog((lines) =>
+                [...lines, "Đã nhận một ảnh trong đoạn chat"].slice(-12),
+              );
+              noticeFromPartner(
+                `${stateRef.current?.partner?.nickname ?? "Người thương"} 💌`,
+                "đã gửi một tấm ảnh 📷",
+                `chatphoto-${id}`,
+              );
+            } catch (error) {
+              setRelayLog((lines) =>
+                [
+                  ...lines,
+                  `Nhận ảnh nhưng chưa lưu được: ${
                     error instanceof Error ? error.message : "lỗi không rõ"
                   }`,
                 ].slice(-12),
@@ -1085,6 +1391,41 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           for (const id of ids) {
             if (current.appearance?.wallpaperId === String(id)) {
               sendWallpaper(String(id));
+              continue;
+            }
+            const chatPhoto = (current.messages ?? []).find(
+              (message: State["messages"][number]) =>
+                message.id === String(id) &&
+                message.authorId !== "partner" &&
+                message.kind === "photo" &&
+                message.photo,
+            );
+            if (chatPhoto?.photo) {
+              const base64 = imageBase64(
+                chatPhoto.photo,
+                CHAT_PHOTO_LIMIT_BYTES,
+              );
+              if (base64) {
+                void (async () => {
+                  try {
+                    for (const packet of photoMessages({
+                      id: chatPhoto.id,
+                      base64,
+                      caption: chatPhoto.body,
+                      createdAt: chatPhoto.createdAt,
+                      nickname: current.me.nickname,
+                      role: "chat",
+                      chatId: chatPhoto.id,
+                    })) {
+                      client.publish(packet);
+                      await new Promise((resolve) => setTimeout(resolve, 60));
+                    }
+                    setRelayLog((lines) =>
+                      [...lines, "Đã gửi lại ảnh trong đoạn chat"].slice(-12),
+                    );
+                  } catch {}
+                })();
+              }
               continue;
             }
             const voiceMessage = (current.messages ?? []).find(
@@ -1171,6 +1512,77 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relayRoom?.id, relayRoom?.key, state?.settings.relay]);
+  // Nhịp 1 giây cho màn hình gọi + tự kết thúc khi chuông reo quá lâu.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCallTick((value) => value + 1);
+      const active = callRef.current;
+      if (!active) return;
+      if (ringTimedOut(active)) {
+        if (active.role === "caller")
+          relayRef.current?.publish({
+            kind: "call",
+            event: "hangup",
+            callId: active.id,
+            name: stateRef.current?.me.nickname ?? "",
+          });
+        applyCall(callEvent(active, { type: "timeout" }));
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (!call || call.phase !== "ended") return;
+    const timer = setTimeout(() => applyCall(null), 4500);
+    return () => clearTimeout(timer);
+  }, [call]);
+  // Lời yêu tự động mỗi 2 tiếng + nhắc khi mình chưa trả lời người thương.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const current = stateRef.current;
+      if (!current) return;
+      const now = Date.now();
+      const canSend =
+        current.settings?.autoLove !== false &&
+        Boolean(current.partner) &&
+        Boolean(relayRef.current?.connected);
+      if (current.settings?.autoLove !== false && !current.autoLoveAt) {
+        update({ type: "autoLove.sent", at: now });
+      } else if (
+        canSend &&
+        dueLoveNote({ now, lastAt: current.autoLoveAt ?? 0 })
+      ) {
+        const note = loveNoteFor(new Date(now));
+        update({
+          type: "message.add",
+          kind: "text",
+          body: `${note.emoji} ${note.text}`,
+        });
+        update({ type: "autoLove.sent", at: now });
+        setRelayLog((lines) =>
+          [...lines, "Đã tự gửi một lời yêu cho người thương"].slice(-12),
+        );
+        setTimeout(() => flushMessages(), 300);
+      }
+      const notice = waitingNotice({
+        messages: current.messages ?? [],
+        now,
+        lastNotice: noticeRef.current,
+        enabled: current.settings?.replyNudge !== false,
+      });
+      if (notice) {
+        noticeRef.current = { key: notice.key, stage: notice.stage, at: now };
+        noticeFromPartner(
+          notice.title,
+          notice.body,
+          `wait-${notice.key}-${notice.stage}`,
+          false,
+        );
+      }
+    }, 30000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     if (
       state?.messages?.some(
@@ -1304,6 +1716,14 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         tab={tab}
         setTab={setTab}
         wallpaperUri={hasWallpaper ? imageUri(storedWallpaper) : null}
+        call={call}
+        callTick={callTick}
+        onStartCall={startCall}
+        onSendPhoto={sendChatPhoto}
+        onSendLocation={() => void sendLocation()}
+        callAction={callAction}
+        callRef={callRef}
+        onSendCallVoice={sendCallVoice}
         notifyState={notifyState}
         onEnableNotifications={() =>
           void (async () => {
@@ -1370,6 +1790,14 @@ function LocalShell({
   wallpaperUri,
   notifyState,
   onEnableNotifications,
+  call,
+  callTick,
+  onStartCall,
+  onSendPhoto,
+  onSendLocation,
+  callAction,
+  callRef,
+  onSendCallVoice,
 }: {
   state: State;
   update: (action: Record<string, unknown>) => void;
@@ -1407,6 +1835,14 @@ function LocalShell({
   wallpaperUri: string | null;
   notifyState: "unknown" | "granted" | "denied";
   onEnableNotifications: () => void;
+  call: CallInfo | null;
+  callTick: number;
+  onStartCall: () => void;
+  onSendPhoto: (uri: string, caption: string) => void;
+  onSendLocation: () => void;
+  callAction: (event: { type: string; on?: boolean; min?: boolean }) => void;
+  callRef: React.MutableRefObject<CallInfo | null>;
+  onSendCallVoice: (uri: string, durationMs: number) => void;
 }) {
   const { theme } = useTheme();
   const unreadMessages = state.messages.filter(
@@ -1607,6 +2043,9 @@ function LocalShell({
               {...props}
               relayStatus={relayStatus}
               onSendMessage={flushMessages}
+              onStartCall={onStartCall}
+              onSendPhoto={onSendPhoto}
+              onSendLocation={onSendLocation}
             />
           ) : tab === "home" ? (
             <HomeLocal
@@ -1672,6 +2111,25 @@ function LocalShell({
             />
           )}
         </ScrollView>
+        {call ? (
+          <CallLocal
+            call={call}
+            state={state}
+            micOn={call.micOn}
+            partnerName={call.name}
+            partnerAvatar={state.partner?.avatar ?? null}
+            onToggleMic={() =>
+              callAction({ type: "mic", on: !callRef.current?.micOn })
+            }
+            onMinimize={() => callAction({ type: "minimize", min: true })}
+            onRestore={() => callAction({ type: "minimize", min: false })}
+            onAccept={() => callAction({ type: "accept" })}
+            onReject={() => callAction({ type: "hangup" })}
+            onHangUp={() => callAction({ type: "hangup" })}
+            onSendVoice={onSendCallVoice}
+            tick={callTick}
+          />
+        ) : null}
         <View
           className="flex-row pt-2 pb-3"
           style={{

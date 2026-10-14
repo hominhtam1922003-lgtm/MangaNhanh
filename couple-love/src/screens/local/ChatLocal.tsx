@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
   FlatList,
+  Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -11,6 +14,8 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import * as ImagePicker from "expo-image-picker";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import {
   AudioModule,
   RecordingPresets,
@@ -48,6 +53,7 @@ const NUDGES = [
   },
   { emoji: "💪", label: "Cố lên nhé", text: "Cố lên nhé, mình luôn ở đây 💪" },
 ];
+/** Bộ emoji: bấm là chèn vào ô viết, giống bàn phím cảm xúc của Messenger. */
 const EMOJIS = [
   "🥰",
   "😍",
@@ -55,24 +61,119 @@ const EMOJIS = [
   "🤗",
   "😊",
   "😁",
+  "😅",
   "🥲",
   "😴",
+  "😜",
+  "😇",
+  "🤭",
+  "😢",
+  "😡",
+  "🤔",
+  "🤩",
   "💗",
   "💖",
+  "💘",
   "💌",
+  "❤️",
+  "💔",
   "🌹",
   "🌸",
+  "🏵️",
   "✨",
-  "🌙",
   "⭐",
+  "🌙",
+  "🌈",
+  "🔥",
+  "🎉",
+  "🎁",
   "🐻",
   "🐰",
+  "🐱",
+  "🐶",
+  "🦊",
+  "🐼",
+  "🐨",
+  "🐧",
   "🍓",
   "🧋",
   "🍰",
-  "🎁",
+  "🍜",
+  "🍕",
   "🎶",
+  "🎂",
   "🫶",
+];
+/** Sticker: gửi nguyên một hình lớn như Messenger, không nằm trong bong bóng. */
+const STICKER_PACKS: { name: string; items: string[] }[] = [
+  {
+    name: "Cặp đôi",
+    items: [
+      "💑",
+      "👩‍❤️‍👨",
+      "💏",
+      "👰",
+      "🤵",
+      "💐",
+      "💍",
+      "🏩",
+      "😘",
+      "🥰",
+      "🫂",
+      "💞",
+    ],
+  },
+  {
+    name: "Thú cưng",
+    items: [
+      "🐻",
+      "🐼",
+      "🐨",
+      "🐰",
+      "🐱",
+      "🐶",
+      "🦊",
+      "🐯",
+      "🦁",
+      "🐸",
+      "🐵",
+      "🐧",
+    ],
+  },
+  {
+    name: "Nhớ nhung",
+    items: [
+      "💌",
+      "🌙",
+      "⭐",
+      "💤",
+      "🛌",
+      "☕",
+      "🍚",
+      "🌧️",
+      "☂️",
+      "📞",
+      "🎈",
+      "🕯️",
+    ],
+  },
+  {
+    name: "Vui vẻ",
+    items: [
+      "🎉",
+      "🎊",
+      "🎁",
+      "🎂",
+      "🍰",
+      "🧋",
+      "🍓",
+      "🎶",
+      "🥳",
+      "😹",
+      "🤗",
+      "🫶",
+    ],
+  },
 ];
 const MAX_VOICE_MS = 25000;
 const clockOf = (iso: string) =>
@@ -90,6 +191,33 @@ function versionOk(version?: string) {
   const major = Number(match[1]);
   const minor = Number(match[2]);
   return major > 1 || (major === 1 && minor >= 8);
+}
+/** Bong bóng ở đúng giữa khung nhìn mỗi khi hiện (thay cho Modal). */
+function PhotoViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Đóng ảnh"
+      onPress={onClose}
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
+        backgroundColor: "#000000dd",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Image
+        source={{ uri }}
+        style={{ width: 300, height: 380, borderRadius: 20 }}
+        resizeMode="contain"
+      />
+      <Text className="text-white mt-3">Chạm để đóng</Text>
+    </Pressable>
+  );
 }
 /** Một tin thoại: có nút nghe, hiện độ dài, thanh chạy theo chủ đề. */
 function VoiceBubble({
@@ -168,6 +296,9 @@ export default function ChatLocal({
   update,
   relayStatus,
   onSendMessage,
+  onStartCall,
+  onSendPhoto,
+  onSendLocation,
 }: {
   state: State;
   update: (action: Record<string, unknown>) => void;
@@ -177,24 +308,32 @@ export default function ChatLocal({
     partnerName?: string | null;
   };
   onSendMessage?: () => void;
+  onStartCall?: () => void;
+  /** App tự nén, lưu và gửi ảnh; màn hình chỉ chọn ảnh. */
+  onSendPhoto?: (uri: string, caption: string) => void;
+  onSendLocation?: () => void;
 }) {
   const { theme } = useTheme();
   const [text, setText] = useState("");
-  const [showEmoji, setShowEmoji] = useState(false);
-  const [showNudges, setShowNudges] = useState(false);
+  const [pad, setPad] = useState<"none" | "emoji" | "sticker" | "nudge">(
+    "none",
+  );
+  const [pack, setPack] = useState(0);
   const [recording, setRecording] = useState(false);
   const [startedAt, setStartedAt] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const [viewing, setViewing] = useState("");
+  const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<State["messages"][number]> | null>(null);
+  const followRef = useRef(true);
   const busyRef = useRef(0);
-  const lastNudgeRef = useRef("");
   const recorder = useAudioRecorder(RecordingPresets.LOW_QUALITY);
   const messages = state.messages ?? [];
+  // Danh sách hiển thị theo thứ tự cũ → mới; tin mới nhất nằm dưới cùng.
+  const ordered = useMemo(() => [...messages].reverse(), [messages]);
+  const readReceipts = state.settings?.readReceipts !== false;
   const unread = useMemo(
-    () =>
-      messages.filter(
-        (message) => message.authorId === "partner" && !message.readAt,
-      ).length,
+    () => messages.filter((m) => m.authorId === "partner" && !m.readAt).length,
     [messages],
   );
   useEffect(() => {
@@ -207,10 +346,8 @@ export default function ChatLocal({
     return () => clearInterval(timer);
   }, [recording, startedAt]);
   function scrollToNewest() {
-    setTimeout(
-      () => listRef.current?.scrollToOffset({ offset: 0, animated: true }),
-      120,
-    );
+    followRef.current = true;
+    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 140);
   }
   function send(kind: string, body: string) {
     const value = body.trim();
@@ -219,14 +356,10 @@ export default function ChatLocal({
     const now = Date.now();
     if (now - busyRef.current < 900) return;
     busyRef.current = now;
-    if (kind === "nudge") {
-      if (lastNudgeRef.current === value && now - busyRef.current < 1500)
-        return;
-      lastNudgeRef.current = value;
-    }
     try {
       update({ type: "message.add", kind, body: value });
       setText("");
+      setPad("none");
       onSendMessage?.();
       scrollToNewest();
     } catch (error) {
@@ -234,6 +367,47 @@ export default function ChatLocal({
         "Chưa gửi được",
         error instanceof Error ? error.message : "Tin nhắn không hợp lệ.",
       );
+    }
+  }
+  async function pickPhoto(camera: boolean) {
+    try {
+      setSending(true);
+      if (camera) {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert(
+            "Cần quyền máy ảnh",
+            "Hãy cho phép dùng máy ảnh để chụp rồi gửi cho người thương.",
+          );
+          return;
+        }
+      }
+      const picked = camera
+        ? await ImagePicker.launchCameraAsync({ quality: 0.75 })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            quality: 0.75,
+            allowsMultipleSelection: false,
+          });
+      if (picked.canceled || !picked.assets?.length) return;
+      const context = ImageManipulator.manipulate(picked.assets[0].uri);
+      context.resize({ width: 720 });
+      const rendered = await context.renderAsync();
+      const processed = await rendered.saveAsync({
+        compress: 0.55,
+        format: SaveFormat.JPEG,
+      });
+      onSendPhoto?.(processed.uri, text.trim());
+      setText("");
+      setPad("none");
+      scrollToNewest();
+    } catch (error) {
+      Alert.alert(
+        "Chưa gửi được ảnh",
+        error instanceof Error ? error.message : "Ảnh bị lỗi.",
+      );
+    } finally {
+      setSending(false);
     }
   }
   async function startRecording() {
@@ -301,7 +475,7 @@ export default function ChatLocal({
   const statusText = relayStatus.partnerOnline
     ? `${partnerName || "Người thương"} đang trực tuyến`
     : state.partner
-      ? "Đã ghép nối — người thương chưa mở app, tin sẽ gửi khi họ mở"
+      ? "Đã ghép nối — tin sẽ gửi khi người thương mở app"
       : "Chưa ghép nối (mở mục Ghép nối để nối hai máy)";
   const oldPartner =
     Boolean(state.partner) && !versionOk(state.partner?.appVersion);
@@ -311,6 +485,7 @@ export default function ChatLocal({
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
+      {/* Thẻ người thương: tên, trạng thái, gọi và nhắn nhanh */}
       <View
         className="flex-row items-center mb-2"
         style={{
@@ -319,13 +494,13 @@ export default function ChatLocal({
           borderWidth: 1,
           borderColor: theme.border,
           paddingHorizontal: 12,
-          paddingVertical: 8,
+          paddingVertical: 10,
         }}
       >
         <LocalAvatar
           name={partnerName || "Người thương"}
           image={state.partner?.avatar ?? null}
-          size={40}
+          size={44}
         />
         <View className="ml-3 flex-1">
           <Text className="font-bold" style={{ color: theme.ink }}>
@@ -337,23 +512,39 @@ export default function ChatLocal({
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Mở lời nhắn nhanh"
-          onPress={() => setShowNudges(!showNudges)}
+          accessibilityLabel="Gọi cho người thương"
+          onPress={() => onStartCall?.()}
           style={{
-            backgroundColor: showNudges ? theme.deep[1] : theme.soft,
-            borderWidth: 1,
-            borderColor: theme.border,
-            borderRadius: 16,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
+            backgroundColor: theme.deep[1],
+            borderRadius: 18,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            marginRight: 8,
           }}
         >
-          <Text style={{ color: showNudges ? theme.onDeep : theme.text }}>
-            💌 nhắn nhanh
+          <Text className="font-bold" style={{ color: theme.onDeep }}>
+            📞 Gọi
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Mở lời nhắn nhanh"
+          onPress={() => setPad(pad === "nudge" ? "none" : "nudge")}
+          style={{
+            backgroundColor: pad === "nudge" ? theme.deep[1] : theme.soft,
+            borderWidth: 1,
+            borderColor: theme.border,
+            borderRadius: 18,
+            paddingHorizontal: 10,
+            paddingVertical: 8,
+          }}
+        >
+          <Text style={{ color: pad === "nudge" ? theme.onDeep : theme.text }}>
+            💌
           </Text>
         </Pressable>
       </View>
-      {showNudges ? (
+      {pad === "nudge" ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -405,141 +596,322 @@ export default function ChatLocal({
           </Text>
         </View>
       ) : null}
-      <FlatList
-        ref={listRef}
-        inverted
-        data={messages}
-        keyExtractor={(item) => item.id}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingVertical: 6 }}
-        ListEmptyComponent={
-          <View style={{ transform: [{ scaleY: -1 }] }}>
+      {/* Bảng tin cố định: tin mới ở dưới, kéo lên xem lại như Messenger/Zalo */}
+      <View className="flex-1" style={{ minHeight: 180 }}>
+        <FlatList
+          ref={listRef}
+          data={ordered}
+          keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingVertical: 6 }}
+          // Ở cuối danh sách thì tự bám theo tin mới; kéo lên xem lại thì đứng yên.
+          onScroll={(event) => {
+            const { contentOffset, contentSize, layoutMeasurement } =
+              event.nativeEvent;
+            const fromBottom =
+              contentSize.height - (contentOffset.y + layoutMeasurement.height);
+            followRef.current = fromBottom < 60;
+          }}
+          scrollEventThrottle={16}
+          onContentSizeChange={() => {
+            if (followRef.current)
+              listRef.current?.scrollToEnd({ animated: false });
+          }}
+          ListEmptyComponent={
             <Card>
               <Note>
-                Chưa có tin nào. Bấm 💌 nhắn nhanh ở trên, hoặc viết vài chữ rồi
-                bấm “Gửi” — máy người thương sẽ nổi thông báo như tin nhắn
+                Chưa có tin nào. Bấm 💌 nhắn nhanh, 😊 sticker, 📷 chụp ảnh hoặc
+                📍 gửi vị trí — máy người thương sẽ nổi thông báo như tin nhắn
                 Messenger.
               </Note>
             </Card>
-          </View>
-        }
-        renderItem={({ item: message, index }) => {
-          const mine = message.authorId === "me";
-          const older = messages[index + 1];
-          const showDay =
-            !older || dayOf(older.createdAt) !== dayOf(message.createdAt);
-          const status = mine
-            ? !message.sentAt
-              ? "đang chờ gửi"
-              : message.deliveredAt
-                ? "đã tới máy kia"
-                : "đã gửi"
-            : message.readAt
-              ? "đã xem"
-              : "mới nhận";
-          return (
-            <View>
-              {showDay ? (
-                <Text
-                  className="text-xs text-center my-2"
-                  style={{ color: theme.sub }}
-                >
-                  {dayOf(message.createdAt)}
-                </Text>
-              ) : null}
-              <View
-                className={`mb-2 ${mine ? "items-end" : "items-start"}`}
-                style={{ maxWidth: "92%" }}
+          }
+          renderItem={({ item: message, index }) => {
+            const mine = message.authorId === "me";
+            const older = ordered[index - 1];
+            const showDay =
+              !older || dayOf(older.createdAt) !== dayOf(message.createdAt);
+            const status = mine
+              ? !message.sentAt
+                ? "đang chờ gửi"
+                : readReceipts && message.readAt
+                  ? "đã xem"
+                  : message.deliveredAt
+                    ? "đã tới máy kia"
+                    : "đã gửi"
+              : readReceipts
+                ? message.readAt
+                  ? "đã xem"
+                  : "mới nhận"
+                : "";
+            const timeLabel = `${clockOf(message.createdAt)}${status ? ` · ${status}` : ""}`;
+            const mineGradient = (
+              <LinearGradient
+                colors={theme.deep}
+                style={{
+                  borderRadius: 20,
+                  borderBottomRightRadius: 6,
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                }}
               >
-                {mine ? (
-                  <LinearGradient
-                    colors={theme.deep}
-                    style={{
-                      borderRadius: 20,
-                      borderBottomRightRadius: 6,
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                    }}
+                <Text style={{ color: theme.onDeep }}>{message.body}</Text>
+              </LinearGradient>
+            );
+            const theirBubble = (
+              <View
+                style={{
+                  backgroundColor: theme.soft,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                  borderRadius: 20,
+                  borderBottomLeftRadius: 6,
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                }}
+              >
+                <Text style={{ color: theme.ink }}>{message.body}</Text>
+              </View>
+            );
+            return (
+              <View>
+                {showDay ? (
+                  <Text
+                    className="text-xs text-center my-2"
+                    style={{ color: theme.sub }}
                   >
-                    {message.kind === "voice" ? (
-                      <VoiceBubble
-                        uri={message.audio ? imageUri(message.audio) : null}
-                        mine
-                        durationMs={message.durationMs}
-                      />
-                    ) : (
-                      <Text style={{ color: theme.onDeep }}>
-                        {message.body}
-                      </Text>
-                    )}
-                  </LinearGradient>
-                ) : (
-                  <View
-                    style={{
-                      backgroundColor: theme.soft,
-                      borderWidth: 1,
-                      borderColor: theme.border,
-                      borderRadius: 20,
-                      borderBottomLeftRadius: 6,
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                    }}
-                  >
-                    {message.kind === "voice" ? (
-                      <VoiceBubble
-                        uri={message.audio ? imageUri(message.audio) : null}
-                        mine={false}
-                        durationMs={message.durationMs}
-                      />
-                    ) : (
-                      <Text style={{ color: theme.ink }}>{message.body}</Text>
-                    )}
-                  </View>
-                )}
-                <View className="flex-row items-center mt-1">
-                  <Text className="text-xs" style={{ color: theme.sub }}>
-                    {clockOf(message.createdAt)} · {status}
+                    {dayOf(message.createdAt)}
                   </Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Xóa tin nhắn này"
-                    onPress={() =>
-                      void (async () => {
-                        if (
-                          !(await confirm(
-                            "Xóa tin nhắn?",
-                            "Tin này biến mất khỏi máy bạn. Máy người thương vẫn giữ bản của họ.",
-                          ))
-                        )
-                          return;
-                        update({ type: "message.remove", id: message.id });
-                      })()
-                    }
-                  >
-                    <Text className="text-xs ml-2" style={{ color: theme.sub }}>
-                      xóa
+                ) : null}
+                <View
+                  className={`mb-2 ${mine ? "items-end" : "items-start"}`}
+                  style={{ maxWidth: "92%" }}
+                >
+                  {message.kind === "sticker" ? (
+                    // Sticker: hình lớn, không bọc trong bong bóng.
+                    <Text style={{ fontSize: 68, lineHeight: 78 }}>
+                      {message.body}
                     </Text>
-                  </Pressable>
+                  ) : message.kind === "photo" ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Mở ảnh"
+                      onPress={() =>
+                        message.photo
+                          ? setViewing(imageUri(message.photo) ?? "")
+                          : Alert.alert(
+                              "Ảnh đang tới",
+                              "Ảnh đang trên đường sang máy bạn, chờ một chút nhé.",
+                            )
+                      }
+                    >
+                      <LinearGradient
+                        colors={mine ? theme.deep : [theme.soft, theme.soft]}
+                        style={{ borderRadius: 20, padding: 3 }}
+                      >
+                        {message.photo ? (
+                          <Image
+                            source={{ uri: imageUri(message.photo) ?? "" }}
+                            style={{
+                              width: 196,
+                              height: 196,
+                              borderRadius: 17,
+                            }}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View
+                            style={{
+                              width: 196,
+                              height: 196,
+                              borderRadius: 17,
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <Text className="text-3xl">🖼</Text>
+                            <Text
+                              className="text-xs mt-2"
+                              style={{ color: theme.ink }}
+                            >
+                              Đang tải ảnh…
+                            </Text>
+                          </View>
+                        )}
+                      </LinearGradient>
+                      {message.body ? (
+                        <Text
+                          className="text-sm mt-1"
+                          style={{ color: theme.ink }}
+                        >
+                          {message.body}
+                        </Text>
+                      ) : null}
+                    </Pressable>
+                  ) : message.kind === "location" ? (
+                    <View
+                      style={{
+                        backgroundColor: theme.soft,
+                        borderWidth: 1,
+                        borderColor: theme.border,
+                        borderRadius: 20,
+                        padding: 12,
+                        width: 232,
+                      }}
+                    >
+                      <Text className="text-2xl">📍</Text>
+                      <Text
+                        className="font-semibold mt-1"
+                        style={{ color: theme.ink }}
+                      >
+                        {mine
+                          ? "Bạn đang ở đây"
+                          : `${partnerName || "Người thương"} đang ở đây`}
+                      </Text>
+                      <Text
+                        className="text-xs mt-1"
+                        style={{ color: theme.sub }}
+                      >
+                        {message.lat?.toFixed(5)}, {message.lng?.toFixed(5)}
+                      </Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Mở bản đồ"
+                        onPress={() =>
+                          void Linking.openURL(
+                            `https://www.google.com/maps/search/?api=1&query=${message.lat},${message.lng}`,
+                          ).catch(() =>
+                            Alert.alert(
+                              "Chưa mở được bản đồ",
+                              "Máy này chưa có ứng dụng bản đồ.",
+                            ),
+                          )
+                        }
+                        style={{
+                          marginTop: 8,
+                          backgroundColor: theme.deep[1],
+                          borderRadius: 14,
+                          paddingVertical: 7,
+                          alignItems: "center",
+                        }}
+                      >
+                        <Text
+                          className="font-bold"
+                          style={{ color: theme.onDeep }}
+                        >
+                          Mở bản đồ
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ) : message.kind === "voice" ? (
+                    mine ? (
+                      <LinearGradient
+                        colors={theme.deep}
+                        style={{
+                          borderRadius: 20,
+                          borderBottomRightRadius: 6,
+                          paddingHorizontal: 14,
+                          paddingVertical: 10,
+                        }}
+                      >
+                        <VoiceBubble
+                          uri={message.audio ? imageUri(message.audio) : null}
+                          mine
+                          durationMs={message.durationMs}
+                        />
+                      </LinearGradient>
+                    ) : (
+                      <View
+                        style={{
+                          backgroundColor: theme.soft,
+                          borderWidth: 1,
+                          borderColor: theme.border,
+                          borderRadius: 20,
+                          borderBottomLeftRadius: 6,
+                          paddingHorizontal: 14,
+                          paddingVertical: 10,
+                        }}
+                      >
+                        <VoiceBubble
+                          uri={message.audio ? imageUri(message.audio) : null}
+                          mine={false}
+                          durationMs={message.durationMs}
+                        />
+                      </View>
+                    )
+                  ) : mine ? (
+                    mineGradient
+                  ) : (
+                    theirBubble
+                  )}
+                  <View className="flex-row items-center mt-1">
+                    <Text className="text-xs" style={{ color: theme.sub }}>
+                      {timeLabel}
+                    </Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Xóa tin nhắn này"
+                      onPress={() =>
+                        void (async () => {
+                          if (
+                            !(await confirm(
+                              "Xóa tin nhắn?",
+                              "Tin này biến mất khỏi máy bạn. Máy người thương vẫn giữ bản của họ.",
+                            ))
+                          )
+                            return;
+                          update({ type: "message.remove", id: message.id });
+                        })()
+                      }
+                    >
+                      <Text
+                        className="text-xs ml-2"
+                        style={{ color: theme.sub }}
+                      >
+                        xóa
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
               </View>
-            </View>
-          );
-        }}
-      />
+            );
+          }}
+        />
+        {messages.length > 3 ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Xuống tin mới nhất"
+            onPress={scrollToNewest}
+            style={{
+              position: "absolute",
+              right: 6,
+              bottom: 6,
+              backgroundColor: theme.glass,
+              borderWidth: 1,
+              borderColor: theme.border,
+              borderRadius: 18,
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+            }}
+          >
+            <Text style={{ color: theme.text }}>↓ mới nhất</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {/* Ô viết: gọn 4 dòng, không kéo dài vô tận */}
       <View
         style={{
           backgroundColor: theme.glass,
-          borderTopWidth: 1,
-          borderTopColor: theme.border,
-          borderRadius: 20,
           borderWidth: 1,
           borderColor: theme.border,
+          borderRadius: 22,
           paddingHorizontal: 10,
           paddingVertical: 8,
-          marginTop: 6,
+          marginTop: 10,
+          marginBottom: 10,
         }}
       >
-        {showEmoji ? (
+        {pad === "emoji" ? (
           <View className="flex-row flex-wrap mb-2">
             {EMOJIS.map((emoji) => (
               <Pressable
@@ -552,6 +924,55 @@ export default function ChatLocal({
                 <Text className="text-2xl">{emoji}</Text>
               </Pressable>
             ))}
+          </View>
+        ) : null}
+        {pad === "sticker" ? (
+          <View className="mb-2">
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mb-1"
+            >
+              {STICKER_PACKS.map((item, index) => (
+                <Pressable
+                  key={item.name}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Bộ sticker ${item.name}`}
+                  onPress={() => setPack(index)}
+                  className="mr-2 px-3 py-1 rounded-full"
+                  style={{
+                    backgroundColor:
+                      index === pack ? theme.deep[1] : theme.soft,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                  }}
+                >
+                  <Text
+                    className="text-xs"
+                    style={{
+                      color: index === pack ? theme.onDeep : theme.text,
+                    }}
+                  >
+                    {item.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <ScrollView style={{ maxHeight: 150 }}>
+              <View className="flex-row flex-wrap">
+                {STICKER_PACKS[pack].items.map((sticker) => (
+                  <Pressable
+                    key={sticker}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Gửi sticker ${sticker}`}
+                    onPress={() => send("sticker", sticker)}
+                    className="p-2"
+                  >
+                    <Text style={{ fontSize: 38 }}>{sticker}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
           </View>
         ) : null}
         {recording ? (
@@ -581,66 +1002,99 @@ export default function ChatLocal({
             </Pressable>
           </View>
         ) : (
-          <View className="flex-row items-end">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Chọn emoji"
-              onPress={() => setShowEmoji(!showEmoji)}
-              className="mr-2 py-2"
-            >
-              <Text className="text-2xl">{showEmoji ? "⌨️" : "😊"}</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Ghi âm tin thoại"
-              onPress={() => void startRecording()}
-              className="mr-2 py-2"
-            >
-              <Text className="text-2xl">🎙</Text>
-            </Pressable>
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              multiline
-              placeholder="Nhắn cho người thương…"
-              placeholderTextColor={theme.sub}
-              accessibilityLabel="Ô viết tin nhắn"
-              style={{
-                flex: 1,
-                color: theme.ink,
-                backgroundColor: theme.surface,
-                borderWidth: 1,
-                borderColor: theme.border,
-                borderRadius: 18,
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                maxHeight: 96,
-              }}
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Gửi tin nhắn"
-              onPress={() => send("text", text)}
-              className="ml-2"
-            >
-              <LinearGradient
-                colors={theme.deep}
+          <>
+            <View className="flex-row items-end">
+              <TextInput
+                value={text}
+                onChangeText={setText}
+                multiline
+                placeholder="Nhắn cho người thương…"
+                placeholderTextColor={theme.sub}
+                accessibilityLabel="Ô viết tin nhắn"
                 style={{
+                  flex: 1,
+                  color: theme.ink,
+                  backgroundColor: theme.surface,
+                  borderWidth: 1,
+                  borderColor: theme.border,
                   borderRadius: 18,
-                  paddingHorizontal: 14,
-                  paddingVertical: 9,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  maxHeight: 96,
                 }}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Gửi tin nhắn"
+                onPress={() => send("text", text)}
+                className="ml-2"
               >
-                <Text className="font-bold" style={{ color: theme.onDeep }}>
-                  Gửi
-                </Text>
-              </LinearGradient>
-            </Pressable>
-          </View>
+                <LinearGradient
+                  colors={theme.deep}
+                  style={{
+                    borderRadius: 18,
+                    paddingHorizontal: 14,
+                    paddingVertical: 9,
+                  }}
+                >
+                  <Text className="font-bold" style={{ color: theme.onDeep }}>
+                    Gửi
+                  </Text>
+                </LinearGradient>
+              </Pressable>
+            </View>
+            <View className="flex-row items-center mt-2">
+              {(
+                [
+                  ["😊", "emoji", "Bảng cảm xúc"],
+                  ["🧸", "sticker", "Sticker"],
+                  ["📷", "camera", "Chụp ảnh gửi ngay"],
+                  ["🖼", "photo", "Chọn ảnh trong máy"],
+                  ["📍", "location", "Gửi vị trí"],
+                  ["🎙", "voice", "Ghi tin thoại"],
+                ] as const
+              ).map(([emoji, action, label]) => (
+                <Pressable
+                  key={action}
+                  accessibilityRole="button"
+                  accessibilityLabel={label}
+                  onPress={() => {
+                    if (action === "emoji" || action === "sticker")
+                      setPad(pad === action ? "none" : action);
+                    else if (action === "camera") void pickPhoto(true);
+                    else if (action === "photo") void pickPhoto(false);
+                    else if (action === "location") onSendLocation?.();
+                    else void startRecording();
+                  }}
+                  className="mr-3 py-1"
+                >
+                  <Text
+                    className="text-2xl"
+                    style={{
+                      opacity:
+                        sending || (action === "voice" && recording)
+                          ? 0.4
+                          : pad === action
+                            ? 1
+                            : 0.75,
+                    }}
+                  >
+                    {emoji}
+                  </Text>
+                </Pressable>
+              ))}
+              <Text
+                className="text-xs flex-1 text-right"
+                style={{ color: theme.sub }}
+              >
+                {text.length > 0 ? `${text.length}/600` : ""}
+              </Text>
+            </View>
+          </>
         )}
         {unread ? (
           <Text className="text-xs mt-1" style={{ color: theme.sub }}>
-            {unread} tin mới từ người thương · chạm vào tin để đánh dấu đã xem
+            {unread} tin mới từ người thương
           </Text>
         ) : null}
       </View>
@@ -657,18 +1111,23 @@ export default function ChatLocal({
             ),
           )
         }
-        className="mt-2"
+        className="mb-4"
       >
         <Text className="text-xs text-center" style={{ color: theme.sub }}>
           Bật thông báo để tin nhắn nổi lên như Messenger
         </Text>
       </Pressable>
       {relayStatus.partnerOnline ? null : (
-        <Note>
-          Hai máy cần cùng mở app và cùng có mạng để tin sang ngay; một bên đóng
-          app thì tin nằm chờ và tự gửi ở lần mở sau.
-        </Note>
+        <View className="mb-3">
+          <Note>
+            Hai máy cần cùng mở app và cùng có mạng để tin sang ngay; một bên
+            đóng app thì tin nằm chờ và tự gửi ở lần mở sau.
+          </Note>
+        </View>
       )}
+      {viewing ? (
+        <PhotoViewer uri={viewing} onClose={() => setViewing("")} />
+      ) : null}
     </KeyboardAvoidingView>
   );
 }

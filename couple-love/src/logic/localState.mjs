@@ -12,7 +12,15 @@ export const MOODS = [
 ];
 const moodIds = MOODS.map((m) => m.id);
 /** Tin nhắn: chữ, emoji, tin thoại, hoặc lời nhắn nhanh ("nhớ người thương"). */
-export const MESSAGE_KINDS = ["text", "emoji", "voice", "nudge"];
+export const MESSAGE_KINDS = [
+  "text",
+  "emoji",
+  "voice",
+  "nudge",
+  "sticker",
+  "photo",
+  "location",
+];
 const text = (value, max) =>
   (typeof value === "string" ? value : "").slice(0, max);
 const iso = (value, fallback) => {
@@ -58,7 +66,15 @@ export function emptyState(now = new Date().toISOString()) {
       relay: true,
       loveNotes: true,
       theme: DEFAULT_THEME,
+      wallpaperTint: 0.5,
+      // Cho người thương biết mình đã xem tin chưa (tắt được).
+      readReceipts: true,
+      // Tự gửi lời yêu/thơ mỗi 2 tiếng trong khung 07:00–22:00.
+      autoLove: true,
+      // Nhắc khi mình chưa trả lời người thương (3 phút, 1 tiếng).
+      replyNudge: true,
     },
+    autoLoveAt: 0,
     relay: null,
     links: [],
     messages: [],
@@ -145,7 +161,15 @@ export function migrate(raw, now = new Date().toISOString()) {
     relay: raw.settings?.relay !== false,
     loveNotes: raw.settings?.loveNotes !== false,
     theme: state.appearance.theme,
+    wallpaperTint: Math.min(
+      0.75,
+      Math.max(0.3, Number(raw.settings?.wallpaperTint) || 0.5),
+    ),
+    readReceipts: raw.settings?.readReceipts !== false,
+    autoLove: raw.settings?.autoLove !== false,
+    replyNudge: raw.settings?.replyNudge !== false,
   };
+  state.autoLoveAt = Math.max(0, Number(raw.autoLoveAt) || 0);
   const messages = Array.isArray(raw.messages) ? raw.messages : [];
   state.messages = messages
     .filter((message) => message && typeof message === "object")
@@ -162,6 +186,13 @@ export function migrate(raw, now = new Date().toISOString()) {
         120000,
         Math.max(0, Number(message.durationMs) || 0),
       ),
+      photo:
+        typeof message.photo === "string" && message.photo
+          ? text(message.photo, 90)
+          : null,
+      lat: Number.isFinite(Number(message.lat)) ? Number(message.lat) : null,
+      lng: Number.isFinite(Number(message.lng)) ? Number(message.lng) : null,
+      place: text(message.place, 120),
       createdAt: iso(message.createdAt, now),
       sentAt: message.sentAt ? iso(message.sentAt, now) : null,
       deliveredAt: message.deliveredAt ? iso(message.deliveredAt, now) : null,
@@ -425,10 +456,15 @@ export function reduce(state, action) {
       typeof action.audio === "string" && action.audio
         ? text(action.audio, 90)
         : null;
-    if (kind === "voice" ? !audio : !body)
-      throw new Error(
-        kind === "voice" ? "Tin thoại chưa ghi xong." : "Tin nhắn còn trống.",
-      );
+    const photo =
+      typeof action.photo === "string" && action.photo
+        ? text(action.photo, 90)
+        : null;
+    if (kind === "voice" && !audio) throw new Error("Tin thoại chưa ghi xong.");
+    if (kind === "photo" && !photo) throw new Error("Ảnh chưa lưu xong.");
+    if (kind !== "voice" && kind !== "photo" && !body)
+      throw new Error("Tin nhắn còn trống.");
+    if (kind === "location" && body === "") throw new Error("Chưa có vị trí.");
     next.messages = [
       {
         id: text(action.id, 40) || uid(),
@@ -436,6 +472,10 @@ export function reduce(state, action) {
         kind,
         body,
         audio,
+        photo,
+        lat: Number.isFinite(Number(action.lat)) ? Number(action.lat) : null,
+        lng: Number.isFinite(Number(action.lng)) ? Number(action.lng) : null,
+        place: text(action.place, 120),
         durationMs: Math.min(
           120000,
           Math.max(0, Number(action.durationMs) || 0),
@@ -478,6 +518,10 @@ export function reduce(state, action) {
             typeof action.audio === "string" && action.audio
               ? text(action.audio, 90)
               : null,
+          photo: null,
+          lat: Number.isFinite(Number(action.lat)) ? Number(action.lat) : null,
+          lng: Number.isFinite(Number(action.lng)) ? Number(action.lng) : null,
+          place: text(action.place, 120),
           durationMs: Math.min(
             120000,
             Math.max(0, Number(action.durationMs) || 0),
@@ -500,6 +544,37 @@ export function reduce(state, action) {
     next.messages = next.messages.map((message) =>
       message.id === id ? { ...message, audio } : message,
     );
+  } else if (type === "message.photo") {
+    // Ảnh trong đoạn chat: tệp đến sau phần mô tả (cắt thành nhiều gói).
+    const id = text(action.id, 40);
+    const file = text(action.file, 90);
+    if (!id || !file) throw new Error("Ảnh nhận được thiếu tệp.");
+    const known = next.messages.some((message) => message.id === id);
+    next.messages = known
+      ? next.messages.map((message) =>
+          message.id === id ? { ...message, photo: file } : message,
+        )
+      : [
+          // Ảnh có thể tới trước phần mô tả tin: vẫn tạo tin để không mất ảnh.
+          {
+            id,
+            authorId: "partner",
+            kind: "photo",
+            body: "",
+            audio: null,
+            photo: file,
+            lat: null,
+            lng: null,
+            place: "",
+            durationMs: 0,
+            createdAt: new Date().toISOString(),
+            sentAt: null,
+            deliveredAt: null,
+            receivedAt: new Date().toISOString(),
+            readAt: null,
+          },
+          ...next.messages,
+        ].slice(0, 300);
   } else if (type === "message.sent") {
     const id = text(action.id, 40);
     next.messages = next.messages.map((message) =>
@@ -519,6 +594,21 @@ export function reduce(state, action) {
       ids.includes(message.id) &&
       !message.deliveredAt
         ? { ...message, deliveredAt: at }
+        : message,
+    );
+  } else if (type === "message.seen") {
+    // Người thương báo đã xem: tin của mình hiện "đã xem".
+    const ids = Array.isArray(action.ids)
+      ? action.ids
+          .map((value) => text(value, 40))
+          .filter(Boolean)
+          .slice(0, 20)
+      : [];
+    if (!ids.length) return next;
+    const at = new Date().toISOString();
+    next.messages = next.messages.map((message) =>
+      message.authorId === "me" && ids.includes(message.id) && !message.readAt
+        ? { ...message, readAt: at }
         : message,
     );
   } else if (type === "message.read") {
@@ -546,6 +636,18 @@ export function reduce(state, action) {
         action.wallpaperTint === undefined
           ? next.settings.wallpaperTint
           : Math.min(0.75, Math.max(0.3, Number(action.wallpaperTint) || 0.5)),
+      readReceipts:
+        action.readReceipts === undefined
+          ? next.settings.readReceipts !== false
+          : action.readReceipts !== false,
+      autoLove:
+        action.autoLove === undefined
+          ? next.settings.autoLove !== false
+          : action.autoLove !== false,
+      replyNudge:
+        action.replyNudge === undefined
+          ? next.settings.replyNudge !== false
+          : action.replyNudge !== false,
     };
     if (isTheme(action.theme) && action.theme !== next.appearance.theme) {
       next.appearance = {
@@ -648,6 +750,8 @@ export function reduce(state, action) {
       (message) => message.authorId !== "partner",
     );
     next.partner = null;
+  } else if (type === "autoLove.sent") {
+    next.autoLoveAt = Math.max(0, Number(action.at) || Date.now());
   } else if (type === "state.replace") {
     return migrate(action.state);
   } else {

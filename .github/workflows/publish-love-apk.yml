@@ -1,6 +1,6 @@
-# Nguồn APK 1.16.0 "Mật Mã Yêu": run_id 38592751848 (commit 270c362, artifact HaiTraiTim-1.16.0-APK, gồm cả bản nhẹ arm64).
-# Ghi chú: Release nháp hai-trai-tim-v1.16.0-test-270c362 đã tạo sẵn ở máy,
-# runner chỉ tải artifact của run 38592751848 lên rồi mở công khai sau khi kiểm tra.
+# Nguồn APK 1.17.0 "Mật Mã Yêu": run_id 38596391427 (commit 068e170, artifact MatMaYeu-1.17.0-APK, gồm cả bản nhẹ arm64).
+# Ghi chú: Release nháp mat-ma-yeu-v1.17.0-test-068e170 đã tạo sẵn ở máy,
+# runner chỉ tải artifact của run 38596391427 lên rồi mở công khai sau khi kiểm tra.
 # Lưu ý: runner không tạo được Release (403) — luôn tạo Release nháp cục bộ trước rồi push file này để runner tải APK lên.
 name: Đăng APK Mật Mã Yêu tải trực tiếp
 
@@ -13,7 +13,7 @@ on:
       run_id:
         description: ID lần chạy "APK Mật Mã Yêu" đã thành công
         required: true
-        default: "38592751848"
+        default: "38596391427"
         type: string
 
 permissions:
@@ -35,9 +35,9 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38592751848' }}
-      ARTIFACT_NAME: HaiTraiTim-1.16.0-APK
-      APK_FILE: HaiTraiTim-1.16.0.apk
+      BUILD_RUN_ID: ${{ inputs.run_id || '38596391427' }}
+      ARTIFACT_NAME: MatMaYeu-1.17.0-APK
+      APK_FILE: MatMaYeu-1.17.0.apk
     steps:
       - name: Kiểm tra nguồn APK đã build thành công
         id: verify
@@ -54,7 +54,7 @@ jobs:
           assert run['path'] == '.github/workflows/build-couple-apk.yml', 'Sai workflow build'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f"sha={run['head_sha']}\n")
-              output.write(f"tag=hai-trai-tim-v1.16.0-test-{run['head_sha'][:7]}\n")
+              output.write(f"tag=mat-ma-yeu-v1.17.0-test-{run['head_sha'][:7]}\n")
           PY
       - name: Lấy APK đã kiểm chứng qua REST API (không build lại, không đổi chữ ký)
         run: |
@@ -112,15 +112,15 @@ jobs:
             fi
           else
             cat > /tmp/love-notes.md <<EOF
-          APK thử nghiệm **Mật Mã Yêu 1.16.0** cho **Android 7.0+ (API 24)**, ký bằng khóa gỡ lỗi nên cài đè lên bản 1.15.0 được, không mất dữ liệu.
+          APK thử nghiệm **Mật Mã Yêu 1.17.0** cho **Android 7.0+ (API 24)**, ký bằng khóa gỡ lỗi nên cài đè lên bản 1.16.0 được, không mất dữ liệu.
 
-          Tải **HaiTraiTim-1.16.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP. Mạng yếu thì tải **HaiTraiTim-1.16.0-arm64.apk** (bản nhẹ, chỉ arm64-v8a — dùng được cho máy thật đời mới và LDPlayer 64-bit).
+          Tải **MatMaYeu-1.17.0.apk** trong Assets để cài trực tiếp, không cần tải ZIP. Mạng yếu thì tải **MatMaYeu-1.17.0-arm64.apk** (bản nhẹ, chỉ arm64-v8a — dùng được cho máy thật đời mới và LDPlayer 64-bit).
 
           Bản 1.16.0 đổi tên app thành **Mật Mã Yêu** (gói vn.haitraitim.app giữ nguyên nên cài đè được). Thêm: thu hồi tin nhắn xoá cả hai bên, thả cảm xúc vào tin nhắn và ảnh, vuốt để trả lời, giữ nút mic để gửi tin thoại, chấm "đang nhập…", báo đã xem kèm ảnh đại diện nhỏ, lưu ảnh người thương gửi về máy, đổi ảnh đại diện là máy kia thấy ngay, sửa lỗi gửi và chụp ảnh trong chat (bỏ hộp chọn ảnh hệ thống hay chết với lỗi "unregistered ActivityResultLauncher", chuyển sang thư viện ảnh trong app), thanh nhập liệu dạng viên thuốc, trái tim đập theo giọng nói trong cuộc gọi, nút Cúp máy đỏ to và nút tắt mic ở nửa dưới màn hình, thông báo bấm vào thẳng đoạn chat kèm nút Trả lời, và công tắc Giữ kết nối khi tắt màn hình.
 
           Cuộc gọi vẫn ba lớp (PeerJS có TURN miễn phí → WebRTC qua kênh ghép nối → kênh ghép nối). Muốn dùng TURN riêng thì đặt EXPO_PUBLIC_TURN_URLS/USER/CREDENTIAL rồi dựng lại APK.
           EOF
-            gh release create "$RELEASE_TAG" "release-apk/$APK_FILE" "release-apk/$APK_FILE.sha256" --target "$VERIFIED_SHA" --title "Mật Mã Yêu 1.16.0 — APK thử nghiệm" --notes-file /tmp/love-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
+            gh release create "$RELEASE_TAG" "release-apk/$APK_FILE" "release-apk/$APK_FILE.sha256" --target "$VERIFIED_SHA" --title "Mật Mã Yêu 1.17.0 — APK thử nghiệm" --notes-file /tmp/love-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
           fi
           gh release view "$RELEASE_TAG" --json tagName,isDraft,assets --repo "$GITHUB_REPOSITORY" | tee /tmp/love-release.json
           echo "APK tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$APK_FILE" >> "$GITHUB_STEP_SUMMARY"

@@ -269,7 +269,19 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Hai Trái Tim 1.9.0 (bản mới nhất)
+## Hai Trái Tim 1.9.1 (bản mới nhất) — ảnh nền kiểu Zalo
+
+**APK Android (cài trực tiếp, không cần ZIP):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.9.1-test-ef2dc57/HaiTraiTim-1.9.1.apk · **57.934.306 byte** · SHA256 `15d43a165d853b67a0889b8dd45cb9aff832c6686f14023932c0b605fa38ad94` · dựng từ `ef2dc57` (lần build 38543908536, đăng bằng workflow 38546491860). Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.9.1, bản dựng 11**.
+
+**iPhone (file .ipa chưa ký, phải tự ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.9.1-test-ef2dc57/HaiTraiTim-1.9.1-unsigned.ipa · **11.309.849 byte** · SHA256 `a313cbb484c9ac5a640d832d861f5b4c24c1f76d40b959038aacf8a8f7d14e08` · dựng từ `ef2dc57` (lần build 38543908210).
+
+- **Đặt ảnh trong thư viện làm nền là thấy ảnh xuyên qua giao diện, giống Zalo.** Khi có ảnh nền, thẻ, ô nhập tin, thanh trên, thanh dưới và bong bóng tin nhắn của người thương **tự chuyển sang màu trong suốt** (`rgba`); lớp phủ trên ảnh mỏng hơn nhiều (0,3–0,8 thay vì 0,85) nên ảnh nền hiện rõ phía sau.
+- **Ba mức để bạn tự chọn:** Cài đặt → Đổi giao diện → Ảnh nền → **Ảnh rõ / Vừa / Chữ rõ** (lưu riêng trên từng máy, hai máy không kéo nhau).
+- Giữ nguyên các sửa của 1.9.0 bên dưới (chữ theo chủ đề, thông báo nổi, tin nhắn tự gửi lại, bảng tin cố định, chủ đề có hoạ tiết, lịch chọn ngày không nhảy về hôm nay).
+
+**_Ghi chú:_** ảnh nền trong suốt mới kiểm thử bằng máy ảo và bài kiểm thử tự động (59 bài), chưa kiểm chứng trên hai điện thoại thật.
+
+## Hai Trái Tim 1.9.0
 
 **APK Android (cài trực tiếp, không cần ZIP):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.9.0-test-51bc943/HaiTraiTim-1.9.0.apk · **57.931.650 byte** · SHA256 `bcbcc29a69407c65b7acfb17a2580bdfb18b2d1e89e4ef42788a586253ad0a11` · dựng từ `51bc943` (lần build 38541252032, đăng bằng workflow 38542781168). Trong app, mở **Cài đặt** xem dòng cuối: phải là **1.9.0, bản dựng 10**.
 

@@ -21,6 +21,14 @@ Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo
 - **Không dùng `TextEncoder`/`TextDecoder` hay `crypto.getRandomValues`** (React Native không cấp): phần chuyển chữ ↔ byte được tự viết trong `relayProtocol.mjs` (đối chiếu từng byte với chuẩn UTF-8 của Node trong `tests/relay.test.mjs`, có bài chạy khi đã xóa hai lớp đó) và nguồn ngẫu nhiên an toàn lấy từ `expo-crypto` qua `installRandomBytes`. Mọi lỗi JavaScript được ghi vào **“Lỗi gần nhất”** trong Cài đặt thay vì làm văng app.
 - Giới hạn thật: cần Internet ở **cả hai** máy; dữ liệu mới chỉ sang nhau khi hai bên cùng mở app (một bên đóng app thì lần mở sau gửi bù); mã 6 số chỉ có 1.000.000 khả năng nên đừng dán công khai ở nơi nhiều người thấy.
 
+### Có gì mới ở 1.9.1 — ảnh nền kiểu Zalo
+
+**Tải APK 1.9.1 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.9.1-test-ef2dc57/HaiTraiTim-1.9.1.apk · 57.934.306 byte · SHA256 `15d43a165d853b67a0889b8dd45cb9aff832c6686f14023932c0b605fa38ad94` · dựng từ `ef2dc57` (build 38543908536). **iOS (.ipa chưa ký):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.9.1-test-ef2dc57/HaiTraiTim-1.9.1-unsigned.ipa · 11.309.849 byte · SHA256 `a313cbb484c9ac5a640d832d861f5b4c24c1f76d40b959038aacf8a8f7d14e08` (build 38543908210).
+
+- **Ảnh nền hiện xuyên qua giao diện.** Hàm `withWallpaper(theme, tint)` trong `src/logic/themes.mjs` đổi `surface`, `soft`, `glass`, `border` và dải `hero` sang `rgba` khi có ảnh nền; lớp phủ `veil` dùng đúng mức `tint` (0,3–0,8) thay vì 0,85 cố định, nên ảnh phía sau hiện rõ như Zalo mà chữ vẫn đọc được.
+- **Ba mức trong Cài đặt:** `settings.set` nhận thêm `wallpaperTint` (kẹp 0,3–0,75), mặc định 0,5. Mức này chỉ lưu trên máy bạn, không gửi sang máy người thương.
+- 59 bài kiểm thử (thêm bài cho `rgbaOf`, `withWallpaper` và việc kẹp mức) đều xanh.
+
 ### Có gì mới ở 1.9.0
 
 **Tải APK 1.9.0 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.9.0-test-51bc943/HaiTraiTim-1.9.0.apk · 57.931.650 byte · SHA256 `bcbcc29a69407c65b7acfb17a2580bdfb18b2d1e89e4ef42788a586253ad0a11` · dựng từ `51bc943` (build 38541252032). **Bản iOS (.ipa chưa ký, tự ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.9.0-test-51bc943/HaiTraiTim-1.9.0-unsigned.ipa (build 38541251941).

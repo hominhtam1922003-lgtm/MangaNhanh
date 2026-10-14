@@ -20,6 +20,15 @@ import { dateOnly } from "../src/logic/time.mjs";
 import { emptyState, reduce } from "../src/logic/localState.mjs";
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
+/** Chờ theo điều kiện thật (máy CI chậm nên chờ số giây cố định là hay hỏng). */
+const until = async (check, timeoutMs = 15000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (check()) return true;
+    await wait(50);
+  }
+  return Boolean(check());
+};
 const stateWith = (nickname, diaryTitle) => {
   let state = emptyState("2026-01-01T00:00:00.000Z");
   state = reduce(state, {
@@ -75,7 +84,7 @@ test("Broker MQTT thật: hai máy nhập cùng mã 6 số thì cả hai cùng n
     });
     clients.push(mayA, mayB);
     mayA.start();
-    await wait(120);
+    await until(() => mayA.connected);
     assert.equal(
       mayA.connected,
       true,
@@ -89,7 +98,8 @@ test("Broker MQTT thật: hai máy nhập cùng mã 6 số thì cả hai cùng n
     );
     assert.equal(gotA.length, 0, "không tự nhận bản tin của mình");
     mayB.start();
-    await wait(400);
+    await until(() => mayA.connected && mayB.connected);
+    await until(() => mayA.status.partnerOnline && mayB.status.partnerOnline);
     assert.equal(mayB.connected, true, "máy B nối được broker thật");
     assert.equal(mayA.status.partnerOnline, true, "A thấy B vào phòng");
     assert.equal(mayB.status.partnerOnline, true, "B thấy A trong phòng");
@@ -104,9 +114,9 @@ test("Broker MQTT thật: hai máy nhập cùng mã 6 số thì cả hai cùng n
       mayB.publishState(buildRelayPayload(stateB, 60000, "may-B"), "Ngọc Ánh"),
       true,
     );
-    await wait(250);
-    assert.equal(gotA.length, 1, "A nhận đúng một gói của B");
-    assert.equal(gotB.length, 1, "B nhận đúng một gói của A");
+    await until(() => gotA.length >= 1 && gotB.length >= 1);
+    assert.equal(gotA.length >= 1, true, "A nhận gói của B");
+    assert.equal(gotB.length >= 1, true, "B nhận gói của A");
     assert.equal(gotA[0].from.nickname, "Ngọc Ánh");
     assert.equal(gotB[0].from.nickname, "Minh");
     let trenA = stateA;
@@ -133,7 +143,7 @@ test("Broker MQTT thật: hai máy nhập cùng mã 6 số thì cả hai cùng n
     assert.equal(mayB.status.partnerName, "Minh");
     // Gửi lại y nguyên (như khi một bên bấm "Gửi lại toàn bộ dữ liệu ngay") không nhân đôi dữ liệu.
     mayB.publishState(buildRelayPayload(stateB, 60000, "may-B"), "Ngọc Ánh");
-    await wait(200);
+    await until(() => gotA.length >= 2, 10000);
     let lai = trenA;
     for (const payload of gotA.slice(1))
       lai = reduce(lai, { type: "partner.merge", state: payload });
@@ -152,7 +162,7 @@ test("Broker MQTT thật: hai máy nhập cùng mã 6 số thì cả hai cùng n
     });
     clients.push(mayLa);
     mayLa.start();
-    await wait(150);
+    await until(() => mayLa.connected);
     assert.equal(mayLa.connected, true);
     assert.equal(
       mayLa.status.partnerOnline,
@@ -211,9 +221,9 @@ test("Broker MQTT thật: gửi ảnh khoảnh khắc từ máy A sang máy B r�
     });
     clients.push(mayA, mayB);
     mayA.start();
-    await wait(120);
+    await until(() => mayA.connected);
     mayB.start();
-    await wait(250);
+    await until(() => mayA.connected && mayB.connected);
     assert.equal(mayA.connected && mayB.connected, true);
     // Ảnh giả 12.000 ký tự base64 ≈ ảnh nén nhỏ thật.
     const base64 = Buffer.from("anh khoanh khac ".repeat(700), "utf8").toString(

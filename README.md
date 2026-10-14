@@ -269,7 +269,26 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Hai Trái Tim 1.12.0 (bản mới nhất) — hết đơ màn hình, mở được Tin nhắn, cầu tình yêu 3D ăn khớp chủ đề
+## Hai Trái Tim 1.13.0 (bản mới nhất) — nói chuyện liền mạch hơn, một máy tắt là máy kia tự tắt, cầu tình yêu vẽ theo tranh
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.13.0-test-d16a04c/HaiTraiTim-1.13.0.apk · **58.937.849 byte** · SHA256 `1733207396ba849cb4d363ff392f8a21c2cd694eb8ad8875328ca0ad5fe7eda6`
+**APK Android (bản NHẸ, tải nhanh hơn ~27%):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.13.0-test-d16a04c/HaiTraiTim-1.13.0-arm64.apk · **43.308.364 byte** · SHA256 `743f9cc0a6cda9e4081ab67087f278c649e5e8bb2e16758c324ad7b756a3fa5c`
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-ios-v1.13.0-test-cc33e5c/HaiTraiTim-1.13.0-unsigned.ipa · **11.647.809 byte** · SHA256 `588c3cbca2cd39e1b0a165e1bc38a4c32c44e9645d7faad6a386aeb6cee82c15`
+
+Trong app mở **Cài đặt**, dòng cuối phải là **1.13.0, bản dựng 15**. APK dựng từ `d16a04c` (lần build 38568939724), IPA dựng từ `cc33e5c` (lần build 38567292645).
+
+Bản 1.13.0 làm đúng bốn việc bạn nêu:
+
+1. **Nói chuyện trong cuộc gọi liền mạch hơn:** mảnh tiếng dài **0,9 giây**, hàng đợi giữ 8 mảnh, phát cách nhau 40 ms, **chờ sẵn 2 mảnh** rồi mới phát mảnh đầu, nhịp phát 90 ms; gói gửi đi **không chờ xác nhận** nên không khựng; **tạm dừng ghi âm khi loa đang phát** nên hết tiếng vọng (vọng) — đây là nguyên nhân chính làm câu nói bị đứt quãng trước đây. Mảnh ghi vào 6 tệp xoay vòng `callout-…-<số>.m4a`, gói tối đa 160 KB.
+2. **Một máy tắt/kết thúc là máy kia tự kết thúc:** hai bên gửi nhịp sống `alive` mỗi 1,5 giây; quá **5 giây** không thấy nhịp thì máy còn lại tự đóng cuộc gọi và hiện **“Người thương đã kết thúc cuộc gọi”**. Gói cúp máy/từ chối được gửi lại ở mốc 0,25 giây và 0,5 giây vì kênh ghép nối có thể làm mất gói.
+3. **Cầu tình yêu và cô dâu chú rể vẽ lại thành tranh vector** theo đúng ảnh bạn gửi (Ngưu Lang – Chức Nữ): vòm cầu ghép từ **19 con chim Ô Thước**, mặt trăng có quầng sáng, hoa văn sóng bốn góc, mây và cánh hoa; cô dâu áo hồng có tà áo bay + khăn quàng đỏ, chú rể áo lam. Tranh vẽ bằng `react-native-svg` (`src/components/LoveBridgeArt.tsx`) nên **không còn mô hình đồ chơi** và **không thêm vùng WebGL** nào — cả màn hình vẫn chỉ một canvas của trái tim 3D.
+4. **Bỏ hẳn tab Cảm xúc** trong chế độ trên máy.
+
+Bản 1.12.0 trước đó làm lại mô hình cầu 3D trong cùng canvas của trái tim; 1.13.0 thay nó bằng tranh vector bạn yêu cầu.
+
+73 bài kiểm thử đều xanh, TypeScript sạch, `expo export` cho Android thành công.
+
+## Hai Trái Tim 1.12.0 — hết đơ màn hình, mở được Tin nhắn, cầu tình yêu 3D ăn khớp chủ đề
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.12.0-test-65aafef/HaiTraiTim-1.12.0.apk · **58.941.701 byte** · SHA256 `48c9a576b713726c3df35af2db54a72e103f39e92e96107379a04d6f680d22dd`
 **APK Android (bản NHẸ, tải nhanh hơn ~26%):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.12.0-test-65aafef/HaiTraiTim-1.12.0-arm64.apk · **43.312.216 byte** · SHA256 `572b81d62312cd4c0ae94bbb108031eb2babf8670fe4091a97c5007236ff92a8`
@@ -294,7 +313,7 @@ Bản 1.12.0 sửa hai lỗi nặng bạn gặp và làm lại cầu tình yêu:
 
 Bản 1.11.0 sửa đúng những việc bạn nêu:
 
-1. **Gọi nói liên tục như Zalo/Messenger — bỏ hẳn kiểu “giữ để nói”.** Tiếng nói cắt thành mảnh **0,7 giây** gửi liên tục qua kênh ghép nối, máy kia tự phát lên loa; mic bật/tắt bằng một nút. *Nói thẳng:* trễ khoảng một giây và có thể ngắt quãng vài chỗ; muốn như cuộc gọi điện thoại thật thì phải thêm WebRTC và build lại native.
+1. **Gọi nói liên tục như Zalo/Messenger — bỏ hẳn kiểu “giữ để nói”.** Tiếng nói cắt thành mảnh **0,7 giây** gửi liên tục qua kênh ghép nối, máy kia tự phát lên loa; mic bật/tắt bằng một nút. _Nói thẳng:_ trễ khoảng một giây và có thể ngắt quãng vài chỗ; muốn như cuộc gọi điện thoại thật thì phải thêm WebRTC và build lại native.
 2. **Cả hai máy cùng nghe chuông:** bên nhận nghe nhạc chuông (rung kèm), bên gọi nghe hồi chuông tổng đài.
 3. **Cài nhạc chuông từ thư viện nhạc trong máy** (Cài đặt → Nhạc chuông cuộc gọi); nhạc chỉ đổi trên máy bạn, có nút quay về nhạc mặc định.
 4. **Kết thúc cuộc gọi tự đóng** sau 2,2 giây và **hiện nhật ký trong đoạn chat**: “📞 Cuộc gọi đi/đến · 01:23”, cuộc gọi nhỡ ghi rõ “Cuộc gọi nhỡ”.

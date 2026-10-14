@@ -1,6 +1,6 @@
-# Nguồn IPA 1.14.0: run_id 38573992999 (commit a352b9f, artifact HaiTraiTim-iOS-unsigned-IPA).
-# Ghi chú: Release nháp hai-trai-tim-ios-v1.14.0-test-a352b9f đã tạo sẵn ở máy,
-# runner chỉ tải artifact của run 38573992999 lên rồi mở công khai sau khi kiểm tra.
+# Nguồn IPA 1.15.0: run_id 38582680084 (commit 91bf7bd, artifact HaiTraiTim-iOS-unsigned-IPA).
+# Ghi chú: Release nháp hai-trai-tim-ios-v1.15.0-test-91bf7bd đã tạo sẵn ở máy,
+# runner chỉ tải artifact của run 38582680084 lên rồi mở công khai sau khi kiểm tra.
 # Lưu ý: runner không tạo được Release (403) — luôn tạo Release nháp cục bộ trước rồi push file này để runner tải IPA lên.
 name: Đăng IPA Hai Trái Tim (iOS) tải trực tiếp
 
@@ -13,7 +13,7 @@ on:
       run_id:
         description: ID lần chạy "IPA Hai Trái Tim (iOS, chưa ký)" đã thành công
         required: true
-        default: '38573992999'
+        default: '38582680084'
         type: string
 
 permissions:
@@ -35,9 +35,9 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38573992999' }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38582680084' }}
       ARTIFACT_NAME: HaiTraiTim-iOS-unsigned-IPA
-      IPA_FILE: HaiTraiTim-1.14.0-unsigned.ipa
+      IPA_FILE: HaiTraiTim-1.15.0-unsigned.ipa
     steps:
       - name: Kiểm tra nguồn IPA đã build thành công
         id: verify
@@ -53,7 +53,7 @@ jobs:
           assert run['path'] == '.github/workflows/build-couple-ipa.yml', 'Sai workflow build iOS'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f"sha={run['head_sha']}\n")
-              output.write(f"tag=hai-trai-tim-ios-v1.14.0-test-{run['head_sha'][:7]}\n")
+              output.write(f"tag=hai-trai-tim-ios-v1.15.0-test-{run['head_sha'][:7]}\n")
           PY
       - name: Lấy IPA đã kiểm chứng qua REST API (không build lại)
         run: |
@@ -109,15 +109,15 @@ jobs:
             gh release upload "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --clobber --repo "$GITHUB_REPOSITORY"
           else
             cat > /tmp/ipa-notes.md <<EOF
-          Bản iOS **Hai Trái Tim 1.14.0** (file .ipa **chưa ký**), lấy nguyên vẹn từ lần build trên macOS của GitHub Actions.
+Bản iOS **Hai Trái Tim 1.15.0** (file .ipa **chưa ký**), lấy nguyên vẹn từ lần build trên macOS của GitHub Actions.
 
-          Tải file **HaiTraiTim-1.14.0-unsigned.ipa** trong Assets. Gói \`vn.haitraitim.app\`.
+Tải file **HaiTraiTim-1.15.0-unsigned.ipa** trong Assets. Gói \`vn.haitraitim.app\`.
 
-          Bản 1.14.0: cuộc gọi dùng WebRTC — tiếng đi thẳng máy-tới-máy, có khử vọng nên liền mạch như gọi thường; không nối trực tiếp được thì tự quay về kênh ghép nối. Bỏ hình cầu, trái tim ở chính giữa có vũ trụ trái tim quay quanh.
+Bản 1.15.0: cuộc gọi ba lớp (PeerJS có TURN miễn phí → WebRTC qua kênh ghép nối → kênh ghép nối) nên qua được cả mạng chặn kiểu NAT đối xứng, vẫn ưu tiên nối trực tiếp P2P trước; thêm TURN dự phòng miễn phí (Open Relay của Metered: cổng 80/443 và TCP 443). Ở chế độ nền, app khai báo chạy nền cho âm thanh (UIBackgroundModes: audio, voip) nên cuộc gọi tiếp tục khi bạn chuyển sang app khác hoặc khoá máy.
 
           iPhone **không cài file trực tiếp như APK**: ký lại bằng Sideloadly/AltStore với Apple ID miễn phí (hết hạn sau 7 ngày) hoặc Apple Developer 99 USD/năm để dùng TestFlight.
           EOF
-            gh release create "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.14.0 — IPA iOS (chưa ký)" --notes-file /tmp/ipa-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
+            gh release create "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --target "$VERIFIED_SHA" --title "Hai Trái Tim 1.15.0 — IPA iOS (chưa ký)" --notes-file /tmp/ipa-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
           fi
           gh release view "$RELEASE_TAG" --json tagName,isDraft,assets --repo "$GITHUB_REPOSITORY" | tee /tmp/ipa-release.json
           echo "IPA tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$IPA_FILE" >> "$GITHUB_STEP_SUMMARY"

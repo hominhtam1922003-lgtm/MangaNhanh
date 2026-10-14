@@ -20,6 +20,8 @@ export const MESSAGE_KINDS = [
   "sticker",
   "photo",
   "location",
+  // Nhật ký cuộc gọi: "Cuộc gọi đi · 01:23" nằm ngay trong đoạn chat.
+  "call",
 ];
 const text = (value, max) =>
   (typeof value === "string" ? value : "").slice(0, max);
@@ -73,6 +75,9 @@ export function emptyState(now = new Date().toISOString()) {
       autoLove: true,
       // Nhắc khi mình chưa trả lời người thương (3 phút, 1 tiếng).
       replyNudge: true,
+      // Nhạc chuông riêng lấy từ thư viện nhạc trong máy (rỗng = dùng nhạc mặc định).
+      ringtone: "",
+      ringtoneName: "",
     },
     autoLoveAt: 0,
     relay: null,
@@ -168,6 +173,8 @@ export function migrate(raw, now = new Date().toISOString()) {
     readReceipts: raw.settings?.readReceipts !== false,
     autoLove: raw.settings?.autoLove !== false,
     replyNudge: raw.settings?.replyNudge !== false,
+    ringtone: text(raw.settings?.ringtone, 80),
+    ringtoneName: text(raw.settings?.ringtoneName, 60),
   };
   state.autoLoveAt = Math.max(0, Number(raw.autoLoveAt) || 0);
   const messages = Array.isArray(raw.messages) ? raw.messages : [];
@@ -648,6 +655,14 @@ export function reduce(state, action) {
         action.replyNudge === undefined
           ? next.settings.replyNudge !== false
           : action.replyNudge !== false,
+      ringtone:
+        action.ringtone === undefined
+          ? next.settings.ringtone
+          : text(action.ringtone, 80),
+      ringtoneName:
+        action.ringtone === undefined
+          ? next.settings.ringtoneName
+          : text(action.ringtoneName, 60),
     };
     if (isTheme(action.theme) && action.theme !== next.appearance.theme) {
       next.appearance = {

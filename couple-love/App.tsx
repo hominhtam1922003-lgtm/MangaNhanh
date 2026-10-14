@@ -71,6 +71,18 @@ import ChatLocal from "./src/screens/local/ChatLocal";
 import CallLocal from "./src/screens/local/CallLocal";
 import { callEvent, newCall, ringTimedOut } from "./src/logic/callLogic.mjs";
 import type { CallInfo } from "./src/logic/callLogic.mjs";
+// Tiếng nói trong cuộc gọi: từng mảnh ngắn, nói liên tục không cần giữ nút.
+import {
+  CALL_CLOSE_MS,
+  CALL_FRAME_MS,
+  callLogText,
+  frameUsable,
+  newAudioQueue,
+  pushFrame,
+} from "./src/logic/callAudio.mjs";
+import type { AudioFrame } from "./src/logic/callAudio.mjs";
+import { AudioModule, setAudioModeAsync, useAudioRecorder } from "expo-audio";
+import * as DocumentPicker from "expo-document-picker";
 import { dueLoveNote, waitingNotice } from "./src/logic/autoLove.mjs";
 import { loveNoteFor } from "./src/logic/lovelines.mjs";
 import { wallpaperFile } from "./src/logic/localState.mjs";
@@ -473,6 +485,30 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     setCall(next);
   };
   const [callTick, setCallTick] = useState(0);
+  // Ghi âm cuộc gọi: mảnh 16 kHz mono, 24 kbit/s (nhẹ, đủ rõ tiếng nói).
+  const callRecorder = useAudioRecorder({
+    extension: ".m4a",
+    sampleRate: 16000,
+    numberOfChannels: 1,
+    bitRate: 24000,
+    android: { outputFormat: "mpeg4", audioEncoder: "aac" },
+    ios: {
+      outputFormat: "aac ",
+      audioQuality: 32,
+      linearPCMBitDepth: 16,
+      linearPCMIsBigEndian: false,
+      linearPCMIsFloat: false,
+    },
+    web: { mimeType: "audio/webm", bitsPerSecond: 24000 },
+  });
+  // Tiếng của người thương đang chờ phát lên loa (hàng đợi nhỏ, giữ độ trễ thấp).
+  const callQueueRef = useRef<AudioFrame[]>(newAudioQueue());
+  const callSeqRef = useRef(0);
+  const callLoggedRef = useRef("");
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistPending = useRef<State | null>(null);
+  const lastLiteRef = useRef("");
+  const lastSlowRef = useRef(0);
   const noticeRef = useRef<{ key: string; stage: string; at: number } | null>(
     null,
   );
@@ -601,17 +637,31 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       setUnlocking(false);
     }
   }
+  /**
+   * Ghi dữ liệu xuống máy nhưng gộp các thay đổi liên tiếp trong 400 ms: gửi tin
+   * nhắn liên tục trước đây ghi cả tệp dữ liệu mỗi lần nên app bị khựng.
+   */
+  function persistSoon(next: State, delay = 400) {
+    persistPending.current = next;
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(() => {
+      const value = persistPending.current;
+      persistPending.current = null;
+      if (!value) return;
+      void persistState(value)
+        .then((warning) => {
+          if (warning) setError(warning);
+        })
+        .catch(() => setError("Chưa ghi được dữ liệu vào bộ nhớ máy."));
+    }, delay);
+  }
   function update(action: Record<string, unknown>) {
     const current = stateRef.current;
     if (!current) return;
     const next = reduce(current, action) as State;
     stateRef.current = next;
     setState(next);
-    void persistState(next)
-      .then((warning) => {
-        if (warning) setError(warning);
-      })
-      .catch(() => setError("Chưa ghi được dữ liệu vào bộ nhớ máy."));
+    persistSoon(next);
     if (
       [
         "cycle.save",
@@ -637,6 +687,45 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     }
   }
 
+  // Chọn nhạc chuông riêng: lấy tệp nhạc trong máy, lưu lại và dùng cho cuộc gọi tới.
+  async function pickRingtone() {
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({
+        type: "audio/*",
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (picked.canceled || !picked.assets?.length) return;
+      const asset = picked.assets[0];
+      const extension = (
+        asset.name?.match(/\.[a-z0-9]+$/i)?.[0] ?? ".mp3"
+      ).toLowerCase();
+      const file = saveImage(asset.uri, `ringtone-custom${extension}`);
+      update({
+        type: "settings.set",
+        ringtone: file,
+        ringtoneName: asset.name ?? "Nhạc trong máy",
+      });
+      Alert.alert(
+        "Đã đặt nhạc chuông",
+        `Cuộc gọi tới sẽ reo bằng “${asset.name ?? "nhạc trong máy"}”.`,
+      );
+    } catch (error) {
+      Alert.alert(
+        "Chưa chọn được nhạc",
+        error instanceof Error
+          ? error.message
+          : "Máy chưa chọn được tệp nhạc này. Thử bài khác nhé.",
+      );
+    }
+  }
+  function resetRingtone() {
+    update({ type: "settings.set", ringtone: "", ringtoneName: "" });
+    Alert.alert(
+      "Đã trở về nhạc mặc định",
+      "Cuộc gọi tới sẽ reo bằng nhạc có sẵn trong app.",
+    );
+  }
   // ---------- Cuộc gọi ----------
   // Bấm Gọi: gửi tín hiệu đổ chuông sang máy người thương rồi hiện màn hình gọi.
   function startCall() {
@@ -677,6 +766,11 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   function callAction(event: { type: string; on?: boolean; min?: boolean }) {
     const active = callRef.current;
     if (!active) return;
+    // Bấm “Đóng” trên màn hình đã kết thúc: dọn hẳn cửa sổ gọi.
+    if (active.phase === "ended") {
+      applyCall(null);
+      return;
+    }
     const client = relayRef.current;
     const name = stateRef.current?.me.nickname ?? "";
     if (
@@ -700,27 +794,6 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       return;
     }
     applyCall(callEvent(active, event));
-  }
-  function sendCallVoice(uri: string, durationMs: number) {
-    try {
-      const id =
-        "v" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-      const file = saveImage(uri, `voice-${id}.m4a`);
-      update({
-        type: "message.add",
-        id,
-        kind: "voice",
-        body: "",
-        audio: file,
-        durationMs,
-      });
-      setTimeout(() => flushMessages(), 120);
-    } catch (error) {
-      Alert.alert(
-        "Chưa gửi được tiếng nói",
-        error instanceof Error ? error.message : "Ghi âm bị lỗi.",
-      );
-    }
   }
   // Gửi ảnh trong đoạn chat (chụp hoặc chọn từ thư viện).
   function sendChatPhoto(uri: string, caption: string) {
@@ -820,8 +893,23 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     );
     const key = payloadKey(payload);
     if (!force && key === lastSentRef.current) return;
+    // Tin nhắn đi bằng gói riêng ngay khi gửi; nếu CHỈ tin nhắn đổi thì không
+    // đẩy lại cả gói dữ liệu lớn (trước đây mỗi tin nhắn/vị trí đều đẩy 60 KB
+    // nên đoạn chat bị lag). Vẫn có nhịp an toàn 20 giây một lần để không mất dữ liệu.
+    const lite = payloadKey({
+      ...payload,
+      messages: (payload.messages ?? []).map(
+        (message: { id: string }) => message.id,
+      ),
+    });
+    if (!force && lite === lastLiteRef.current) {
+      const now = Date.now();
+      if (now - lastSlowRef.current < 20000) return;
+      lastSlowRef.current = now;
+    }
     if (client.publishState(payload, current.me.nickname)) {
       lastSentRef.current = key;
+      lastLiteRef.current = lite;
       // Ghi lại ngay trong nhật ký kết nối để cả hai máy đều nhìn thấy dữ liệu
       // nào đã đi: nhật ký, cảm xúc, tin nhắn.
       setRelayLog((lines) =>
@@ -1269,6 +1357,24 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           }
           const active = callRef.current;
           if (!active || active.id !== callId) return;
+          if (event === "audio") {
+            // Tiếng nói của người thương: lưu ra tệp rồi xếp hàng cho loa phát.
+            if (active.phase !== "active") return;
+            const data = String(message.data ?? "");
+            const seq = Number(message.seq);
+            if (!data || !Number.isFinite(seq)) return;
+            try {
+              const name = `callin-${callId}-${seq % 4}.m4a`;
+              writeBase64(name, data);
+              callQueueRef.current = pushFrame(callQueueRef.current, {
+                seq,
+                uri: imageUri(name) ?? undefined,
+                bytes: Number(message.bytes) || data.length,
+                at: Date.now(),
+              });
+            } catch {}
+            return;
+          }
           if (event === "accept")
             applyCall(callEvent(active, { type: "accept" }));
           else if (event === "reject")
@@ -1531,11 +1637,92 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+  // Nói chuyện liên tục: ghi âm thành từng mảnh ngắn rồi gửi ngay, không cần
+  // giữ nút. Mảnh nhỏ nên vẫn nhẹ kênh; mic tắt thì tạm dừng gửi tiếng.
+  useEffect(() => {
+    const active = call?.phase === "active";
+    if (!active) return;
+    const callId = call!.id;
+    let alive = true;
+    void (async () => {
+      try {
+        const permission = await AudioModule.requestRecordingPermissionsAsync();
+        if (!permission.granted) return;
+        await setAudioModeAsync({
+          allowsRecording: true,
+          playsInSilentMode: true,
+        });
+      } catch {
+        return;
+      }
+      while (alive) {
+        const current = callRef.current;
+        if (!current || current.id !== callId || current.phase !== "active")
+          break;
+        if (!current.micOn) {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          continue;
+        }
+        try {
+          await callRecorder.prepareToRecordAsync();
+          callRecorder.record();
+          await new Promise((resolve) => setTimeout(resolve, CALL_FRAME_MS));
+          await callRecorder.stop();
+          const uri = callRecorder.uri;
+          const seq = callSeqRef.current + 1;
+          callSeqRef.current = seq;
+          if (!uri) continue;
+          // Xoay vòng 4 tệp: máy kia phát xong mảnh cũ trước khi tệp bị ghi đè.
+          const name = `callout-${callId}-${seq % 4}.m4a`;
+          saveImage(uri, name);
+          const base64 = imageBase64(name, 120 * 1024);
+          if (!base64) continue;
+          const bytes = base64.length;
+          if (!frameUsable(bytes, true)) continue;
+          relayRef.current?.publish({
+            kind: "call",
+            event: "audio",
+            callId,
+            seq,
+            ms: CALL_FRAME_MS,
+            data: base64,
+            bytes,
+            name: stateRef.current?.me.nickname ?? "",
+          });
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+      try {
+        callRecorder.stop();
+      } catch {}
+      void setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      }).catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [call?.phase, call?.id]);
   useEffect(() => {
     if (!call || call.phase !== "ended") return;
-    const timer = setTimeout(() => applyCall(null), 4500);
+    // Ghi nhật ký cuộc gọi vào đoạn chat (một lần cho mỗi cuộc gọi).
+    if (callLoggedRef.current !== call.id) {
+      callLoggedRef.current = call.id;
+      const body = callLogText(call, Date.now());
+      if (body) update({ type: "message.add", kind: "call", body });
+    }
+    // Cửa sổ cuộc gọi tự đóng, không phải bấm gì.
+    const timer = setTimeout(() => applyCall(null), CALL_CLOSE_MS);
     return () => clearTimeout(timer);
-  }, [call]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [call?.id, call?.phase]);
+  // Trong cuộc gọi: tiếng của người thương tới thì lưu thành tệp và xếp hàng phát.
+  useEffect(() => {
+    if (call?.phase !== "active") callQueueRef.current = newAudioQueue();
+  }, [call?.phase]);
   // Lời yêu tự động mỗi 2 tiếng + nhắc khi mình chưa trả lời người thương.
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1719,11 +1906,13 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         call={call}
         callTick={callTick}
         onStartCall={startCall}
+        onPickRingtone={pickRingtone}
+        onResetRingtone={resetRingtone}
+        callQueueRef={callQueueRef}
         onSendPhoto={sendChatPhoto}
         onSendLocation={() => void sendLocation()}
         callAction={callAction}
         callRef={callRef}
-        onSendCallVoice={sendCallVoice}
         notifyState={notifyState}
         onEnableNotifications={() =>
           void (async () => {
@@ -1792,12 +1981,14 @@ function LocalShell({
   onEnableNotifications,
   call,
   callTick,
+  callQueueRef,
+  onPickRingtone,
+  onResetRingtone,
   onStartCall,
   onSendPhoto,
   onSendLocation,
   callAction,
   callRef,
-  onSendCallVoice,
 }: {
   state: State;
   update: (action: Record<string, unknown>) => void;
@@ -1837,12 +2028,14 @@ function LocalShell({
   onEnableNotifications: () => void;
   call: CallInfo | null;
   callTick: number;
+  callQueueRef: React.MutableRefObject<AudioFrame[]>;
+  onPickRingtone: () => void;
+  onResetRingtone: () => void;
   onStartCall: () => void;
   onSendPhoto: (uri: string, caption: string) => void;
   onSendLocation: () => void;
   callAction: (event: { type: string; on?: boolean; min?: boolean }) => void;
   callRef: React.MutableRefObject<CallInfo | null>;
-  onSendCallVoice: (uri: string, durationMs: number) => void;
 }) {
   const { theme } = useTheme();
   const unreadMessages = state.messages.filter(
@@ -1980,15 +2173,24 @@ function LocalShell({
             </Pressable>
           </View>
         )}
+        {/* Tin nhắn: khung riêng chiếm hết chiều cao nên ô nhắn tin luôn đứng
+            yên dưới đáy, tin nhắn nhiều tới đâu cũng chỉ phần tin cuộn lên. */}
+        {!alertPage && tab === "chat" ? (
+          <View style={{ flex: 1, paddingHorizontal: 18, paddingTop: 10 }}>
+            <ChatLocal
+              {...props}
+              relayStatus={relayStatus}
+              onSendMessage={flushMessages}
+              onStartCall={onStartCall}
+              onSendPhoto={onSendPhoto}
+              onSendLocation={onSendLocation}
+            />
+          </View>
+        ) : null}
         <ScrollView
           key={alertPage ? "alerts" : tab}
           keyboardShouldPersistTaps="handled"
-          scrollEnabled={alertPage || tab !== "chat"}
-          contentContainerStyle={
-            !alertPage && tab === "chat"
-              ? { flexGrow: 1, paddingHorizontal: 18, paddingTop: 10 }
-              : { padding: 18, paddingBottom: 32 }
-          }
+          contentContainerStyle={{ padding: 18, paddingBottom: 32 }}
         >
           {alertPage ? (
             <>
@@ -2038,15 +2240,6 @@ function LocalShell({
                 />
               )}
             </>
-          ) : tab === "chat" ? (
-            <ChatLocal
-              {...props}
-              relayStatus={relayStatus}
-              onSendMessage={flushMessages}
-              onStartCall={onStartCall}
-              onSendPhoto={onSendPhoto}
-              onSendLocation={onSendLocation}
-            />
           ) : tab === "home" ? (
             <HomeLocal
               {...props}
@@ -2096,6 +2289,8 @@ function LocalShell({
           ) : (
             <SettingsLocal
               {...props}
+              onPickRingtone={onPickRingtone}
+              onResetRingtone={onResetRingtone}
               replaceState={replaceState}
               clearAll={clearAll}
               locked={lockEnabled}
@@ -2114,10 +2309,15 @@ function LocalShell({
         {call ? (
           <CallLocal
             call={call}
-            state={state}
             micOn={call.micOn}
             partnerName={call.name}
             partnerAvatar={state.partner?.avatar ?? null}
+            ringtoneUri={
+              state.settings?.ringtone
+                ? imageUri(state.settings.ringtone)
+                : null
+            }
+            queueRef={callQueueRef}
             onToggleMic={() =>
               callAction({ type: "mic", on: !callRef.current?.micOn })
             }
@@ -2126,8 +2326,6 @@ function LocalShell({
             onAccept={() => callAction({ type: "accept" })}
             onReject={() => callAction({ type: "hangup" })}
             onHangUp={() => callAction({ type: "hangup" })}
-            onSendVoice={onSendCallVoice}
-            tick={callTick}
           />
         ) : null}
         <View

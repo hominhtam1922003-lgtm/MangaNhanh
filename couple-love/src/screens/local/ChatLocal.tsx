@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   Animated,
@@ -291,6 +297,265 @@ function VoiceBubble({
     </View>
   );
 }
+/**
+ * Một dòng tin nhắn. Tách riêng và nhớ sẵn (React.memo) để khi bạn đang gõ chữ
+ * trong ô nhắn, cả bảng tin không phải vẽ lại từng dòng — app mượt hơn hẳn.
+ */
+const MessageRow = React.memo(function MessageRow({
+  message,
+  previousAt,
+  theme,
+  mine,
+  partnerName,
+  readReceipts,
+  onOpenPhoto,
+  onDelete,
+}: {
+  message: State["messages"][number];
+  previousAt: string | null;
+  theme: ReturnType<typeof useTheme>["theme"];
+  mine: boolean;
+  partnerName: string;
+  readReceipts: boolean;
+  onOpenPhoto: (photo: string | null | undefined) => void;
+  onDelete: (id: string) => void;
+}) {
+  const showDay = !previousAt || dayOf(previousAt) !== dayOf(message.createdAt);
+  const status = mine
+    ? !message.sentAt
+      ? "đang chờ gửi"
+      : readReceipts && message.readAt
+        ? "đã xem"
+        : message.deliveredAt
+          ? "đã tới máy kia"
+          : "đã gửi"
+    : readReceipts
+      ? message.readAt
+        ? "đã xem"
+        : "mới nhận"
+      : "";
+  const timeLabel = `${clockOf(message.createdAt)}${status ? ` · ${status}` : ""}`;
+  const mineGradient = (
+    <LinearGradient
+      colors={theme.deep}
+      style={{
+        borderRadius: 20,
+        borderBottomRightRadius: 6,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+      }}
+    >
+      <Text style={{ color: theme.onDeep }}>{message.body}</Text>
+    </LinearGradient>
+  );
+  const theirBubble = (
+    <View
+      style={{
+        backgroundColor: theme.soft,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 20,
+        borderBottomLeftRadius: 6,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+      }}
+    >
+      <Text style={{ color: theme.ink }}>{message.body}</Text>
+    </View>
+  );
+  // Nhật ký cuộc gọi: một dòng giữa khung, không phải bong bóng tin nhắn.
+  if (message.kind === "call")
+    return (
+      <View>
+        {showDay ? (
+          <Text
+            className="text-xs text-center my-2"
+            style={{ color: theme.sub }}
+          >
+            {dayOf(message.createdAt)}
+          </Text>
+        ) : null}
+        <View className="items-center mb-2">
+          <View
+            style={{
+              backgroundColor: theme.glass,
+              borderWidth: 1,
+              borderColor: theme.border,
+              borderRadius: 16,
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+            }}
+          >
+            <Text className="text-xs" style={{ color: theme.ink }}>
+              📞 {message.body} · {clockOf(message.createdAt)}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  return (
+    <View>
+      {showDay ? (
+        <Text className="text-xs text-center my-2" style={{ color: theme.sub }}>
+          {dayOf(message.createdAt)}
+        </Text>
+      ) : null}
+      <View
+        className={`mb-2 ${mine ? "items-end" : "items-start"}`}
+        style={{ maxWidth: "92%" }}
+      >
+        {message.kind === "sticker" ? (
+          // Sticker: hình lớn, không bọc trong bong bóng.
+          <Text style={{ fontSize: 68, lineHeight: 78 }}>{message.body}</Text>
+        ) : message.kind === "photo" ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Mở ảnh"
+            onPress={() => onOpenPhoto(message.photo)}
+          >
+            <LinearGradient
+              colors={mine ? theme.deep : [theme.soft, theme.soft]}
+              style={{ borderRadius: 20, padding: 3 }}
+            >
+              {message.photo ? (
+                <Image
+                  source={{ uri: imageUri(message.photo) ?? "" }}
+                  style={{
+                    width: 196,
+                    height: 196,
+                    borderRadius: 17,
+                  }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View
+                  style={{
+                    width: 196,
+                    height: 196,
+                    borderRadius: 17,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text className="text-3xl">🖼</Text>
+                  <Text className="text-xs mt-2" style={{ color: theme.ink }}>
+                    Đang tải ảnh…
+                  </Text>
+                </View>
+              )}
+            </LinearGradient>
+            {message.body ? (
+              <Text className="text-sm mt-1" style={{ color: theme.ink }}>
+                {message.body}
+              </Text>
+            ) : null}
+          </Pressable>
+        ) : message.kind === "location" ? (
+          <View
+            style={{
+              backgroundColor: theme.soft,
+              borderWidth: 1,
+              borderColor: theme.border,
+              borderRadius: 20,
+              padding: 12,
+              width: 232,
+            }}
+          >
+            <Text className="text-2xl">📍</Text>
+            <Text className="font-semibold mt-1" style={{ color: theme.ink }}>
+              {mine
+                ? "Bạn đang ở đây"
+                : `${partnerName || "Người thương"} đang ở đây`}
+            </Text>
+            <Text className="text-xs mt-1" style={{ color: theme.sub }}>
+              {message.lat?.toFixed(5)}, {message.lng?.toFixed(5)}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Mở bản đồ"
+              onPress={() =>
+                void Linking.openURL(
+                  `https://www.google.com/maps/search/?api=1&query=${message.lat},${message.lng}`,
+                ).catch(() =>
+                  Alert.alert(
+                    "Chưa mở được bản đồ",
+                    "Máy này chưa có ứng dụng bản đồ.",
+                  ),
+                )
+              }
+              style={{
+                marginTop: 8,
+                backgroundColor: theme.deep[1],
+                borderRadius: 14,
+                paddingVertical: 7,
+                alignItems: "center",
+              }}
+            >
+              <Text className="font-bold" style={{ color: theme.onDeep }}>
+                Mở bản đồ
+              </Text>
+            </Pressable>
+          </View>
+        ) : message.kind === "voice" ? (
+          mine ? (
+            <LinearGradient
+              colors={theme.deep}
+              style={{
+                borderRadius: 20,
+                borderBottomRightRadius: 6,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+              }}
+            >
+              <VoiceBubble
+                uri={message.audio ? imageUri(message.audio) : null}
+                mine
+                durationMs={message.durationMs}
+              />
+            </LinearGradient>
+          ) : (
+            <View
+              style={{
+                backgroundColor: theme.soft,
+                borderWidth: 1,
+                borderColor: theme.border,
+                borderRadius: 20,
+                borderBottomLeftRadius: 6,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+              }}
+            >
+              <VoiceBubble
+                uri={message.audio ? imageUri(message.audio) : null}
+                mine={false}
+                durationMs={message.durationMs}
+              />
+            </View>
+          )
+        ) : mine ? (
+          mineGradient
+        ) : (
+          theirBubble
+        )}
+        <View className="flex-row items-center mt-1">
+          <Text className="text-xs" style={{ color: theme.sub }}>
+            {timeLabel}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Xóa tin nhắn này"
+            onPress={() => onDelete(message.id)}
+          >
+            <Text className="text-xs ml-2" style={{ color: theme.sub }}>
+              xóa
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+});
+
 export default function ChatLocal({
   state,
   update,
@@ -471,6 +736,52 @@ export default function ChatLocal({
       );
     }
   }
+  // Giữ hàm cập nhật trong ref để các dòng tin nhắn không phải vẽ lại khi App
+  // vẽ lại (mỗi giây một lần khi đang gọi) — bảng tin chỉ vẽ khi tin đổi.
+  const updateRef = useRef(update);
+  updateRef.current = update;
+  const onDelete = useCallback((id: string) => {
+    void (async () => {
+      if (
+        !(await confirm(
+          "Xóa tin nhắn?",
+          "Tin này biến mất khỏi máy bạn. Máy người thương vẫn giữ bản của họ.",
+        ))
+      )
+        return;
+      updateRef.current({ type: "message.remove", id });
+    })();
+  }, []);
+  const onOpenPhoto = useCallback((photo: string | null | undefined) => {
+    if (photo) setViewing(imageUri(photo) ?? "");
+    else
+      Alert.alert(
+        "Ảnh đang tới",
+        "Ảnh đang trên đường sang máy bạn, chờ một chút nhé.",
+      );
+  }, []);
+  const renderItem = useCallback(
+    ({ item, index }: { item: State["messages"][number]; index: number }) => (
+      <MessageRow
+        message={item}
+        previousAt={ordered[index - 1]?.createdAt ?? null}
+        theme={theme}
+        mine={item.authorId === "me"}
+        partnerName={state.partner?.nickname || relayStatus.partnerName || ""}
+        readReceipts={readReceipts}
+        onOpenPhoto={onOpenPhoto}
+        onDelete={onDelete}
+      />
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      ordered,
+      theme,
+      readReceipts,
+      state.partner?.nickname,
+      relayStatus.partnerName,
+    ],
+  );
   const partnerName = state.partner?.nickname || relayStatus.partnerName;
   const statusText = relayStatus.partnerOnline
     ? `${partnerName || "Người thương"} đang trực tuyến`
@@ -604,6 +915,12 @@ export default function ChatLocal({
           keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingVertical: 6 }}
+          // Tối ưu cho máy yếu: chỉ vẽ những dòng đang nhìn thấy.
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={40}
+          windowSize={9}
+          removeClippedSubviews={Platform.OS === "android"}
           // Ở cuối danh sách thì tự bám theo tin mới; kéo lên xem lại thì đứng yên.
           onScroll={(event) => {
             const { contentOffset, contentSize, layoutMeasurement } =
@@ -626,256 +943,7 @@ export default function ChatLocal({
               </Note>
             </Card>
           }
-          renderItem={({ item: message, index }) => {
-            const mine = message.authorId === "me";
-            const older = ordered[index - 1];
-            const showDay =
-              !older || dayOf(older.createdAt) !== dayOf(message.createdAt);
-            const status = mine
-              ? !message.sentAt
-                ? "đang chờ gửi"
-                : readReceipts && message.readAt
-                  ? "đã xem"
-                  : message.deliveredAt
-                    ? "đã tới máy kia"
-                    : "đã gửi"
-              : readReceipts
-                ? message.readAt
-                  ? "đã xem"
-                  : "mới nhận"
-                : "";
-            const timeLabel = `${clockOf(message.createdAt)}${status ? ` · ${status}` : ""}`;
-            const mineGradient = (
-              <LinearGradient
-                colors={theme.deep}
-                style={{
-                  borderRadius: 20,
-                  borderBottomRightRadius: 6,
-                  paddingHorizontal: 14,
-                  paddingVertical: 10,
-                }}
-              >
-                <Text style={{ color: theme.onDeep }}>{message.body}</Text>
-              </LinearGradient>
-            );
-            const theirBubble = (
-              <View
-                style={{
-                  backgroundColor: theme.soft,
-                  borderWidth: 1,
-                  borderColor: theme.border,
-                  borderRadius: 20,
-                  borderBottomLeftRadius: 6,
-                  paddingHorizontal: 14,
-                  paddingVertical: 10,
-                }}
-              >
-                <Text style={{ color: theme.ink }}>{message.body}</Text>
-              </View>
-            );
-            return (
-              <View>
-                {showDay ? (
-                  <Text
-                    className="text-xs text-center my-2"
-                    style={{ color: theme.sub }}
-                  >
-                    {dayOf(message.createdAt)}
-                  </Text>
-                ) : null}
-                <View
-                  className={`mb-2 ${mine ? "items-end" : "items-start"}`}
-                  style={{ maxWidth: "92%" }}
-                >
-                  {message.kind === "sticker" ? (
-                    // Sticker: hình lớn, không bọc trong bong bóng.
-                    <Text style={{ fontSize: 68, lineHeight: 78 }}>
-                      {message.body}
-                    </Text>
-                  ) : message.kind === "photo" ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Mở ảnh"
-                      onPress={() =>
-                        message.photo
-                          ? setViewing(imageUri(message.photo) ?? "")
-                          : Alert.alert(
-                              "Ảnh đang tới",
-                              "Ảnh đang trên đường sang máy bạn, chờ một chút nhé.",
-                            )
-                      }
-                    >
-                      <LinearGradient
-                        colors={mine ? theme.deep : [theme.soft, theme.soft]}
-                        style={{ borderRadius: 20, padding: 3 }}
-                      >
-                        {message.photo ? (
-                          <Image
-                            source={{ uri: imageUri(message.photo) ?? "" }}
-                            style={{
-                              width: 196,
-                              height: 196,
-                              borderRadius: 17,
-                            }}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <View
-                            style={{
-                              width: 196,
-                              height: 196,
-                              borderRadius: 17,
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
-                            <Text className="text-3xl">🖼</Text>
-                            <Text
-                              className="text-xs mt-2"
-                              style={{ color: theme.ink }}
-                            >
-                              Đang tải ảnh…
-                            </Text>
-                          </View>
-                        )}
-                      </LinearGradient>
-                      {message.body ? (
-                        <Text
-                          className="text-sm mt-1"
-                          style={{ color: theme.ink }}
-                        >
-                          {message.body}
-                        </Text>
-                      ) : null}
-                    </Pressable>
-                  ) : message.kind === "location" ? (
-                    <View
-                      style={{
-                        backgroundColor: theme.soft,
-                        borderWidth: 1,
-                        borderColor: theme.border,
-                        borderRadius: 20,
-                        padding: 12,
-                        width: 232,
-                      }}
-                    >
-                      <Text className="text-2xl">📍</Text>
-                      <Text
-                        className="font-semibold mt-1"
-                        style={{ color: theme.ink }}
-                      >
-                        {mine
-                          ? "Bạn đang ở đây"
-                          : `${partnerName || "Người thương"} đang ở đây`}
-                      </Text>
-                      <Text
-                        className="text-xs mt-1"
-                        style={{ color: theme.sub }}
-                      >
-                        {message.lat?.toFixed(5)}, {message.lng?.toFixed(5)}
-                      </Text>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Mở bản đồ"
-                        onPress={() =>
-                          void Linking.openURL(
-                            `https://www.google.com/maps/search/?api=1&query=${message.lat},${message.lng}`,
-                          ).catch(() =>
-                            Alert.alert(
-                              "Chưa mở được bản đồ",
-                              "Máy này chưa có ứng dụng bản đồ.",
-                            ),
-                          )
-                        }
-                        style={{
-                          marginTop: 8,
-                          backgroundColor: theme.deep[1],
-                          borderRadius: 14,
-                          paddingVertical: 7,
-                          alignItems: "center",
-                        }}
-                      >
-                        <Text
-                          className="font-bold"
-                          style={{ color: theme.onDeep }}
-                        >
-                          Mở bản đồ
-                        </Text>
-                      </Pressable>
-                    </View>
-                  ) : message.kind === "voice" ? (
-                    mine ? (
-                      <LinearGradient
-                        colors={theme.deep}
-                        style={{
-                          borderRadius: 20,
-                          borderBottomRightRadius: 6,
-                          paddingHorizontal: 14,
-                          paddingVertical: 10,
-                        }}
-                      >
-                        <VoiceBubble
-                          uri={message.audio ? imageUri(message.audio) : null}
-                          mine
-                          durationMs={message.durationMs}
-                        />
-                      </LinearGradient>
-                    ) : (
-                      <View
-                        style={{
-                          backgroundColor: theme.soft,
-                          borderWidth: 1,
-                          borderColor: theme.border,
-                          borderRadius: 20,
-                          borderBottomLeftRadius: 6,
-                          paddingHorizontal: 14,
-                          paddingVertical: 10,
-                        }}
-                      >
-                        <VoiceBubble
-                          uri={message.audio ? imageUri(message.audio) : null}
-                          mine={false}
-                          durationMs={message.durationMs}
-                        />
-                      </View>
-                    )
-                  ) : mine ? (
-                    mineGradient
-                  ) : (
-                    theirBubble
-                  )}
-                  <View className="flex-row items-center mt-1">
-                    <Text className="text-xs" style={{ color: theme.sub }}>
-                      {timeLabel}
-                    </Text>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Xóa tin nhắn này"
-                      onPress={() =>
-                        void (async () => {
-                          if (
-                            !(await confirm(
-                              "Xóa tin nhắn?",
-                              "Tin này biến mất khỏi máy bạn. Máy người thương vẫn giữ bản của họ.",
-                            ))
-                          )
-                            return;
-                          update({ type: "message.remove", id: message.id });
-                        })()
-                      }
-                    >
-                      <Text
-                        className="text-xs ml-2"
-                        style={{ color: theme.sub }}
-                      >
-                        xóa
-                      </Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </View>
-            );
-          }}
+          renderItem={renderItem}
         />
         {messages.length > 3 ? (
           <Pressable

@@ -29,8 +29,13 @@ test("Bảng tin nhắn cố định: tin mới trôi lên, kéo xem lại như 
   const app = read("App.tsx");
   assert.match(
     app,
-    /tab === "chat"[\s\S]{0,120}flexGrow: 1/,
-    "khung chat chiếm hết chiều cao và tự cuộn",
+    /tab === "chat" \? \(\s*<View style=\{\{ flex: 1/,
+    "khung Tin nhắn chiếm hết chiều cao nên ô nhắn tin đứng yên, chỉ tin nhắn cuộn",
+  );
+  assert.doesNotMatch(
+    app,
+    /tab === "chat" \? \(\s*<ChatLocal/,
+    "bảng tin không nằm trong khung cuộn chung của cả màn hình",
   );
 });
 

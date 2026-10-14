@@ -287,8 +287,9 @@ test("Đã xem: bật tắt được và tin của mình hiện “đã xem” k
   assert.match(chat, /onSendLocation/);
   assert.match(chat, /onStartCall/);
   const callUi = read("src/screens/local/CallLocal.tsx");
-  assert.match(callUi, /giữ nút/);
+  // Từ 1.11.0 cuộc gọi nói liên tục: không còn "giữ để nói".
   assert.match(callUi, /Thu nhỏ/);
   assert.match(callUi, /Mic đang tắt/);
-  assert.match(callUi, /ring\.wav/);
+  assert.match(callUi, /ringtone\.wav/, "chuông cho bên nhận");
+  assert.match(callUi, /ringback\.wav/, "hồi chuông cho bên gọi");
 });

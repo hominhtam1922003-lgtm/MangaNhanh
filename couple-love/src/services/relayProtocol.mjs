@@ -286,6 +286,8 @@ export function buildRelayPayload(
           "sticker",
           "photo",
           "location",
+          // Nhật ký cuộc gọi hiện trong đoạn chat của cả hai máy.
+          "call",
         ].includes(message.kind)
           ? message.kind
           : "text",

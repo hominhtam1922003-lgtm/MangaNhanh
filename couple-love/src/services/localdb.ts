@@ -58,6 +58,10 @@ export type State = {
     autoLove?: boolean;
     /** Nhắc khi mình chưa trả lời người thương. */
     replyNudge?: boolean;
+    /** Nhạc chuông riêng lấy từ thư viện nhạc trong máy (tên tệp đã lưu). */
+    ringtone?: string;
+    /** Tên bài nhạc chuông để hiện trong Cài đặt. */
+    ringtoneName?: string;
   };
   /** Mốc lần cuối tự gửi lời yêu, để không gửi dồn. */
   autoLoveAt?: number;

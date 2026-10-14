@@ -41,6 +41,8 @@ export default function SettingsLocal({
   lastError,
   onClearError,
   onOpenHome,
+  onPickRingtone,
+  onResetRingtone,
 }: {
   state: State;
   update: (action: Record<string, unknown>) => void;
@@ -53,6 +55,10 @@ export default function SettingsLocal({
   lastError: string;
   onClearError: () => void;
   onOpenHome: () => void;
+  /** Chọn nhạc chuông từ thư viện nhạc trong máy. */
+  onPickRingtone: () => void;
+  /** Trở về nhạc chuông có sẵn trong app. */
+  onResetRingtone: () => void;
 }) {
   const [name, setName] = useState(state.me.nickname);
   const [busy, setBusy] = useState(false);
@@ -517,6 +523,46 @@ export default function SettingsLocal({
         ) : null}
       </Card>
       <Card>
+        <Title small>Nhạc chuông cuộc gọi</Title>
+        <View className="mb-3">
+          <Text style={{ color: theme.ink }}>
+            {state.settings.ringtoneName
+              ? `Đang dùng: ${state.settings.ringtoneName}`
+              : "Đang dùng nhạc chuông có sẵn trong app"}
+          </Text>
+          <Note>
+            Bạn có thể lấy một bài nhạc trong thư viện nhạc của máy làm nhạc
+            chuông khi người thương gọi tới. Nhạc này chỉ đổi trên máy bạn.
+          </Note>
+          <View className="flex-row mt-2">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Chọn nhạc chuông từ thư viện nhạc trong máy"
+              onPress={onPickRingtone}
+              className="mr-3 px-4 py-2 rounded-full"
+              style={{ backgroundColor: theme.deep[1] }}
+            >
+              <Text className="font-bold" style={{ color: theme.onDeep }}>
+                🎵 Chọn nhạc trong máy
+              </Text>
+            </Pressable>
+            {state.settings.ringtone ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Trở về nhạc chuông mặc định"
+                onPress={onResetRingtone}
+                className="px-4 py-2 rounded-full"
+                style={{
+                  backgroundColor: theme.soft,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                }}
+              >
+                <Text style={{ color: theme.ink }}>Nhạc mặc định</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
         <Title small>Nhắc nhở &amp; lời yêu tự động</Title>
         <View className="flex-row justify-between items-center my-3">
           <View className="flex-1 pr-2">
@@ -670,7 +716,7 @@ export default function SettingsLocal({
         </Card>
       ) : null}
       <Note>
-        Hai Trái Tim {Constants.expoConfig?.version ?? "1.10.0"} (chế độ trên
+        Hai Trái Tim {Constants.expoConfig?.version ?? "1.11.0"} (chế độ trên
         máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 12}) — ghi
         lại số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục
         riêng của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ

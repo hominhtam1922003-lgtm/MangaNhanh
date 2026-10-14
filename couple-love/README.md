@@ -17,9 +17,17 @@ Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo
 - Vào phòng là **mỗi máy vừa gửi dữ liệu của mình vừa nhận dữ liệu của người thương**, cả hai đều hiện “Đã ghép nối với …” và chip trạng thái trên đầu app. Không phải quét hai lần, không phải làm lại ở bên nào.
 - Kênh truyền là MQTT 3.1.1 qua WebSocket tới **năm trạm công cộng miễn phí nối SONG SONG** (EMQX 8084, EMQX châu Á 8084, Eclipse 443, HiveMQ 8884, Mosquitto 8081): trạm nào vào được thì dùng ngay, trạm chết không làm chậm trạm khác. Bản tin đi trên mọi trạm đang sẵn sàng và **chống trùng theo mã bản tin**, nên hai máy chỉ cần **một** trạm chung. Dữ liệu chỉ được gửi **sau khi trạm xác nhận đăng ký phòng (SUBACK)** — gửi sớm hơn là mất tin. Nhịp giữ kết nối 10 giây và **chào nhau tức thì**: vừa thấy máy kia vào phòng là hai bên gửi dữ liệu ngay.
 - Trong màn hình Ghép nối có **“Chi tiết kết nối”**: từng trạm báo gì (sẵn sàng / quá 12 giây chưa mở được / bị từ chối mã mấy), nhật ký 6 dòng gần nhất và nút **Thử kết nối lại**. Cài đặt hiện **số phiên bản + bản dựng** để biết chắc máy đang chạy bản nào. Nội dung **luôn được mã hóa đầu-cuối** bằng NaCl secretbox (nonce 24 byte ngẫu nhiên mỗi gói), trạm chỉ thấy chuỗi đã mã hóa. Ai không biết mã 6 số thì không đọc được; nếu muốn riêng tư hơn, hãy dùng mục **Cách khác → Tạo mã QR** (khóa ngẫu nhiên 32 byte, dài hơn nên khó đoán hơn mã 6 số).
-- Mỗi gói chỉ chứa **dữ liệu của chính máy gửi** (tên, cảm xúc, chu kỳ, kỷ niệm mình viết, lời nhắc) nên hai máy không gửi trả lại dữ liệu của nhau và không lặp vô tận; gói quá lớn thì tự cắt bớt phần chữ rồi mới bỏ bớt kỷ niệm, và **ảnh riêng không đi qua kênh này** (dùng “Xuất và chia sẻ tệp dữ liệu”).
+- Mỗi gói chỉ chứa **dữ liệu của chính máy gửi** (tên, cảm xúc, chu kỳ, kỷ niệm mình viết, lời nhắc) nên hai máy không gửi trả lại dữ liệu của nhau và không lặp vô tận; gói quá lớn thì tự cắt bớt phần chữ rồi mới bỏ bớt kỷ niệm. **Ảnh Khoảnh khắc có đi qua kênh này** từ 1.6.0: ảnh được nén còn khoảng 100 KB rồi cắt thành gói 3.500 ký tự, máy kia ghép lại và lưu thành `moment-<mã>.jpg`; máy nào thiếu ảnh thì tự gửi lời xin gửi lại.
 - **Không dùng `TextEncoder`/`TextDecoder` hay `crypto.getRandomValues`** (React Native không cấp): phần chuyển chữ ↔ byte được tự viết trong `relayProtocol.mjs` (đối chiếu từng byte với chuẩn UTF-8 của Node trong `tests/relay.test.mjs`, có bài chạy khi đã xóa hai lớp đó) và nguồn ngẫu nhiên an toàn lấy từ `expo-crypto` qua `installRandomBytes`. Mọi lỗi JavaScript được ghi vào **“Lỗi gần nhất”** trong Cài đặt thay vì làm văng app.
 - Giới hạn thật: cần Internet ở **cả hai** máy; dữ liệu mới chỉ sang nhau khi hai bên cùng mở app (một bên đóng app thì lần mở sau gửi bù); mã 6 số chỉ có 1.000.000 khả năng nên đừng dán công khai ở nơi nhiều người thấy.
+
+### Có gì mới ở 1.6.0
+
+- **Khoảnh khắc kiểu Locket** thay cho cách gửi/nhận tệp thủ công: ở trang chủ bấm **Chụp ngay** (camera trước, không cần thoát app) hoặc **Chọn từ thư viện**, viết chú thích ngắn, rồi ảnh tự nén và sang máy người thương. Hai bạn cùng xem trong lưới khoảnh khắc 3 cột, mở ra xem lớn kèm **ngày giờ chụp**, ai gửi, đã gửi hay chưa; xóa được từng khoảnh khắc (có hỏi lại). Tối đa 200 khoảnh khắc gần nhất.
+- **Sửa lỗi chọn ngày bắt đầu yêu** cứ nhảy về tháng 10/2026: bộ chọn ngày được tách riêng khỏi nhịp đếm từng giây và chỉ nhận ngày đã lưu, chặn ngày tương lai; ngày lưu ở 12 giờ trưa nên đổi múi giờ vẫn đúng ngày.
+- **Sửa lỗi đổi ảnh đại diện**: dùng API mới của `expo-image-manipulator` (`manipulate → resize → renderAsync → saveAsync`) và mỗi lần đổi dùng tên tệp mới nên không hiện lại ảnh cũ.
+- **Lời yêu thương mỗi ngày**: 45 câu yêu thương/thơ ngắn, chọn theo ngày nên **hai máy luôn nhận cùng một câu** lúc 09:00 và 21:00, không cần mạng; tắt được trong Cài đặt (mục “Lời yêu thương mỗi ngày”).
+- **8 chủ đề cho trang chủ** (Hồng, Tím, Biển, Bạc hà, Hoàng hôn, Nắng, Tuyết, Đêm) đổi nền chuyển sắc toàn app, màu nhấn của thanh tab và biểu tượng trang trí — chọn trong **Cài đặt → Hình nền & chủ đề**.
 
 ## Có trong mã nguồn
 
@@ -133,7 +141,7 @@ Secrets tùy chọn trong GitHub Settings → Secrets and variables → Actions:
 
 **Không có secrets vẫn build được**: nhập Supabase khi mở app; push chưa sẵn sàng. Không có bốn secrets keystore thì APK dùng chữ ký debug của mẫu Expo: chỉ dành thử nghiệm, không phát hành cửa hàng. Dùng cùng keystore riêng cho mọi lần nâng cấp để giữ dữ liệu. Không gửi secrets trong chat.
 
-CI: Ubuntu → Node 22 → Java 17 → Android SDK → `npm ci` → tests / TypeScript / format → Expo prebuild → Gradle `assembleRelease` cho ARM64 và ARMv7 → artifact **`HaiTraiTim-1.0.0-APK`**, chứa `.apk` và SHA256, giữ 14 ngày. Tải từ trang run → Artifacts, giải nén và cài APK. Android tối thiểu API 24 (Android 7). Chi phí / hạn mức Actions phụ thuộc repository và tài khoản GitHub, không vô hạn.
+CI: Ubuntu → Node 22 → Java 17 → Android SDK → `npm ci` → tests / TypeScript / format → Expo prebuild → Gradle `assembleRelease` cho ARM64 và ARMv7 → artifact **`HaiTraiTim-1.6.0-APK`**, chứa `.apk` và SHA256, giữ 14 ngày. Tải từ trang run → Artifacts, giải nén và cài APK. Android tối thiểu API 24 (Android 7). Chi phí / hạn mức Actions phụ thuộc repository và tài khoản GitHub, không vô hạn.
 
 ## 5. Bảo mật, vận hành và giới hạn
 

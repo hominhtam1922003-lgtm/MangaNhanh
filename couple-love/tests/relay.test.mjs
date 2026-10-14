@@ -213,14 +213,22 @@ test("Kết nối tức thời: trạng thái có tên người thương và ch�
     room: roomFromCode("482913"),
     onStatus: (status) => statuses.push(status),
     onPayload: () => {},
+    onLog: () => {},
   });
-  assert.equal(client.status.state, "connecting");
+  assert.equal(client.status.state, "off", "chưa bật thì trạng thái là tắt");
+  client.stopped = false;
+  client.slots[0].ready = true;
+  client.slots[0].subscribed = true;
   client.partnerSeen = Date.now();
   client.partnerName = "Ngọc Ánh";
-  client.connected = true;
   client.emitStatus();
   assert.equal(statuses.at(-1).state, "online");
   assert.equal(statuses.at(-1).partnerName, "Ngọc Ánh");
+  assert.equal(statuses.at(-1).readyCount, 1);
+  assert.deepEqual(statuses.at(-1).summary[0], {
+    host: "broker.emqx.io:8084",
+    state: "sẵn sàng",
+  });
   const count = statuses.length;
   client.emitStatus();
   assert.equal(
@@ -236,16 +244,26 @@ class FakeSocket {
   constructor(broker) {
     this.broker = broker;
     this.sent = [];
+    broker.sockets.push(this);
     setTimeout(() => this.onopen && this.onopen(), 1);
   }
-  send(bytes) {
-    const data = Uint8Array.from(bytes);
+  send(payload) {
+    const data =
+      payload instanceof ArrayBuffer
+        ? new Uint8Array(payload)
+        : Uint8Array.from(payload);
     this.sent.push(data);
-    if (data[0] === 0x10) {
+    const type = data[0] & 0xf0;
+    if (type === 0x10) {
       this.receive(Uint8Array.from([0x20, 0x02, 0x00, 0x00]));
       return;
     }
-    if ((data[0] & 0xf0) === 0x30) {
+    if (type === 0x80) {
+      // SUBACK: trạm xác nhận đã đăng ký phòng.
+      this.receive(Uint8Array.from([0x90, 0x03, data[2], data[3], 0x00]));
+      return;
+    }
+    if (type === 0x30) {
       // Broker thật gửi bản tin cho mọi máy đăng ký topic, kể cả máy vừa gửi.
       for (const socket of this.broker.sockets) socket.receive(data);
     }
@@ -264,9 +282,7 @@ class FakeBroker {
     this.sockets = [];
   }
   connect() {
-    const socket = new FakeSocket(this);
-    this.sockets.push(socket);
-    return socket;
+    return new FakeSocket(this);
   }
 }
 const wait = (milliseconds) =>
@@ -274,10 +290,10 @@ const wait = (milliseconds) =>
 test("Kết nối tức thời: hai máy nhập cùng mã 6 số thì CẢ HAI cùng nhận dữ liệu", async () => {
   const realWebSocket = globalThis.WebSocket;
   const broker = new FakeBroker();
-  function FakeWebSocket() {
+  globalThis.WebSocket = function FakeWebSocket() {
     return broker.connect();
-  }
-  globalThis.WebSocket = FakeWebSocket;
+  };
+  const clients = [];
   try {
     const created = roomFromCode("482913");
     const joined = roomFromCode("482913");
@@ -285,30 +301,38 @@ test("Kết nối tức thời: hai máy nhập cùng mã 6 số thì CẢ HAI c
     const gotB = [];
     const statusA = [];
     const statusB = [];
+    const logs = [];
     const mayA = new RelayClient({
       room: created,
       deviceId: "mayA",
       onPayload: (payload) => gotA.push(payload),
       onStatus: (status) => statusA.push(status),
+      onLog: (entry) => logs.push(entry.text),
     });
     const mayB = new RelayClient({
       room: joined,
       deviceId: "mayB",
       onPayload: (payload) => gotB.push(payload),
       onStatus: (status) => statusB.push(status),
+      onLog: () => {},
     });
+    clients.push(mayA, mayB);
     mayA.start();
     mayB.start();
-    await wait(80);
+    await wait(120);
     assert.equal(
       mayA.connected && mayB.connected,
       true,
-      "hai máy nối được trạm",
+      "hai máy đăng ký được phòng",
     );
     assert.equal(gotA.length, 0, "máy A không tự nhận bản tin của chính mình");
     assert.equal(gotB.length, 0);
     assert.equal(mayA.status.partnerOnline, true, "A thấy B vừa vào phòng");
     assert.equal(mayB.status.partnerOnline, true, "B thấy A trong phòng");
+    assert.ok(
+      logs.some((text) => text.includes("sẵn sàng nhận dữ liệu")),
+      "nhật ký ghi rõ lúc sẵn sàng",
+    );
     // Đúng cách App làm: mỗi máy gửi dữ liệu của mình khi thấy người thương trực tuyến.
     const stateA = stateWith("Minh", [
       { type: "diary.add", title: "Hẹn hò đầu tiên", body: "a" },
@@ -324,8 +348,12 @@ test("Kết nối tức thời: hai máy nhập cùng mã 6 số thì CẢ HAI c
       mayB.publishState(buildRelayPayload(stateB, 60000, "mayB"), "Ngọc Ánh"),
       true,
     );
-    await wait(80);
-    assert.equal(gotA.length, 1, "A nhận đúng một gói của B");
+    await wait(120);
+    assert.equal(
+      gotA.length,
+      1,
+      "A nhận đúng một gói của B (không nhân bản theo số trạm)",
+    );
     assert.equal(gotB.length, 1, "B nhận đúng một gói của A");
     let trenA = stateA;
     let trenB = stateB;
@@ -366,24 +394,28 @@ test("Kết nối tức thời: hai máy nhập cùng mã 6 số thì CẢ HAI c
       "A biết tên người thương",
     );
     assert.equal(mayB.status.partnerName, "Minh");
+    assert.ok(
+      mayA.status.summary.every((item) => item.state === "sẵn sàng"),
+      "mọi trạm đang sẵn sàng đều được liệt kê trong chi tiết kết nối",
+    );
     // Máy ở một mình trong phòng thì không được coi bản tin dội lại là người thương.
     const solo = new RelayClient({
       room: createRoom(),
       deviceId: "mayMot",
       onPayload: () => {},
+      onLog: () => {},
     });
+    clients.push(solo);
     solo.start();
-    await wait(80);
+    await wait(120);
     assert.equal(solo.connected, true);
     assert.equal(
       solo.status.partnerOnline,
       false,
       "ở một mình thì chưa có ai trực tuyến",
     );
-    solo.stop();
-    mayA.stop();
-    mayB.stop();
   } finally {
+    for (const client of clients) client.stop();
     globalThis.WebSocket = realWebSocket;
   }
 });

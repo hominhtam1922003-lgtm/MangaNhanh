@@ -3,7 +3,7 @@ module.exports = {
   expo: {
     name: "Hai Trái Tim",
     slug: "hai-trai-tim",
-    version: "1.3.0",
+    version: "1.4.0",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
@@ -11,7 +11,7 @@ module.exports = {
     icon: "./assets/icon.png",
     android: {
       package: "vn.haitraitim.app",
-      versionCode: 4,
+      versionCode: 5,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#fff1f2",

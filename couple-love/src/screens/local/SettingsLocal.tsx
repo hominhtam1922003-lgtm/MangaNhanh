@@ -22,6 +22,7 @@ import {
 } from "../../services/localsync";
 import { requestNotifications } from "../../services/localnotify";
 import { restoreFromPayload } from "../../logic/localState.mjs";
+import Constants from "expo-constants";
 export default function SettingsLocal({
   state,
   update,
@@ -290,10 +291,12 @@ export default function SettingsLocal({
         />
       </Card>
       <Note>
-        Hai Trái Tim 1.0.0 (chế độ trên máy). Dữ liệu nằm trong thư mục riêng
-        của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ liệu, nên
-        hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch, không phải
-        kết luận y tế và không dùng để tránh thai.
+        Hai Trái Tim {Constants.expoConfig?.version ?? "1.4.0"} (chế độ trên
+        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 5}) — ghi
+        lại số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục
+        riêng của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ
+        liệu, nên hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch,
+        không phải kết luận y tế và không dùng để tránh thai.
       </Note>
     </>
   );

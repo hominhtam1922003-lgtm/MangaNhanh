@@ -400,7 +400,11 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     broker: string | null;
     partnerOnline: boolean;
     partnerName?: string | null;
+    readyCount?: number;
+    summary?: { host: string; state: string }[];
   }>({ state: "off", broker: null, partnerOnline: false });
+  const [relayLog, setRelayLog] = useState<string[]>([]);
+  const readyRef = useRef(false);
   const authenticating = useRef(false);
   const stateRef = useRef<State | null>(null);
   const relayRef = useRef<RelayClient | null>(null);
@@ -540,9 +544,12 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     if (!relayRoom || !state?.settings.relay) {
       relayRef.current?.stop();
       relayRef.current = null;
+      readyRef.current = false;
       setRelayStatus({ state: "off", broker: null, partnerOnline: false });
       return;
     }
+    readyRef.current = false;
+    setRelayLog((lines) => (lines.length > 40 ? lines.slice(-20) : lines));
     const client = new RelayClient({
       room: relayRoom,
       deviceId: deviceIdRef.current,
@@ -562,7 +569,19 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         state: string;
         broker: string | null;
         partnerOnline: boolean;
+        partnerName?: string | null;
+        readyCount?: number;
+        summary?: { host: string; state: string }[];
       }) => setRelayStatus(status),
+      // Log ngắn bằng tiếng Việt để người dùng thấy ngay máy đang tắc ở đâu.
+      onLog: (entry: { time: string; text: string }) =>
+        setRelayLog((lines) =>
+          [...lines, `${entry.time} · ${entry.text}`].slice(-12),
+        ),
+      onReady: () => {
+        readyRef.current = true;
+        publishCurrent(true);
+      },
     });
     relayRef.current = client;
     client.start();
@@ -676,7 +695,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
                 {relayStatus.state === "online"
                   ? `Đã kết nối · ${relayStatus.partnerName ?? "người thương"} đang trực tuyến`
                   : relayStatus.state === "alone"
-                    ? "Đã nối trạm · chờ người thương"
+                    ? `Đã vào phòng qua ${relayStatus.readyCount ?? 0} trạm · chờ người thương`
                     : relayStatus.state === "connecting"
                       ? "Đang kết nối tức thời…"
                       : "Chạy trên máy · không cần máy chủ"}
@@ -771,6 +790,17 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               {...props}
               initialCode={state.links.length > 0 ? "1" : ""}
               relayStatus={relayStatus}
+              relayLog={relayLog}
+              onRetryRelay={() => {
+                const client = relayRef.current;
+                if (!client) return;
+                for (const slot of client.slots) {
+                  clearTimeout(slot.timer);
+                  slot.retry = 0;
+                  if (!slot.subscribed) client.connect(slot);
+                }
+                client.emitStatus();
+              }}
               syncNow={() => publishCurrent(true)}
             />
           ) : tab === "cycle" ? (

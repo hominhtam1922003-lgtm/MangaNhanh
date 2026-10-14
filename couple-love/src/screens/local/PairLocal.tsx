@@ -34,6 +34,8 @@ type Status = {
   broker: string | null;
   partnerOnline: boolean;
   partnerName?: string | null;
+  readyCount?: number;
+  summary?: { host: string; state: string }[];
 };
 const digitsOf = (text: string) => text.replace(/\D/g, "").slice(0, 6);
 const prettyCode = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}`;
@@ -42,13 +44,17 @@ export default function PairLocal({
   update,
   initialCode,
   relayStatus,
+  relayLog,
   syncNow,
+  onRetryRelay,
 }: {
   state: State;
   update: (action: Record<string, unknown>) => void;
   initialCode: string;
   relayStatus: Status;
+  relayLog: string[];
   syncNow: () => void;
+  onRetryRelay: () => void;
 }) {
   const [mode, setMode] = useState<"code" | "manual">("code");
   const [extra, setExtra] = useState(false);
@@ -57,6 +63,7 @@ export default function PairLocal({
   const [pasted, setPasted] = useState("");
   const [permission, requestPermission] = useCameraPermissions();
   const [slow, setSlow] = useState(false);
+  const [details, setDetails] = useState(false);
   const handled = useRef("");
   const room: Room | null = (state.relay as Room | null) ?? null;
   const guest = room?.role === "guest";
@@ -125,14 +132,14 @@ export default function PairLocal({
     }
   }
   useEffect(() => {
-    if (relayStatus.state === "online" || relayStatus.state === "off") {
+    if (relayStatus.state !== "connecting") {
       setSlow(false);
       return;
     }
     const timer = setTimeout(() => setSlow(true), 20000);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [relayStatus.state, relayStatus.broker]);
+  }, [relayStatus.state, relayStatus.readyCount]);
   function applyManual(raw: string) {
     try {
       const codes = raw
@@ -244,9 +251,39 @@ export default function PairLocal({
             {slow ? (
               <Note>
                 Máy này chưa tới được trạm trung chuyển nào. Hãy kiểm tra
-                WiFi/4G của máy (máy ảo Android cũng cần bật mạng), rồi bấm “Gửi
-                lại toàn bộ dữ liệu ngay” để thử lại.
+                WiFi/4G của máy (máy ảo Android cũng cần bật mạng), rồi bấm “Thử
+                kết nối lại”. Nếu vẫn không được, mở “Chi tiết kết nối” để xem
+                từng trạm báo gì.
               </Note>
+            ) : null}
+            <Button label="Thử kết nối lại" secondary onPress={onRetryRelay} />
+            {room ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Chi tiết kết nối"
+                onPress={() => setDetails(!details)}
+              >
+                <Text className="text-love font-semibold mt-3">
+                  {details
+                    ? "▲ Ẩn chi tiết kết nối"
+                    : `▼ Chi tiết kết nối (${relayStatus.readyCount ?? 0}/${relayStatus.summary?.length ?? 0} trạm sẵn sàng)`}
+                </Text>
+              </Pressable>
+            ) : null}
+            {details && room ? (
+              <View className="mt-2">
+                {(relayStatus.summary ?? []).map((item) => (
+                  <Text key={item.host} className="text-xs text-stone-600">
+                    {item.state === "sẵn sàng" ? "● " : "○ "}
+                    {item.host}: {item.state}
+                  </Text>
+                ))}
+                {relayLog.slice(-6).map((line) => (
+                  <Text key={line} className="text-xs text-stone-400 mt-1">
+                    {line}
+                  </Text>
+                ))}
+              </View>
             ) : null}
             <Button
               label="Gửi lại toàn bộ dữ liệu ngay"
@@ -273,7 +310,7 @@ export default function PairLocal({
                 ? "Bạn đã nhập mã của người thương nên không phải gửi mã cho ai nữa. Cứ để app mở; khi dòng trạng thái ghi “Đã ghép nối với …” là hai máy đã chung dữ liệu."
                 : "Bấm tạo mã rồi gửi 6 số này cho người thương qua tin nhắn bất kỳ. Bạn không phải làm gì thêm."}
             </Note>
-            {room && room.mode === "code" && room.code ? (
+            {room && room.mode === "code" && room.code && !guest ? (
               <View className="items-center py-4">
                 <Text
                   selectable
@@ -290,6 +327,18 @@ export default function PairLocal({
                       : "Đang chờ người thương nhập mã…"}
                 </Text>
               </View>
+            ) : null}
+            {guest && room?.code ? (
+              <Note>
+                Bạn đã vào phòng bằng mã {prettyCode(room.code)} của người
+                thương. Không cần gửi mã đi đâu nữa.
+              </Note>
+            ) : null}
+            {guest && room?.code ? (
+              <Note>
+                Bạn đã vào phòng bằng mã {prettyCode(room.code)} của người
+                thương. Không cần gửi mã đi đâu nữa.
+              </Note>
             ) : null}
             <Button
               label={

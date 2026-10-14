@@ -5,7 +5,11 @@ on:
   push:
     branches: [arena/6f7cfa08-manganhanh]
     paths:
-      [.github/workflows/relay-probe.yml, couple-love/scripts/relay-probe.mjs]
+      [
+        .github/workflows/relay-probe.yml,
+        couple-love/scripts/relay-probe.mjs,
+        couple-love/src/services/relayProtocol.mjs,
+      ]
   workflow_dispatch:
 
 permissions:

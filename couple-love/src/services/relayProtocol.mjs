@@ -3,8 +3,9 @@
 import nacl from "tweetnacl";
 
 export const BROKERS = [
-  "wss://broker.emqx.io:8084/mqtt",
-  "wss://mqtt.eclipseprojects.io:443/mqtt", // cổng 443, dễ qua được mạng di động / WiFi chặn cổng lạ
+  "wss://broker.emqx.io:8084/mqtt", // trạm chính, thường nhanh nhất
+  "wss://broker-cn.emqx.io:8084/mqtt", // trạm châu Á, gần Việt Nam
+  "wss://mqtt.eclipseprojects.io:443/mqtt", // cổng 443, dễ qua mạng chặn cổng lạ
   "wss://broker.hivemq.com:8884/mqtt",
   "wss://test.mosquitto.org:8081/mqtt",
 ];
@@ -271,68 +272,120 @@ export function decodePackets(buffer) {
   return { packets, rest: buffer.slice(offset) };
 }
 const HELLO_MS = 45000;
-/** Kết nối tới broker đầu tiên hoạt động, tự nối lại, và phát/nhận dữ liệu đã mã hóa. */
+// Mã bản tin: dùng để bỏ qua bản tin trùng khi nó tới từ nhiều trạm cùng lúc.
+const randomMark = () =>
+  Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+const OPEN_MS = 12000;
+const shortHost = (url) =>
+  String(url)
+    .replace(/^wss?:\/\//, "")
+    .replace(/\/.*$/, "");
+/** Nối SONG SONG tới mọi trạm công cộng: trạm nào vào được thì dùng, trạm chết
+ *  không làm chậm trạm khác. Bản tin đi trên mọi trạm đang sẵn sàng và được
+ *  chống trùng theo mã bản tin, nên hai máy gặp nhau chỉ cần MỘT trạm chung. */
 export class RelayClient {
   constructor(options) {
     this.room = options.room;
     this.onPayload = options.onPayload ?? (() => {});
     this.onStatus = options.onStatus ?? (() => {});
+    this.onReady = options.onReady ?? (() => {});
+    this.onLog = options.onLog ?? (() => {});
     this.brokers = options.brokers ?? BROKERS;
     this.clientId =
       options.clientId ?? "htt" + Math.random().toString(36).slice(2, 10);
     // Mã máy: broker công cộng dội lại bản tin cho chính máy vừa gửi, nên phải
     // bỏ qua bản tin của mình — nếu không máy sẽ tự nhận mình là "người thương".
     this.deviceId = options.deviceId ?? this.clientId;
-    this.socket = null;
-    this.brokerIndex = 0;
-    this.buffer = new Uint8Array(0);
+    this.slots = this.brokers.map((url, index) => ({
+      url,
+      index,
+      socket: null,
+      ready: false,
+      subscribed: false,
+      lastError: "",
+      retry: 0,
+      timer: null,
+      openTimer: null,
+      buffer: new Uint8Array(0),
+    }));
     this.packetId = 1;
-    this.stopped = false;
-    this.connected = false;
+    this.stopped = true;
     this.partnerSeen = 0;
     this.partnerName = null;
     this.statusKey = "";
-    this.retry = 0;
+    this.seen = [];
     this.timers = [];
   }
   start() {
+    if (!this.stopped) return;
     this.stopped = false;
-    this.connect();
+    for (const slot of this.slots) this.connect(slot);
     this.timers.push(setInterval(() => this.keepalive(), 10000));
-    this.timers.push(setInterval(() => this.checkPresence(), 5000));
+    this.timers.push(setInterval(() => this.emitStatus(), 4000));
+    this.note(null, `Đang thử ${this.slots.length} trạm công cộng cùng lúc…`);
   }
   stop() {
     this.stopped = true;
     for (const timer of this.timers) clearInterval(timer);
     this.timers = [];
-    try {
-      this.socket?.send(encodeDisconnect());
-    } catch {}
-    try {
-      this.socket?.close();
-    } catch {}
-    this.socket = null;
-    this.connected = false;
+    for (const slot of this.slots) {
+      clearTimeout(slot.timer);
+      clearTimeout(slot.openTimer);
+      slot.timer = null;
+      slot.openTimer = null;
+      try {
+        slot.socket?.send(encodeDisconnect());
+      } catch {}
+      try {
+        slot.socket?.close();
+      } catch {}
+      slot.socket = null;
+      slot.ready = false;
+      slot.subscribed = false;
+    }
     this.statusKey = "";
     this.onStatus({
       state: "off",
       broker: null,
       partnerOnline: false,
       partnerName: this.partnerName,
+      summary: this.summary(),
     });
   }
+  get readySlots() {
+    return this.slots.filter((slot) => slot.subscribed);
+  }
+  get connected() {
+    return this.readySlots.length > 0;
+  }
+  get partnerOnline() {
+    return Date.now() - this.partnerSeen < HELLO_MS;
+  }
+  summary() {
+    return this.slots.map((slot) => ({
+      host: shortHost(slot.url),
+      state: slot.subscribed
+        ? "sẵn sàng"
+        : slot.ready
+          ? "đang đăng ký phòng"
+          : slot.lastError || "đang thử",
+    }));
+  }
   get status() {
+    const ready = this.readySlots[0];
     return {
-      state: this.connected
-        ? this.partnerOnline
-          ? "online"
-          : "alone"
-        : this.stopped
-          ? "off"
+      state: this.stopped
+        ? "off"
+        : this.connected
+          ? this.partnerOnline
+            ? "online"
+            : "alone"
           : "connecting",
-      broker: this.brokers[this.brokerIndex] ?? null,
+      broker: ready?.url ?? this.slots[0]?.url ?? null,
       partnerOnline: this.partnerOnline,
       partnerName: this.partnerName,
+      readyCount: this.readySlots.length,
+      summary: this.summary(),
     };
   }
   // Chỉ gọi onStatus khi có thay đổi thật, tránh làm giao diện render liên tục.
@@ -340,40 +393,48 @@ export class RelayClient {
     const status = this.status;
     const key = [
       status.state,
-      status.broker,
+      status.readyCount,
       status.partnerOnline,
       status.partnerName,
+      status.summary.map((item) => item.host + ":" + item.state).join(","),
     ].join("|");
     if (key === this.statusKey) return;
     this.statusKey = key;
     this.onStatus(status);
   }
-  get partnerOnline() {
-    return Date.now() - this.partnerSeen < HELLO_MS;
+  note(slot, text) {
+    this.onLog({
+      time: new Date().toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+      text: slot ? `${shortHost(slot.url)}: ${text}` : text,
+    });
   }
-  connect() {
+  connect(slot) {
     if (this.stopped) return;
-    const broker = this.brokers[this.brokerIndex % this.brokers.length];
-    this.emitStatus();
     let socket;
     try {
-      socket = new WebSocket(broker, ["mqtt"]);
-    } catch {
-      this.scheduleRetry();
+      socket = new WebSocket(slot.url, ["mqtt"]);
+    } catch (error) {
+      slot.lastError = "không mở được";
+      this.retrySlot(slot);
       return;
     }
     socket.binaryType = "arraybuffer";
-    this.socket = socket;
-    const timer = setTimeout(() => {
-      if (this.socket === socket && !this.connected) {
-        try {
-          socket.close();
-        } catch {}
-      }
-    }, 15000);
-    this.timers.push(timer);
+    slot.socket = socket;
+    slot.buffer = new Uint8Array(0);
+    slot.openTimer = setTimeout(() => {
+      if (this.stopped || slot.ready) return;
+      slot.lastError = `quá ${Math.round(OPEN_MS / 1000)} giây chưa mở được`;
+      try {
+        socket.close();
+      } catch {}
+    }, OPEN_MS);
     socket.onopen = () => {
-      socket.send(encodeConnect(this.clientId));
+      if (this.stopped) return;
+      this.sendTo(slot, encodeConnect(this.clientId));
     };
     socket.onmessage = (event) => {
       const bytes =
@@ -382,46 +443,70 @@ export class RelayClient {
           : typeof event.data === "string"
             ? encoder.encode(event.data)
             : new Uint8Array(event.data?.buffer ?? []);
-      this.handle(bytes);
+      this.handle(bytes, slot);
     };
     socket.onerror = () => {
-      this.scheduleRetry();
+      if (!slot.ready) slot.lastError = "lỗi mạng";
     };
-    socket.onclose = () => {
-      clearTimeout(timer);
-      this.connected = false;
-      this.scheduleRetry();
+    socket.onclose = (event) => {
+      clearTimeout(slot.openTimer);
+      slot.openTimer = null;
+      const wasReady = slot.ready || slot.subscribed;
+      slot.ready = false;
+      slot.subscribed = false;
+      if (this.stopped) return;
+      if (!wasReady)
+        slot.lastError =
+          slot.lastError ||
+          (event?.code ? `đóng kết nối (mã ${event.code})` : "không nối được");
+      this.note(slot, wasReady ? "mất kết nối, đang nối lại" : slot.lastError);
+      this.retrySlot(slot);
+      this.emitStatus();
     };
   }
-  handle(bytes) {
-    const merged = new Uint8Array(this.buffer.length + bytes.length);
-    merged.set(this.buffer, 0);
-    merged.set(bytes, this.buffer.length);
+  handle(bytes, slot) {
+    const merged = new Uint8Array(slot.buffer.length + bytes.length);
+    merged.set(slot.buffer, 0);
+    merged.set(bytes, slot.buffer.length);
     const { packets, rest } = decodePackets(merged);
-    this.buffer = rest;
+    slot.buffer = rest;
     for (const packet of packets) {
       if (packet.type === "connack") {
         if (packet.returnCode === 0) {
-          this.connected = true;
-          this.retry = 0;
-          this.socket?.send(
+          slot.ready = true;
+          slot.lastError = "";
+          slot.retry = 0;
+          slot.socket?.send(
             encodeSubscribe(this.packetId++, topicFor(this.room)),
           );
+          this.note(slot, "bắt tay MQTT xong, đang đăng ký phòng");
           this.emitStatus();
-          this.publish(
-            { kind: "hello", name: null },
-            { skipPartnerCheck: true },
-          );
         } else {
-          this.brokerIndex += 1;
-          this.scheduleRetry(1000);
+          slot.lastError = `trạm từ chối (mã ${packet.returnCode})`;
+          try {
+            slot.socket?.close();
+          } catch {}
         }
+      } else if (packet.type === "suback") {
+        const wasSubscribed = slot.subscribed;
+        slot.subscribed = true;
+        this.note(slot, "sẵn sàng nhận dữ liệu");
+        this.emitStatus();
+        // Đăng ký xong mới gửi: gửi trước khi đăng ký là tin bị mất.
+        this.publishHello();
+        if (!wasSubscribed) this.onReady();
       } else if (packet.type === "publish") {
         if (packet.qos > 0) this.socket?.send(encodePuback(packet.packetId));
         if (packet.topic !== topicFor(this.room)) continue;
         try {
           const message = open(this.room, packet.text);
           if (message?.device && message.device === this.deviceId) continue;
+          const mark = message?.mid;
+          if (mark) {
+            if (this.seen.includes(mark)) continue;
+            this.seen.push(mark);
+            if (this.seen.length > 200) this.seen.splice(0, 100);
+          }
           if (
             message?.kind === "ping" ||
             message?.kind === "hello" ||
@@ -447,48 +532,56 @@ export class RelayClient {
     }
   }
   keepalive() {
-    if (!this.connected) return;
-    try {
-      this.socket?.send(encodePingreq());
-      this.socket?.send(
-        encodePublish(topicFor(this.room), seal(this.room, { kind: "ping" })),
-      );
-    } catch {}
+    for (const slot of this.readySlots) {
+      try {
+        slot.socket?.send(encodePingreq());
+        slot.socket?.send(
+          encodePublish(topicFor(this.room), seal(this.room, { kind: "ping" })),
+        );
+      } catch {}
+    }
     this.emitStatus();
   }
-  checkPresence() {
-    this.emitStatus();
-  }
-  publish(message, options = {}) {
-    if (!this.connected || !this.socket) return false;
-    const body = { ...message, device: message.device ?? this.deviceId };
+  sendTo(slot, bytes) {
     try {
-      this.socket.send(
-        encodePublish(topicFor(this.room), seal(this.room, body)),
+      // Truyền ArrayBuffer là đường đi được React Native hỗ trợ chắc chắn nhất.
+      slot.socket?.send(
+        bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength,
+        ),
       );
       return true;
     } catch {
       return false;
     }
   }
+  publish(message, options = {}) {
+    const targets = this.readySlots;
+    if (!targets.length) return false;
+    const body = { ...message, device: this.deviceId, mid: randomMark() };
+    let sent = false;
+    for (const slot of targets) {
+      const bytes = encodePublish(topicFor(this.room), seal(this.room, body));
+      if (this.sendTo(slot, bytes)) sent = true;
+    }
+    if (!sent && options.markOnly) return false;
+    return sent;
+  }
   publishState(payload, name) {
     return this.publish({ kind: "state", name, payload });
   }
   publishHello() {
-    return this.publish(
-      { kind: "hello", name: null },
-      { skipPartnerCheck: true },
-    );
+    return this.publish({ kind: "hello", name: null });
   }
-  scheduleRetry(delay) {
+  retrySlot(slot) {
     if (this.stopped) return;
-    this.brokerIndex += 1;
-    const wait = delay ?? Math.min(30000, 1000 * 2 ** this.retry);
-    this.retry = Math.min(5, this.retry + 1);
-    this.emitStatus();
-    const timer = setTimeout(() => {
-      if (!this.stopped) this.connect();
+    clearTimeout(slot.timer);
+    const wait = Math.min(30000, 1500 * 2 ** slot.retry);
+    slot.retry = Math.min(5, slot.retry + 1);
+    slot.timer = setTimeout(() => {
+      if (!this.stopped) this.connect(slot);
     }, wait);
-    this.timers.push(timer);
+    this.emitStatus();
   }
 }

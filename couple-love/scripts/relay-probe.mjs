@@ -163,6 +163,69 @@ for (const broker of BROKERS) {
     }`,
   );
 }
+// Đúng đường đi của app: mỗi máy nối song song mọi trạm, chỉ cần một trạm chung.
+const roomAll = createRoom();
+const wall = Date.now();
+let allReceived = 0;
+const allLog = [];
+const mayA = new RelayClient({
+  room: roomAll,
+  deviceId: "song-song-A",
+  onPayload: () => {},
+  onStatus: () => {},
+  onLog: (entry) => allLog.push("A " + entry.text),
+});
+const mayB = new RelayClient({
+  room: roomAll,
+  deviceId: "song-song-B",
+  onPayload: () => {
+    allReceived = Date.now() - wall;
+  },
+  onStatus: () => {},
+  onLog: (entry) => allLog.push("B " + entry.text),
+});
+mayA.start();
+const readyDeadline = Date.now() + 20000;
+while (Date.now() < readyDeadline && !mayA.connected) await wait(200);
+say(`\n## Nối song song mọi trạm (đúng cách app đang chạy)`);
+say(
+  `- Máy A sẵn sàng sau ${Date.now() - wall}ms, số trạm sẵn sàng: ${mayA.readySlots.length}`,
+);
+say(
+  mayA
+    .summary()
+    .map((item) => `  - ${item.host}: ${item.state}`)
+    .join("\n"),
+);
+if (mayA.connected) {
+  mayB.start();
+  const bDeadline = Date.now() + 20000;
+  while (Date.now() < bDeadline && !mayB.connected) await wait(200);
+  say(
+    `- Máy B sẵn sàng sau ${Date.now() - wall}ms, số trạm: ${mayB.readySlots.length}`,
+  );
+  let stateBig = emptyState("2026-01-01T00:00:00.000Z");
+  stateBig = reduce(stateBig, {
+    type: "profile.set",
+    nickname: "Máy A",
+    mood: "love",
+    moodNote: "thử",
+  });
+  mayA.publishState(buildRelayPayload(stateBig, 60000, "song-song-A"), "Máy A");
+  const recvDeadline = Date.now() + 8000;
+  while (Date.now() < recvDeadline && !allReceived) await wait(150);
+  say(
+    allReceived
+      ? `- Máy B nhận dữ liệu của A sau ${allReceived}ms (ghép nối: ${mayA.status.partnerOnline && mayB.status.partnerOnline ? "cả hai đều thấy" : "CHƯA đủ"})`
+      : "- LỖI — máy B KHÔNG nhận được gì trong 8 giây",
+  );
+} else {
+  say("- LỖI — không trạm nào sẵn sàng trong 20 giây");
+}
+say(`- Nhật ký: ${allLog.slice(-8).join(" | ")}`);
+mayA.stop();
+mayB.stop();
+
 const ntfy = await ntfyCheck();
 say(
   `\n## Kênh dự phòng HTTPS (ntfy.sh, cổng 443)\n- ${ntfy.ok ? "OK — " + ntfy.why : "LỖI — " + ntfy.why}`,

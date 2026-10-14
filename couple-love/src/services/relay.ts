@@ -21,6 +21,8 @@ export type RelayStatus = {
   broker: string | null;
   partnerOnline: boolean;
   partnerName?: string | null;
+  readyCount?: number;
+  summary?: { host: string; state: string }[];
 };
 export { BROKERS, createRoom, makeCode, roomFromCode, roomFromQr, roomToQr };
 export function roomFromState(state: State): Room | null {

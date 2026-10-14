@@ -105,16 +105,16 @@ jobs:
           exec > >(tee ../android-build.log) 2>&1
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures=arm64-v8a,armeabi-v7a -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
-          cp app/build/outputs/apk/release/app-release.apk ../HaiTraiTim-1.3.0.apk
+          cp app/build/outputs/apk/release/app-release.apk ../HaiTraiTim-1.4.0.apk
           cd ..
-          sha256sum HaiTraiTim-1.3.0.apk > HaiTraiTim-1.3.0.sha256
+          sha256sum HaiTraiTim-1.4.0.apk > HaiTraiTim-1.4.0.sha256
       - name: Tải APK xuống từ Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: HaiTraiTim-1.3.0-APK
+          name: HaiTraiTim-1.4.0-APK
           path: |
-            ${{ env.PROJECT_DIR }}/HaiTraiTim-1.3.0.apk
-            ${{ env.PROJECT_DIR }}/HaiTraiTim-1.3.0.sha256
+            ${{ env.PROJECT_DIR }}/HaiTraiTim-1.4.0.apk
+            ${{ env.PROJECT_DIR }}/HaiTraiTim-1.4.0.sha256
           if-no-files-found: error
           retention-days: 14
       - name: Đính kèm lỗi build vào GitHub Checks

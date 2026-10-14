@@ -23,6 +23,8 @@ Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo
 
 ### Có gì mới ở 1.8.0
 
+**Tải APK 1.8.0 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/hai-trai-tim-v1.8.0-test-cf8c282/HaiTraiTim-1.8.0.apk — 57.921.934 byte · SHA256 `070a194f9c784af24f2d39c31f68f2acbcfaa8800d441486d9c9b7d156f8a94f` · dựng từ `cf8c282` (lần build 38532880571), đăng bằng workflow 38534194891.
+
 - **Đổi giao diện thì mọi chữ tự đổi theo, kể cả khi đặt ảnh làm nền.** Bảng màu có thêm `onDeep` (màu chữ nằm trên nền đậm) nên nút chính, thanh tab đang chọn, nút chọn mã 6 số không còn chữ trắng trên nền sáng; 12 bảng màu được hiệu chỉnh lại và **kiểm tra tự động độ tương phản** (chữ chính ≥ 4,5 · chữ phụ ≥ 3,0 · chữ trên nền đậm ≥ 3,2/4,6) trong `tests/theme_ui.test.mjs`. Nút gạt, dòng báo lỗi khi gõ ngày, tên chủ đề, ô nhập ngày đều lấy màu từ chủ đề. Khi có ảnh nền, lớp `veil` phủ trên ảnh dày hơn ở chủ đề tối (0,82) nên ảnh nền sáng cũng không làm chữ biến mất.
 - **Sửa đúng lỗi “máy B viết nhật ký mà máy A không thấy”.** Gói dữ liệu 60 KB trước đây khi quá lớn thì **cắt mất cả phần nhật ký**, nên nhật ký viết thêm không sang được máy kia trong khi cảm xúc/khoảnh khắc vẫn đi. Nay **nhật ký luôn nằm trong gói**; gói quá lớn thì cắt theo thứ tự: khoảnh khắc → lời nhắc → tin nhắn → rút ngắn chữ trong nhật ký, và bài kiểm thử `Gói dữ liệu lớn vẫn giữ nhật ký của mình` canh đúng điều này.
 - **Nhìn thấy dữ liệu đã đi hay chưa.** Nhật ký kết nối trong mục **Ghép nối** ghi rõ `Đã gửi sang máy kia: n kỷ niệm · n tin nhắn · cảm xúc “…”` và `Đã nhận từ …: n kỷ niệm · cảm xúc “…”`; thẻ nhật ký gắn nhãn **của bạn** hay **từ <tên người thương>** kèm số bài của người thương, mục Cảm xúc luôn hiện cảm xúc của cả hai bên.

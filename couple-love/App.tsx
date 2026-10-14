@@ -89,6 +89,9 @@ import {
 } from "./src/logic/callAudio.mjs";
 import type { AudioFrame } from "./src/logic/callAudio.mjs";
 import { AudioModule, setAudioModeAsync, useAudioRecorder } from "expo-audio";
+import { RtcCall, rtcSupport } from "./src/services/rtcCall";
+import { RTC_RETRY_SIGNAL_MS, rtcStatusText } from "./src/logic/rtcSignal.mjs";
+import type { RtcState } from "./src/logic/rtcSignal.mjs";
 import * as DocumentPicker from "expo-document-picker";
 import { dueLoveNote, waitingNotice } from "./src/logic/autoLove.mjs";
 import { loveNoteFor } from "./src/logic/lovelines.mjs";
@@ -514,6 +517,19 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   // vào mic (gây ù và làm câu chuyện đứt quãng).
   const callPlayingRef = useRef(false);
   const lastAliveSentRef = useRef(0);
+  // Đường tiếng trực tiếp (WebRTC): tiếng đi thẳng máy-tới-máy nên không còn
+  // cảnh cắt thành từng mảnh rồi ghép lại. Không nối được thì vẫn có đường
+  // tiếng cũ qua kênh ghép nối.
+  const rtcRef = useRef<RtcCall | null>(null);
+  const rtcLiveRef = useRef(false);
+  const [rtcLive, setRtcLive] = useState(false);
+  // WebRTC chưa nối được (máy không có thư viện, mạng chặn, micro bận) thì mới
+  // bật lại đường tiếng cũ — mic không thể chạy hai nơi cùng lúc.
+  const [rtcFallback, setRtcFallback] = useState(false);
+  const [rtcInfo, setRtcInfo] = useState<{ state: RtcState; detail: string }>({
+    state: "off",
+    detail: "",
+  });
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistPending = useRef<State | null>(null);
   const lastLiteRef = useRef("");
@@ -757,6 +773,9 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       return;
     }
     const id = "c" + Date.now().toString(36);
+    closeRtc();
+    setRtcInfo({ state: "off", detail: "" });
+    setRtcFallback(false);
     const sent = client.publish({
       kind: "call",
       event: "ring",
@@ -770,6 +789,54 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         sent ? `Đang gọi ${name}…` : "Chưa gửi được tín hiệu gọi, thử lại nhé.",
       ].slice(-12),
     );
+  }
+  // Mở (hoặc lấy lại) đường tiếng trực tiếp cho cuộc gọi đang mở. Tín hiệu
+  // offer/answer/ICE đi qua kênh ghép nối, còn tiếng nói đi thẳng hai máy.
+  function ensureRtc(active: CallInfo) {
+    if (rtcRef.current) return rtcRef.current;
+    const support = rtcSupport();
+    if (!support.ok) {
+      setRtcInfo({ state: "failed", detail: support.detail });
+      return null;
+    }
+    const controller = new RtcCall({
+      callId: active.id,
+      role: active.role === "caller" ? "caller" : "callee",
+      // Gửi lại tín hiệu quan trọng: kênh công cộng thỉnh thoảng mất gói, mất
+      // lời mời là hai máy không nối được với nhau.
+      send: (packet, retries = 0) => {
+        relayRef.current?.publish(packet);
+        for (let index = 0; index < retries; index += 1) {
+          const delay = RTC_RETRY_SIGNAL_MS * (index + 1);
+          setTimeout(() => relayRef.current?.publish(packet), delay);
+        }
+      },
+      onState: (state, detail) => {
+        setRtcInfo({ state, detail: detail || rtcStatusText(state) });
+        const live = state === "live";
+        rtcLiveRef.current = live;
+        setRtcLive(live);
+        setRtcFallback(state === "failed");
+        if (live)
+          setRelayLog((lines) =>
+            [
+              ...lines,
+              "Đã nối tiếng trực tiếp: nói chuyện như gọi thường.",
+            ].slice(-12),
+          );
+      },
+    });
+    rtcRef.current = controller;
+    return controller;
+  }
+  function closeRtc() {
+    const controller = rtcRef.current;
+    rtcRef.current = null;
+    rtcLiveRef.current = false;
+    setRtcLive(false);
+    try {
+      controller?.close();
+    } catch {}
   }
   // Nghe / Từ chối / Kết thúc / thu nhỏ / bật tắt mic.
   function callAction(event: { type: string; on?: boolean; min?: boolean }) {
@@ -802,6 +869,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         );
       }
     }
+    if (event.type === "mic") rtcRef.current?.setMic(Boolean(event.on));
     if (
       event.type === "hangup" &&
       !active.startedAt &&
@@ -1365,6 +1433,9 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               });
               return;
             }
+            closeRtc();
+            setRtcInfo({ state: "off", detail: "" });
+            setRtcFallback(false);
             applyCall(newCall({ id: callId, role: "callee", name: who }));
             void notifyNow(
               `${who} đang gọi cho bạn 📞`,
@@ -1375,6 +1446,12 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           }
           const active = callRef.current;
           if (!active || active.id !== callId) return;
+          if (event === "rtc") {
+            // Tín hiệu nối tiếng trực tiếp (offer/answer/ICE) của người thương.
+            const controller = rtcRef.current ?? ensureRtc(active);
+            void controller?.handle(message);
+            return;
+          }
           if (event === "audio") {
             // Tiếng nói của người thương: lưu ra tệp rồi xếp hàng cho loa phát.
             if (active.phase !== "active") return;
@@ -1642,6 +1719,26 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relayRoom?.id, relayRoom?.key, state?.settings.relay]);
+  // Cuộc gọi vừa được nghe máy: mở ngay đường tiếng trực tiếp. Bên gọi mời
+  // trước, bên nghe trả lời; chưa nối được trong vài giây thì vẫn gọi bình
+  // thường bằng đường tiếng qua kênh ghép nối.
+  useEffect(() => {
+    if (call?.phase !== "active") return;
+    ensureRtc(call);
+    if (!rtcSupport().ok)
+      setRelayLog((lines) =>
+        [...lines, "Máy này chưa có WebRTC, tiếng đi qua kênh ghép nối."].slice(
+          -12,
+        ),
+      );
+    return () => {
+      closeRtc();
+      setRtcInfo((info) =>
+        info.state === "off" ? info : { state: "off", detail: "" },
+      );
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [call?.phase, call?.id]);
   // Nhịp 1 giây cho màn hình gọi + tự kết thúc khi chuông reo quá lâu.
   // Không có cuộc gọi thì không chạy nhịp nào: trước đây app tự vẽ lại toàn bộ
   // giao diện mỗi giây nên máy yếu bị giật, có lúc đơ dính cả màn hình.
@@ -1664,7 +1761,11 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             name: stateRef.current?.me.nickname ?? "",
           });
         }
-        if (callTimedOut(active, now)) {
+        if (rtcLiveRef.current) {
+          // WebRTC cho biết máy kia còn sống qua chính luồng tiếng; không chờ
+          // nhịp qua kênh ghép nối nữa (kênh mất gói là mình tưởng máy kia tắt).
+          applyCall(callEvent(active, { type: "alive" }, now));
+        } else if (callTimedOut(active, now)) {
           applyCall(callEvent(active, { type: "lost" }, now));
           return;
         }
@@ -1687,7 +1788,10 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   // giữ nút. Mảnh nhỏ nên vẫn nhẹ kênh; mic tắt thì tạm dừng gửi tiếng.
   useEffect(() => {
     const active = call?.phase === "active";
-    if (!active) return;
+    // Đang nói bằng WebRTC thì không ghi âm từng mảnh nữa: tiếng đã đi trực tiếp.
+    // Chưa nối xong (hoặc chưa bỏ cuộc) thì cũng chưa ghi: micro chỉ phục vụ một
+    // đường tiếng, mở hai nơi cùng lúc là cả hai cùng hỏng.
+    if (!active || rtcLive || !rtcFallback) return;
     const callId = call!.id;
     let alive = true;
     void (async () => {
@@ -1747,15 +1851,21 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       try {
         callRecorder.stop();
       } catch {}
-      void setAudioModeAsync({
-        allowsRecording: false,
-        playsInSilentMode: true,
-      }).catch(() => {});
+      // Đang nói bằng WebRTC thì đừng đụng vào chế độ âm thanh của máy, kẻo
+      // phiên âm thanh của WebRTC bị đổi giữa cuộc gọi.
+      setTimeout(() => {
+        if (rtcLiveRef.current) return;
+        void setAudioModeAsync({
+          allowsRecording: false,
+          playsInSilentMode: true,
+        }).catch(() => {});
+      }, 400);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [call?.phase, call?.id]);
+  }, [call?.phase, call?.id, rtcLive, rtcFallback]);
   useEffect(() => {
     if (!call || call.phase !== "ended") return;
+    closeRtc();
     // Ghi nhật ký cuộc gọi vào đoạn chat (một lần cho mỗi cuộc gọi).
     if (callLoggedRef.current !== call.id) {
       callLoggedRef.current = call.id;
@@ -1958,6 +2068,8 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         onResetRingtone={resetRingtone}
         callQueueRef={callQueueRef}
         callPlayingRef={callPlayingRef}
+        rtcInfo={rtcInfo}
+        rtcLive={rtcLive}
         onSendPhoto={sendChatPhoto}
         onSendLocation={() => void sendLocation()}
         callAction={callAction}
@@ -2032,6 +2144,8 @@ function LocalShell({
   callTick,
   callQueueRef,
   callPlayingRef,
+  rtcInfo,
+  rtcLive,
   onPickRingtone,
   onResetRingtone,
   onStartCall,
@@ -2080,6 +2194,9 @@ function LocalShell({
   callTick: number;
   callQueueRef: React.MutableRefObject<AudioFrame[]>;
   callPlayingRef: React.MutableRefObject<boolean>;
+  /** Trạng thái đường tiếng trực tiếp (WebRTC) của cuộc gọi đang mở. */
+  rtcInfo: { state: string; detail: string };
+  rtcLive: boolean;
   onPickRingtone: () => void;
   onResetRingtone: () => void;
   onStartCall: () => void;
@@ -2383,6 +2500,8 @@ function LocalShell({
             }
             queueRef={callQueueRef}
             playingRef={callPlayingRef}
+            rtcInfo={rtcInfo}
+            rtcLive={rtcLive}
             onToggleMic={() =>
               callAction({ type: "mic", on: !callRef.current?.micOn })
             }

@@ -14,7 +14,6 @@ import * as ImagePicker from "expo-image-picker";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
 import ThreeHeart from "../../components/ThreeHeart";
-import LoveBridgeArt from "../../components/LoveBridgeArt";
 import DatePicker from "../../components/DatePicker";
 import {
   Button,
@@ -315,8 +314,8 @@ export default function HomeLocal({
         </View>
         {/* Cầu tình yêu: tranh vẽ vector theo đúng ảnh bạn gửi — nhẹ, không mở
             thêm vùng WebGL nào nên máy yếu vẫn mượt. */}
-        <LoveBridgeArt height={226} reduced={reduced} />
-        <ThreeHeart reduced={reduced} height={272} />
+        {/* Trái tim ở chính giữa, vũ trụ trái tim quay quanh — không còn hình cầu. */}
+        <ThreeHeart reduced={reduced} height={330} />
         <View className="items-center mb-4">
           <Text
             className="text-xs uppercase"

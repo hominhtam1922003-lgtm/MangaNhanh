@@ -167,33 +167,34 @@ test("Nhật ký cuộc gọi là một loại tin nhắn thật, hiện giữa 
   assert.match(relay, /"call",\n\s*\].includes\(message\.kind\)/);
 });
 
-test("Cầu tình yêu là tranh vector theo ảnh người dùng gửi", () => {
-  const art = read("src/components/LoveBridgeArt.tsx");
-  assert.match(art, /react-native-svg/, "vẽ bằng vector");
-  assert.match(art, /WaveOrnament/, "hoa văn sóng hai góc như tranh");
-  assert.match(art, /moonGlow/, "vầng trăng vàng có quầng");
-  assert.match(art, /Cloud/, "mây trắng cuộn");
-  assert.match(art, /dressPink/, "tà áo hồng của cô dâu");
-  assert.match(art, /robeBlue/, "áo lam của chú rể");
-  assert.match(art, /Bird/, "chim Ô Thước xếp thành cầu");
-  assert.match(art, /Animated\.loop/, "hoạt ảnh nhẹ, không cần WebGL");
-  assert.doesNotMatch(art, /<Canvas/, "tranh không mở vùng WebGL nào");
-  // Chỉ còn MỘT vùng WebGL: trái tim. Hai canvas cùng lúc làm máy ảo đơ.
-  const heart = read("src/components/ThreeHeart.tsx");
-  assert.doesNotMatch(
-    heart,
-    /BridgeGroup/,
-    "trái tim không còn vẽ cầu trong GL",
+test("Bỏ hình cầu tình yêu: trái tim ở giữa, vũ trụ trái tim quay quanh", () => {
+  assert.equal(
+    existsSync(new URL("../src/components/LoveBridgeArt.tsx", import.meta.url)),
+    false,
+    "hình cầu đã bỏ hẳn khỏi máy",
   );
+  const heart = read("src/components/ThreeHeart.tsx");
+  assert.match(heart, /ORBITS/, "có các quỹ đạo quay quanh trái tim giữa");
+  assert.match(heart, /function Orbit/, "mỗi quỹ đạo mang các trái tim nhỏ");
+  assert.match(heart, /useStars/, "nền vũ trụ có sao");
+  assert.match(heart, /torusGeometry/, "quỹ đạo là vòng mảnh");
+  assert.doesNotMatch(heart, /BridgeGroup/, "không còn vẽ cầu trong GL");
   assert.match(heart, /antialias: false/, "hạ tải đồ hoạ cho máy yếu");
   const home = read("src/screens/local/HomeLocal.tsx");
-  assert.match(home, /<LoveBridgeArt height=\{226\} reduced=\{reduced\} \/>/);
-  assert.match(home, /<ThreeHeart reduced=\{reduced\} height=\{272\} \/>/);
-  assert.equal(
-    existsSync(new URL("../src/components/LoveBridge.tsx", import.meta.url)),
-    false,
-    "mô hình đồ chơi cũ đã bỏ",
+  assert.doesNotMatch(
+    home,
+    /LoveBridgeArt/,
+    "màn hình chính không còn hình cầu",
   );
+  assert.match(home, /<ThreeHeart reduced=\{reduced\} height=\{330\} \/>/);
+  // Chỉ còn MỘT vùng WebGL trong cả app: hai canvas cùng lúc làm máy ảo đơ.
+  const canvases = [
+    "src/components/ThreeHeart.tsx",
+    "src/screens/local/HomeLocal.tsx",
+  ]
+    .map((path) => (read(path).match(/<Canvas/g) ?? []).length)
+    .reduce((total, count) => total + count, 0);
+  assert.equal(canvases, 1, "chỉ một vùng WebGL");
 });
 
 test("Máy này tắt thì máy kia cũng tắt cuộc gọi", () => {

@@ -3,7 +3,7 @@ module.exports = {
   expo: {
     name: "Hai Trái Tim",
     slug: "hai-trai-tim",
-    version: "1.13.0",
+    version: "1.14.0",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
@@ -11,7 +11,14 @@ module.exports = {
     icon: "./assets/icon.png",
     android: {
       package: "vn.haitraitim.app",
-      versionCode: 15,
+      // WebRTC (cuộc gọi tiếng trực tiếp) cần đổi chế độ âm thanh và theo dõi
+      // mạng của máy; RECORD_AUDIO do plugin expo-audio thêm sẵn.
+      permissions: [
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CHANGE_NETWORK_STATE",
+      ],
+      versionCode: 16,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#fff1f2",
@@ -27,6 +34,9 @@ module.exports = {
       infoPlist: {
         NSFaceIDUsageDescription:
           "Xác thực để mở nhật ký và dữ liệu riêng tư của bạn.",
+        // WebRTC tự tìm đường nối trực tiếp giữa hai máy trong cùng mạng Wi-Fi.
+        NSLocalNetworkUsageDescription:
+          "Tìm máy của người thương trong cùng mạng Wi-Fi để nối cuộc gọi trực tiếp.",
       },
     },
     plugins: [

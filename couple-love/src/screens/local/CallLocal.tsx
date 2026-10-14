@@ -140,6 +140,8 @@ export default function CallLocal({
   ringtoneUri,
   queueRef,
   playingRef,
+  rtcInfo,
+  rtcLive,
   onToggleMic,
   onMinimize,
   onRestore,
@@ -155,6 +157,9 @@ export default function CallLocal({
   queueRef: React.MutableRefObject<AudioFrame[]>;
   /** Bật lên khi loa đang phát tiếng người thương (để máy này tạm ngừng ghi âm). */
   playingRef: React.MutableRefObject<boolean>;
+  /** Đường tiếng trực tiếp (WebRTC): đã nối thì tiếng đi thẳng, không qua tệp. */
+  rtcInfo: { state: string; detail: string };
+  rtcLive: boolean;
   onToggleMic: () => void;
   onMinimize: () => void;
   onRestore: () => void;
@@ -259,9 +264,19 @@ export default function CallLocal({
     return () => clearInterval(timer);
   }, [active, call.startedAt]);
 
+  // Đã nối tiếng trực tiếp: xoá hàng đợi mảnh cũ và không phát gì nữa — tiếng
+  // của người thương do chính WebRTC đưa ra loa, liền mạch theo thời gian thực.
+  useEffect(() => {
+    if (!rtcLive) return;
+    queueRef.current = [];
+    playingRef.current = false;
+    setBuffered(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rtcLive]);
+
   // Phát tiếng của người thương: lấy từng mảnh trong hàng đợi, phát lên loa.
   useEffect(() => {
-    if (!active) {
+    if (!active || rtcLive) {
       setBuffered(0);
       return;
     }
@@ -295,7 +310,7 @@ export default function CallLocal({
       } catch {}
     }, PLAY_TICK_MS);
     return () => clearInterval(timer);
-  }, [active, incoming, queueRef]);
+  }, [active, incoming, queueRef, rtcLive]);
 
   const scale = pulse.interpolate({
     inputRange: [0, 1],
@@ -432,8 +447,25 @@ export default function CallLocal({
                 {micOn
                   ? "Nói bình thường, không cần giữ nút"
                   : "Mic đang tắt — bấm mic để nói tiếp"}
-                {buffered > 0 ? ` · đang nhận ${buffered} mảnh tiếng` : ""}
+                {!rtcLive && buffered > 0
+                  ? ` · đang nhận ${buffered} mảnh tiếng`
+                  : ""}
               </Text>
+              {rtcInfo.state !== "off" && rtcInfo.detail ? (
+                <Text
+                  className="text-xs mt-1"
+                  style={{
+                    color: rtcLive
+                      ? "#86efac"
+                      : theme.dark
+                        ? theme.sub
+                        : "#ffffffaa",
+                  }}
+                >
+                  {rtcLive ? "● " : "○ "}
+                  {rtcInfo.detail}
+                </Text>
+              ) : null}
             </View>
           ) : null}
           {call.phase === "ended" ? (

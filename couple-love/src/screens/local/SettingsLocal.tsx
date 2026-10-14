@@ -28,6 +28,7 @@ import { requestNotifications } from "../../services/localnotify";
 import { restoreFromPayload } from "../../logic/localState.mjs";
 import { THEMES } from "../../logic/themes.mjs";
 import { useTheme } from "../../theme/ThemeContext";
+import { rtcSupport } from "../../services/rtcCall";
 import Constants from "expo-constants";
 export default function SettingsLocal({
   state,
@@ -716,8 +717,15 @@ export default function SettingsLocal({
         </Card>
       ) : null}
       <Note>
-        Hai Trái Tim {Constants.expoConfig?.version ?? "1.13.0"} (chế độ trên
-        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 12}) — ghi
+        Cuộc gọi tiếng trực tiếp (WebRTC): {rtcSupport().detail}. Khi đã nối
+        trực tiếp, tiếng đi thẳng từ máy này sang máy kia nên liền mạch như gọi
+        thường; nếu mạng chặn thì app tự quay về đường tiếng qua kênh ghép nối,
+        không ai bị mất cuộc gọi. Ghi lại dòng này nếu cuộc gọi còn đứt quãng để
+        tôi biết máy đang dùng đường tiếng nào.
+      </Note>
+      <Note>
+        Hai Trái Tim {Constants.expoConfig?.version ?? "1.14.0"} (chế độ trên
+        máy, bản dựng {Constants.expoConfig?.android?.versionCode ?? 16}) — ghi
         lại số này để biết máy đang chạy bản nào. Dữ liệu nằm trong thư mục
         riêng của ứng dụng, không tải lên máy chủ nào. Gỡ ứng dụng sẽ xóa dữ
         liệu, nên hãy xuất tệp dự phòng. Dự báo chu kỳ chỉ là phép tính lịch,

@@ -23,7 +23,6 @@ import { StatusBar } from "expo-status-bar";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
-import { readConfig } from "./src/services/backend";
 import { secureStorage } from "./src/services/storage";
 import CloudApp from "./src/screens/CloudApp";
 import ModeChooser from "./src/screens/ModeChooser";
@@ -111,14 +110,20 @@ import * as DocumentPicker from "expo-document-picker";
 import { dueLoveNote, waitingNotice } from "./src/logic/autoLove.mjs";
 import { loveNoteFor } from "./src/logic/lovelines.mjs";
 import { wallpaperFile } from "./src/logic/localState.mjs";
-import { pairGate, gateReasonText } from "./src/logic/pairing.mjs";
 import {
+  pairGate,
+  gateReasonText,
+  inviteSecretForCode,
+} from "./src/logic/pairing.mjs";
+import {
+  acceptPartnerInvite,
   accountConfigured,
   currentSession,
   saveAccountProfile,
   uploadAvatar,
   ensureAccount,
   pairWithCode,
+  signInWithAccount,
   signInAnonymously as signInAnonymous,
   signInWithProvider,
   signOut as signOutAccount,
@@ -1486,6 +1491,15 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             relayRef.current?.publish({ kind: "photoRequest", ids: [avatar] });
           return;
         }
+        if (kind === "pair.unpair") {
+          void unpairAccount().then(() => {
+            if (stateRef.current?.relay) update({ type: "pairing.clear" });
+            void refreshAccount(
+              "Người thương đã ngắt kết nối — hai máy đã rời khỏi phòng chung.",
+            );
+          });
+          return;
+        }
         if (kind === "chatRecall") {
           // Người thương thu hồi một tin: xoá nội dung ở máy này luôn.
           const id = String(message.id ?? "");
@@ -2163,6 +2177,116 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account?.uid]);
+  const inviteInRef = useRef<RelayClient | null>(null);
+  const inviteOutRef = useRef<RelayClient | null>(null);
+  // Kênh đón lời mời theo mã cố định của mình: khi máy kia nhập mã 6 ký tự của
+  // mình thì tự động nhận đôi ngay (chỉ cần MỘT máy nhập mã).
+  useEffect(() => {
+    const myCode = account?.shortCode ?? "";
+    if (!myCode || state?.settings.relay === false) {
+      inviteInRef.current?.stop();
+      inviteInRef.current = null;
+      return;
+    }
+    let client: RelayClient | null = null;
+    try {
+      const room = roomFromPair(inviteSecretForCode(myCode));
+      client = new RelayClient({
+        room,
+        deviceId: deviceIdRef.current + "-in",
+        onMessage: (message: Record<string, unknown>) => {
+          const kind = String(message.kind ?? "");
+          if (kind === "pair.invite") {
+            const target = String(message.targetCode ?? "");
+            const fromCode = String(message.fromCode ?? "");
+            if (!fromCode || (target && target !== myCode)) return;
+            void acceptPartnerInvite({
+              fromUid: String(message.fromUid ?? ""),
+              fromCode,
+              fromName: String(message.fromName ?? ""),
+            }).then((accepted) => {
+              if (accepted)
+                void refreshAccount(
+                  `Đã ghép nối với ${accepted.partnerName || "người thương"}!`,
+                );
+            });
+            return;
+          }
+          if (kind === "pair.unpair") {
+            void unpairAccount().then(() => {
+              if (stateRef.current?.relay) update({ type: "pairing.clear" });
+              void refreshAccount(
+                "Người thương đã ngắt kết nối — hai máy đã rời khỏi phòng chung.",
+              );
+            });
+          }
+        },
+      });
+      inviteInRef.current = client;
+      client.start();
+    } catch {}
+    return () => {
+      client?.stop();
+      inviteInRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.shortCode, state?.settings.relay]);
+
+  // Khi mình vừa nhập mã cố định của người thương: bắn lời mời sang kênh đón của
+  // mã đó để máy người thương tự ghép đôi mà không bắt họ phải nhập lại mã.
+  useEffect(() => {
+    const partnerCode = account?.partnerCode ?? "";
+    const myCode = account?.shortCode ?? "";
+    if (
+      !partnerCode ||
+      !myCode ||
+      !account?.pairSecret ||
+      relayStatus.partnerOnline ||
+      state?.settings.relay === false
+    ) {
+      inviteOutRef.current?.stop();
+      inviteOutRef.current = null;
+      return;
+    }
+    let client: RelayClient | null = null;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    try {
+      const room = roomFromPair(inviteSecretForCode(partnerCode));
+      const sendInvite = () => {
+        client?.publish({
+          kind: "pair.invite",
+          targetCode: partnerCode,
+          fromUid: account?.uid ?? "",
+          fromCode: myCode,
+          fromName:
+            stateRef.current?.me?.nickname ||
+            account?.displayName ||
+            "Người thương",
+        });
+      };
+      client = new RelayClient({
+        room,
+        deviceId: deviceIdRef.current + "-out",
+        onReady: sendInvite,
+      });
+      inviteOutRef.current = client;
+      client.start();
+      timer = setInterval(sendInvite, 4500);
+    } catch {}
+    return () => {
+      if (timer) clearInterval(timer);
+      client?.stop();
+      inviteOutRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    account?.partnerCode,
+    account?.shortCode,
+    account?.pairSecret,
+    relayStatus.partnerOnline,
+    state?.settings.relay,
+  ]);
+
   /** Bảng điều khiển tài khoản dùng ở màn hình ghép nối. */
   const pairActions = {
     onSignIn: (provider: AuthProvider) =>
@@ -2177,6 +2301,36 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         }
         setPairBusy(false);
       })(),
+    onSignInAccount: (
+      identifier: string,
+      password: string,
+      displayName: string,
+    ) =>
+      void (async () => {
+        setPairBusy(true);
+        setPairMessage("");
+        const result = await signInWithAccount(
+          identifier,
+          password,
+          displayName,
+        );
+        setPairMessage(result.message);
+        if (result.ok) {
+          if (displayName.trim() && stateRef.current) {
+            try {
+              update({
+                type: "profile.set",
+                nickname: displayName.trim(),
+                mood: stateRef.current.me.mood,
+                moodNote: stateRef.current.me.moodNote,
+              });
+            } catch {}
+          }
+          setAccountEmail((await currentSession()).email);
+          await refreshAccount(result.message);
+        }
+        setPairBusy(false);
+      })(),
     onSignInAnonymous: () =>
       void (async () => {
         setPairBusy(true);
@@ -2185,7 +2339,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         setPairMessage(result.message);
         if (result.ok) {
           setAccountEmail((await currentSession()).email);
-          await refreshAccount();
+          await refreshAccount(result.message);
         }
         setPairBusy(false);
       })(),
@@ -2195,6 +2349,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         await signOutAccount();
         if (stateRef.current?.relay) update({ type: "pairing.clear" });
         setAccount(null);
+        setAccountEmail(null);
         setPairChecked(true);
         setPairMessage("Đã đăng xuất tài khoản ghép nối.");
         setPairBusy(false);
@@ -2215,6 +2370,18 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       void (async () => {
         setPairBusy(true);
         setPairMessage("");
+        try {
+          relayRef.current?.publish({
+            kind: "pair.unpair",
+            fromUid: accountRef.current?.uid ?? "",
+            fromCode: accountRef.current?.shortCode ?? "",
+          });
+          inviteOutRef.current?.publish({
+            kind: "pair.unpair",
+            fromUid: accountRef.current?.uid ?? "",
+            fromCode: accountRef.current?.shortCode ?? "",
+          });
+        } catch {}
         const result = await unpairAccount();
         if (stateRef.current?.relay) update({ type: "pairing.clear" });
         setPairMessage(
@@ -2398,92 +2565,23 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relayStatus.partnerOnline, relayStatus.partnerName]);
 
-  // Chưa ghép nối (hoặc chưa kiểm tra được với máy chủ) thì DỪNG ở đây, không cho
-  // vào app: đây là chỗ chặn "tự chui vào phòng MQTT cũ" khi khôi phục sao lưu.
+  // Không còn chặn toàn màn hình trước LocalShell: thanh 5 tab (Yêu nhau, Tin nhắn,
+  // Chăm sóc, Nhật ký, Cài đặt) và Theme luôn hiển thị đầy đủ; phần đăng nhập /
+  // nhập mã 6 ký tự nằm ngay trong mục Ghép nối (tab === "pair"), còn kênh MQTT
+  // vẫn chỉ mở khi đã ghép nối (gate.screen !== "paired" thì relayRoom = null).
   const hasCfg = accountReady;
-  // Lần kiểm tra đầu tiên chưa xong thì chỉ hiện vòng xoay, chưa doạ "chưa liên
-  // lạc được máy chủ" (tránh báo lỗi giả trong 1–2 giây đầu khi mở app).
-  const waitingFirstCheck = hasCfg && gate.screen === "offline" && !pairError;
-  if (hasCfg && gate.screen !== "paired" && !waitingFirstCheck) {
-    // Dữ liệu máy phải đọc xong mới mở được màn chuyển tay (đọc tệp dự phòng…).
-    if (gateManual && state)
-      return (
-        <ThemeProvider themeId={state?.appearance?.theme ?? "hong"}>
-          <View className="flex-1 bg-pink-50">
-            <View className="px-5 pt-4">
-              <Text className="text-xl font-bold text-ink">
-                Chuyển dữ liệu thủ công
-              </Text>
-              <Text className="text-xs text-stone-500 mt-1">
-                Không cần ghép nối: dán mã hoặc dùng tệp dự phòng để chuyển dữ
-                liệu khi một máy không có mạng.
-              </Text>
-              <View className="mt-2">
-                <Button
-                  label="Quay lại ghép nối theo tài khoản"
-                  secondary
-                  onPress={() => setGateManual(false)}
-                />
-              </View>
-            </View>
-            <PairLocal
-              state={state}
-              update={update}
-              pairCode={account?.shortCode ?? ""}
-              initialCode=""
-              relayStatus={relayStatus}
-              relayLog={relayLog}
-              selfTest={selfTest}
-              onRunSelfTest={() => setSelfTest(relaySelfTest())}
-              lastError={lastError}
-              onRetryRelay={() => {}}
-              syncNow={() => publishCurrent(true)}
-            />
-          </View>
-        </ThemeProvider>
-      );
-    return (
-      <ThemeProvider themeId={state?.appearance?.theme ?? "hong"}>
-        <KeyboardAvoidingView
-          className="flex-1 bg-pink-50"
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <View className="px-5 py-4">
-            <Text className="text-xl font-bold text-ink">
-              Mật Mã Yêu <Text className="text-love">♡</Text>
-            </Text>
-            <Text className="text-xs text-stone-500 mt-1">
-              {gateReasonText(gate)}
-            </Text>
-          </View>
-          <PairGate
-            gate={gate}
-            account={account}
-            email={accountEmail}
-            busy={pairBusy}
-            message={pairMessage}
-            relayConnected={relayStatus.state === "online"}
-            {...pairActions}
-          />
-        </KeyboardAvoidingView>
-      </ThemeProvider>
-    );
-  }
+  void hasCfg;
 
-  if (!state || waitingFirstCheck) {
+  if (!state) {
     return (
-      <ThemeProvider themeId={state?.appearance?.theme ?? "hong"}>
+      <ThemeProvider themeId="hong">
         <View className="flex-1 bg-pink-50 items-center justify-center">
-          {error && !waitingFirstCheck ? (
+          {error ? (
             <Text className="text-ink px-8 text-center">{error}</Text>
           ) : (
             <>
               <ActivityIndicator color="#e64980" />
-              <Text className="text-love mt-4">
-                {waitingFirstCheck
-                  ? "Đang kiểm tra ghép nối với máy chủ…"
-                  : "Đang mở góc yêu thương…"}
-              </Text>
+              <Text className="text-love mt-4">Đang mở góc yêu thương…</Text>
             </>
           )}
         </View>
@@ -2548,7 +2646,11 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         setError={setError}
         lockEnabled={lockEnabled}
         toggleLock={toggleLock}
-        onSwitchMode={onSwitchMode}
+        onSwitchMode={() => {
+          setGateManual(false);
+          setTab("pair");
+          void onSwitchMode;
+        }}
         replaceState={replaceState}
         clearAll={clearAll}
         flushMoments={flushMoments}
@@ -2559,6 +2661,12 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         setTab={setTab}
         wallpaperUri={hasWallpaper ? imageUri(storedWallpaper) : null}
         account={account}
+        gate={gate}
+        accountEmail={accountEmail}
+        pairBusy={pairBusy}
+        pairActions={pairActions}
+        gateManual={gateManual}
+        setGateManual={setGateManual}
         pairMessage={pairMessage}
         onUnpair={pairActions.onUnpair}
         onSignOutAccount={pairActions.onSignOut}
@@ -2626,6 +2734,12 @@ function LocalShell({
   setTab,
   wallpaperUri,
   account,
+  gate,
+  accountEmail,
+  pairBusy,
+  pairActions,
+  gateManual,
+  setGateManual,
   pairMessage,
   onUnpair,
   onSignOutAccount,
@@ -2688,6 +2802,25 @@ function LocalShell({
   wallpaperUri: string | null;
   /** Tài khoản ghép nối trên máy chủ (null nếu bản dựng không có cấu hình). */
   account: Account | null;
+  gate: ReturnType<typeof pairGate>;
+  accountEmail: string | null;
+  pairBusy: boolean;
+  pairActions: {
+    onSignIn: (provider: AuthProvider) => void;
+    onSignInAccount: (
+      identifier: string,
+      password: string,
+      displayName: string,
+    ) => void;
+    onSignInAnonymous: () => void;
+    onSignOut: () => void;
+    onPair: (code: string) => void;
+    onUnpair: () => void;
+    onRetry: () => void;
+    onManual: () => void;
+  };
+  gateManual: boolean;
+  setGateManual: (value: boolean) => void;
   pairMessage: string;
   onUnpair: () => void;
   onSignOutAccount: () => void;
@@ -2772,7 +2905,16 @@ function LocalShell({
             backgroundColor: theme.glass,
           }}
         >
-          <View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Trạng thái kết nối — bấm để mở Ghép nối"
+            onPress={() => {
+              setGateManual(false);
+              setTab("pair");
+              setAlertPage(false);
+            }}
+            style={{ flex: 1, marginRight: 8 }}
+          >
             <Text className="text-xl font-bold" style={{ color: theme.ink }}>
               Mật Mã Yêu <Text style={{ color: theme.deep[0] }}>♡</Text>
             </Text>
@@ -2788,24 +2930,57 @@ function LocalShell({
                         : "bg-stone-300"
                 }`}
               />
-              <Text className="text-xs" style={{ color: theme.sub }}>
+              <Text
+                className="text-xs"
+                style={{ color: theme.sub }}
+                numberOfLines={1}
+              >
                 {relayStatus.state === "online"
                   ? `Đã kết nối · ${relayStatus.partnerName ?? "người thương"} đang trực tuyến`
                   : relayStatus.state === "alone"
                     ? `Đã vào phòng qua ${relayStatus.readyCount ?? 0} trạm · chờ người thương`
                     : relayStatus.state === "connecting"
                       ? "Đang kết nối tức thời…"
-                      : "Chạy trên máy · không cần máy chủ"}
+                      : gate.screen !== "paired"
+                        ? "Chưa ghép nối · chạm để lấy mã 6 ký tự"
+                        : "Chạy trên máy · không cần máy chủ"}
               </Text>
             </View>
-          </View>
-          {tab === "pair" && (
+          </Pressable>
+          {tab === "pair" ? (
             <Pressable
               accessibilityLabel="Về trang trước"
               onPress={() => setTab("home")}
               className="px-3 py-2 mr-2 rounded-full bg-white border border-pink-100"
             >
               <Text className="text-love">‹ Về</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Mở màn hình Ghép nối"
+              onPress={() => {
+                setGateManual(false);
+                setTab("pair");
+                setAlertPage(false);
+              }}
+              className="px-3 py-2 mr-2 rounded-full"
+              style={{
+                backgroundColor:
+                  gate.screen === "paired" ? theme.glass : theme.deep[0],
+                borderWidth: 1,
+                borderColor: theme.border,
+              }}
+            >
+              <Text
+                style={{
+                  color: gate.screen === "paired" ? theme.text : theme.onDeep,
+                  fontWeight: "700",
+                  fontSize: 12,
+                }}
+              >
+                {gate.screen === "paired" ? "💞 Đã ghép" : "🔗 Ghép nối"}
+              </Text>
             </Pressable>
           )}
           <Pressable
@@ -2900,6 +3075,10 @@ function LocalShell({
               onRecall={onRecall}
               onSavePhoto={onSavePhoto}
               onSendLocation={onSendLocation}
+              onOpenPair={() => {
+                setGateManual(false);
+                setTab("pair");
+              }}
             />
           </View>
         ) : null}
@@ -2981,27 +3160,60 @@ function LocalShell({
                 }}
               />
             ) : tab === "pair" ? (
-              <PairLocal
-                {...props}
-                pairCode={account?.shortCode ?? ""}
-                initialCode={state.links.length > 0 ? "1" : ""}
-                relayStatus={relayStatus}
-                relayLog={relayLog}
-                selfTest={selfTest}
-                onRunSelfTest={() => setSelfTest(relaySelfTest())}
-                lastError={lastError}
-                onRetryRelay={() => {
-                  const client = relayRef.current;
-                  if (!client) return;
-                  for (const slot of client.slots) {
-                    clearTimeout(slot.timer);
-                    slot.retry = 0;
-                    if (!slot.subscribed) client.connect(slot);
-                  }
-                  client.emitStatus();
-                }}
-                syncNow={() => publishCurrent(true)}
-              />
+              (() => {
+                if (gateManual && state)
+                  return (
+                    <>
+                      <Card>
+                        <Title small>
+                          Chi tiết trạm kết nối & chuyển dữ liệu thủ công
+                        </Title>
+                        <Note>{gateReasonText(gate)}</Note>
+                        <View className="mt-2">
+                          <Button
+                            label="Quay lại ghép nối theo tài khoản"
+                            secondary
+                            onPress={() => setGateManual(false)}
+                          />
+                        </View>
+                      </Card>
+                      <PairLocal
+                        {...props}
+                        pairCode={account?.shortCode ?? ""}
+                        initialCode={state.links.length > 0 ? "1" : ""}
+                        relayStatus={relayStatus}
+                        relayLog={relayLog}
+                        selfTest={selfTest}
+                        onRunSelfTest={() => setSelfTest(relaySelfTest())}
+                        lastError={lastError}
+                        onRetryRelay={() => {
+                          const client = relayRef.current;
+                          if (!client) return;
+                          for (const slot of client.slots) {
+                            clearTimeout(slot.timer);
+                            slot.retry = 0;
+                            if (!slot.subscribed) client.connect(slot);
+                          }
+                          client.emitStatus();
+                        }}
+                        syncNow={() => publishCurrent(true)}
+                      />
+                    </>
+                  );
+                return (
+                  <PairGate
+                    gate={gate}
+                    account={account}
+                    email={accountEmail}
+                    defaultName={state.me?.nickname ?? ""}
+                    busy={pairBusy}
+                    message={pairMessage}
+                    relayConnected={relayStatus.state === "online"}
+                    onOpenChat={() => setTab("chat")}
+                    {...pairActions}
+                  />
+                );
+              })()
             ) : tab === "cycle" ? (
               <CycleLocal {...props} />
             ) : tab === "diary" ? (
@@ -3104,23 +3316,24 @@ function LocalShell({
 }
 function Root() {
   const [mode, setMode] = useState<"loading" | "choose" | "local" | "cloud">(
-    "loading",
+    "local",
   );
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const stored = await AsyncStorage.getItem("love-mode");
-      const config = stored === "local" ? null : await readConfig();
+      const stored = await AsyncStorage.getItem("love-mode-v2");
       if (!alive) return;
-      if (stored === "local") setMode("local");
-      else setMode(config ? "cloud" : "choose");
+      // Mặc định luôn mở bản đầy đủ (LocalApp: Yêu nhau, Tin nhắn, Chăm sóc,
+      // Nhật ký, Cài đặt & Theme) — không bao giờ tự đẩy sang CloudApp 1.0 cũ.
+      if (stored === "cloud") setMode("cloud");
+      else setMode("local");
     })();
     return () => {
       alive = false;
     };
   }, []);
   function pick(value: "local" | "cloud") {
-    void AsyncStorage.setItem("love-mode", value);
+    void AsyncStorage.setItem("love-mode-v2", value);
     setMode(value);
   }
   if (mode === "loading") {

@@ -9,11 +9,16 @@ import {
   PAIR_ALPHABET,
   PAIR_CODE_LENGTH,
   accountSummary,
+  deterministicUid,
   formatPairCode,
   gateReasonText,
+  inviteSecretForCode,
   isValidPairCode,
+  normalizeAccountEmail,
   normalizePairCode,
   pairGate,
+  pairSecretFromCodes,
+  shortCodeFromUid,
 } from "../src/logic/pairing.mjs";
 import { roomFromPair } from "../src/services/relayProtocol.mjs";
 import {
@@ -393,4 +398,34 @@ test("câu chữ trên giao diện: tóm tắt tài khoản luôn có mã cố �
     }),
     /An/,
   );
+});
+
+test("1.18.2: mã cố định suy từ tài khoản, khoá phòng đối xứng, không mất thanh 5 tab & Theme", () => {
+  const codeA = shortCodeFromUid("hominhtam1922003@gmail.com");
+  const codeB = shortCodeFromUid("nguoi-thuong@gmail.com");
+  assert.equal(isValidPairCode(codeA), true);
+  assert.equal(isValidPairCode(codeB), true);
+  assert.equal(
+    shortCodeFromUid("hominhtam1922003@gmail.com"),
+    codeA,
+    "cùng một tài khoản luôn ra đúng một mã 6 ký tự",
+  );
+  assert.notEqual(codeA, codeB);
+  const secretAB = pairSecretFromCodes(codeA, codeB);
+  const secretBA = pairSecretFromCodes(codeB, codeA);
+  assert.equal(
+    secretAB,
+    secretBA,
+    "ai nhập mã của ai trước cũng vào cùng một phòng",
+  );
+  assert.deepEqual(roomFromPair(secretAB), roomFromPair(secretBA));
+  assert.ok(roomFromPair(inviteSecretForCode(codeA)).id.length >= 16);
+  assert.throws(() => pairSecretFromCodes(codeA, codeA), /chính bạn/);
+  assert.equal(normalizeAccountEmail("minhtam192"), "minhtam192@matmayeu.app");
+  assert.equal(
+    deterministicUid("minhtam192", "123456"),
+    deterministicUid("minhtam192@matmayeu.app", "123456"),
+  );
+  assert.match(app, /love-mode-v2/, "không tự đẩy sang CloudApp 1.0 cũ");
+  assert.match(pairGateScreen, /Đăng nhập \/ Đăng ký tài khoản/);
 });

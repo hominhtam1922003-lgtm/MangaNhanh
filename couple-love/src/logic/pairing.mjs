@@ -45,6 +45,106 @@ export function formatPairCode(value) {
 }
 
 /**
+ * Sinh mã cố định 6 ký tự từ `uid` (hoặc email tài khoản): cùng một tài khoản
+ * trên bất kỳ máy nào cũng ra ĐÚNG một mã 6 ký tự trong `PAIR_ALPHABET`, không
+ * cần chờ bảng SQL mới có mã.
+ */
+export function shortCodeFromUid(uid) {
+  const raw = String(uid ?? "")
+    .trim()
+    .toLowerCase();
+  if (!raw) return "";
+  const seed = "haitraitim-short-code-v1|" + raw;
+  let h1 = 0x811c9dc5;
+  let h2 = 0x9e3779b9;
+  for (let i = 0; i < seed.length; i += 1) {
+    const c = seed.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ (c + i * 17), 0x85ebca6b) >>> 0;
+  }
+  let out = "";
+  let a = h1;
+  let b = h2;
+  for (let i = 0; i < PAIR_CODE_LENGTH; i += 1) {
+    a = Math.imul(a ^ (a >>> 15), 0x2c1b3c6d) >>> 0;
+    b = Math.imul(b ^ (b >>> 13), 0x297a2d39) >>> 0;
+    const idx = ((a ^ b) + i * 31) >>> 0;
+    out += PAIR_ALPHABET[idx % PAIR_ALPHABET.length];
+  }
+  return out;
+}
+
+/**
+ * Khoá phòng chung suy ra từ hai mã cố định: sắp xếp hai mã theo thứ tự chữ cái
+ * nên máy A nhập mã B hay máy B nhập mã A đều ra CÙNG một khoá phòng.
+ */
+export function pairSecretFromCodes(codeA, codeB) {
+  const a = normalizePairCode(codeA);
+  const b = normalizePairCode(codeB);
+  if (!isValidPairCode(a) || !isValidPairCode(b))
+    throw new Error("Mã kết nối chưa đúng 6 ký tự hợp lệ.");
+  if (a === b)
+    throw new Error(
+      "Đây là mã của chính bạn — hãy nhập mã của người thương nhé.",
+    );
+  const sorted = [a, b].sort();
+  return `haitraitim-pair-codes-v1|${sorted[0]}|${sorted[1]}`;
+}
+
+/**
+ * Kênh đón lời mời ghép nối của một mã cố định: máy A lắng nghe trên mã của
+ * mình, khi máy B nhập mã của A thì B bắn lời mời vào kênh này để A tự ghép đôi
+ * ngay (chỉ cần MỘT máy nhập mã).
+ */
+export function inviteSecretForCode(code) {
+  const normalized = normalizePairCode(code);
+  if (!isValidPairCode(normalized))
+    throw new Error("Mã kết nối chưa đúng 6 ký tự hợp lệ.");
+  return `haitraitim-invite-code-v1|${normalized}`;
+}
+
+/**
+ * Chuẩn hoá tên tài khoản / email: người dùng có thể gõ email đầy đủ
+ * (`ten@gmail.com`) hoặc chỉ gõ tên tài khoản ngắn (`minhtam192`).
+ */
+export function normalizeAccountEmail(value) {
+  const raw = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (!raw) return "";
+  if (raw.includes("@")) return raw;
+  const clean = raw.replace(/[^a-z0-9._-]/g, "");
+  return clean ? `${clean}@matmayeu.app` : "";
+}
+
+/**
+ * Sinh `uid` dạng UUID cố định từ tài khoản + mật khẩu: khi máy chủ chưa bật
+ * xác nhận email hoặc chưa chạy SQL, cùng một tài khoản đăng nhập ở máy nào cũng
+ * ra đúng một `uid` và đúng một mã kết nối cố định.
+ */
+export function deterministicUid(email, secret = "") {
+  const seed = `haitraitim-uid-v1|${normalizeAccountEmail(email)}|${String(secret ?? "").trim()}`;
+  const hex = [];
+  let h1 = 0x811c9dc5;
+  let h2 = 0x9e3779b9;
+  for (let i = 0; i < seed.length; i += 1) {
+    const c = seed.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ (c + i * 23), 0x85ebca6b) >>> 0;
+  }
+  for (let i = 0; i < 32; i += 1) {
+    h1 = Math.imul(h1 ^ (h1 >>> 15), 0x2c1b3c6d + i * 19) >>> 0;
+    h2 = Math.imul(h2 ^ (h2 >>> 13), 0x297a2d39 + i * 29) >>> 0;
+    const nibble = ((h1 ^ h2) >>> ((i % 4) * 4)) & 0xf;
+    hex.push(nibble.toString(16));
+  }
+  hex[12] = "4";
+  hex[16] = ((parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
+  const s = hex.join("");
+  return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20, 32)}`;
+}
+
+/**
  * Quyết định màn hình nào phải hiện khi mở app. Đây là chốt chống "kết nối ảo":
  * máy CHỈ được vào phòng khi máy chủ xác nhận đã ghép đôi; còn lại phải dừng ở
  * màn hình nhập mã và xoá phòng cũ trong bộ nhớ máy.

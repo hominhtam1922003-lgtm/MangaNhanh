@@ -3,6 +3,17 @@ export declare const PAIR_ALPHABET: string;
 export declare function normalizePairCode(value: unknown): string;
 export declare function isValidPairCode(value: unknown): boolean;
 export declare function formatPairCode(value: unknown): string;
+export declare function shortCodeFromUid(uid: unknown): string;
+export declare function pairSecretFromCodes(
+  codeA: unknown,
+  codeB: unknown,
+): string;
+export declare function inviteSecretForCode(code: unknown): string;
+export declare function normalizeAccountEmail(value: unknown): string;
+export declare function deterministicUid(
+  email: unknown,
+  secret?: unknown,
+): string;
 export type PairGateScreen = "login" | "code" | "paired" | "offline";
 export type PairGate = {
   screen: PairGateScreen;

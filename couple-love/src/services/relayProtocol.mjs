@@ -762,9 +762,20 @@ export class RelayClient {
             message?.kind === "photo" ||
             message?.kind === "photoRequest" ||
             message?.kind === "chat" ||
+            message?.kind === "chatAck" ||
+            message?.kind === "read" ||
+            message?.kind === "chatRead" ||
+            message?.kind === "typing" ||
+            message?.kind === "reaction" ||
+            message?.kind === "chatReact" ||
+            message?.kind === "unsend" ||
+            message?.kind === "chatRecall" ||
+            message?.kind === "profile" ||
+            message?.kind === "pair.invite" ||
+            message?.kind === "pair.unpair" ||
+            message?.kind === "pair.check" ||
             // Tín hiệu cuộc gọi (đổ chuông, nghe, từ chối, kết thúc) và báo đã xem.
-            message?.kind === "call" ||
-            message?.kind === "chatRead"
+            message?.kind === "call"
           ) {
             const firstContact = !this.partnerOnline;
             this.partnerSeen = Date.now();

@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 
-import { Button, Card, Note, Title } from "../../components/UI";
+import { Button, Card, Input, Note, Title } from "../../components/UI";
 import { useTheme } from "../../theme/ThemeContext";
 import {
   PAIR_CODE_LENGTH,
@@ -23,46 +23,60 @@ import type { Account, AuthProvider } from "../../services/account";
 import type { PairGate as Gate } from "../../logic/pairing.mjs";
 
 /**
- * Màn hình CHẶN khi chưa ghép nối: từ 1.18.0 hai máy chỉ kết nối khi máy chủ xác
- * nhận đã ghép đôi theo tài khoản, nên không còn cảnh "tự chui vào phòng cũ".
+ * Màn hình tài khoản & ghép nối bằng mã cố định 6 ký tự.
+ * Nằm gọn trong mục Ghép nối (thanh 5 tab bên dưới luôn hiện đầy đủ để bạn dùng
+ * Yêu nhau, Tin nhắn, Chăm sóc, Nhật ký, Cài đặt/Theme bất cứ lúc nào).
  */
 export default function PairGate({
   gate,
   account,
   email,
+  defaultName = "",
   busy,
   message,
   relayConnected,
   onSignIn,
+  onSignInAccount,
   onSignInAnonymous,
   onSignOut,
   onPair,
   onUnpair,
   onRetry,
   onManual,
+  onOpenChat,
 }: {
   gate: Gate;
   account: Account | null;
   email: string | null;
+  defaultName?: string;
   busy: boolean;
   message: string;
   relayConnected: boolean;
   onSignIn: (provider: AuthProvider) => void;
+  onSignInAccount?: (
+    identifier: string,
+    password: string,
+    displayName: string,
+  ) => void;
   onSignInAnonymous: () => void;
   onSignOut: () => void;
   onPair: (code: string) => void;
   onUnpair: () => void;
   onRetry: () => void;
   onManual: () => void;
+  onOpenChat?: () => void;
 }) {
   const { theme } = useTheme();
   const [code, setCode] = useState("");
+  const [identifier, setIdentifier] = useState(email ?? "");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState(defaultName);
 
   async function shareCode() {
     const value = formatPairCode(account?.shortCode ?? "");
     try {
       await Share.share({
-        message: `Mã kết nối Mật Mã Yêu của mình: ${value}\nBạn nhập mã này trong app (Ghép nối → Nhập mã người thương) nhé.`,
+        message: `Mã kết nối Mật Mã Yêu của mình: ${value}\nBạn mở mục Ghép nối rồi nhập mã này nhé.`,
       });
     } catch {}
   }
@@ -79,19 +93,37 @@ export default function PairGate({
     onPair(normalized);
   }
 
+  function submitAccount() {
+    if (!identifier.trim()) {
+      Alert.alert(
+        "Thiếu tài khoản",
+        "Hãy nhập địa chỉ Gmail/Email hoặc tên tài khoản của bạn.",
+      );
+      return;
+    }
+    if (password.trim().length < 6) {
+      Alert.alert("Mật khẩu ngắn", "Mật khẩu cần ít nhất 6 ký tự.");
+      return;
+    }
+    onSignInAccount?.(identifier.trim(), password.trim(), displayName.trim());
+  }
+
   const header = (
     <Card>
       <Title>Ghép nối bằng tài khoản</Title>
       <Note>
         Từ bản 1.18.0 mã kết nối là mã cố định gắn với tài khoản của bạn (không
-        còn mã 6 số ngẫu nhiên). Nhờ vậy không thể nối nhầm người lạ, và máy chỉ
-        vào phòng khi máy chủ xác nhận hai bạn đang ghép với nhau.
+        còn mã 6 số ngẫu nhiên). Nhờ vậy không thể nối nhầm người lạ, và hai máy
+        chỉ vào phòng khi bạn chủ động ghép nối.
       </Note>
       <Text className="mt-2" style={{ color: theme.sub, fontSize: 13 }}>
         {gateReasonText(gate)}
       </Text>
       {message ? (
-        <Text className="mt-2" style={{ color: theme.deep[1], fontSize: 13 }}>
+        <Text
+          className="mt-2 font-semibold"
+          style={{ color: theme.deep[1], fontSize: 13 }}
+        >
           {message}
         </Text>
       ) : null}
@@ -100,73 +132,111 @@ export default function PairGate({
 
   return (
     <ScrollView
-      contentContainerStyle={{ paddingBottom: 40 }}
+      contentContainerStyle={{ paddingBottom: 28 }}
       keyboardShouldPersistTaps="handled"
     >
       {header}
 
       {gate.screen === "login" ? (
+        <>
+          <Card>
+            <Title small>Cách 1: Đăng nhập / Đăng ký ngay trong app</Title>
+            <Note>
+              Nhập Gmail (hoặc tên tài khoản bất kỳ) và mật khẩu từ 6 ký tự trở
+              lên. Nếu tài khoản chưa có thì app tự tạo mới và cấp ngay mã kết
+              nối cố định 6 ký tự (không cần mở trình duyệt).
+            </Note>
+            <View className="mt-2">
+              <Input
+                label="Gmail hoặc tên tài khoản (ví dụ: minhtam@gmail.com)"
+                value={identifier}
+                onChangeText={setIdentifier}
+              />
+              <Input
+                label="Mật khẩu (tối thiểu 6 ký tự)"
+                value={password}
+                onChangeText={setPassword}
+                secure
+              />
+              <Input
+                label="Tên hiển thị của bạn (không bắt buộc)"
+                value={displayName}
+                onChangeText={setDisplayName}
+              />
+              <Button
+                label="Đăng nhập / Đăng ký tài khoản"
+                busy={busy}
+                onPress={submitAccount}
+              />
+            </View>
+          </Card>
+
+          <Card>
+            <Title small>Cách 2: Lấy mã nhanh 1 chạm</Title>
+            <Note>
+              Không muốn nhập email/mật khẩu? Bấm nút dưới để cấp ngay một mã cố
+              định 6 ký tự gắn với máy này.
+            </Note>
+            <View className="mt-2">
+              <Button
+                label="Đăng nhập nhanh (lấy mã 6 ký tự ngay)"
+                busy={busy}
+                onPress={onSignInAnonymous}
+              />
+            </View>
+          </Card>
+
+          <Card>
+            <Title small>Cách 3: Đăng nhập qua trình duyệt (OAuth)</Title>
+            <Note>
+              Dùng khi dự án Supabase đã cấu hình Google/Facebook OAuth và
+              Redirect URL haitraitim://auth-callback.
+            </Note>
+            <View className="mt-2">
+              <Button
+                label="Đăng nhập bằng Google"
+                secondary
+                busy={busy}
+                onPress={() => onSignIn("google")}
+              />
+            </View>
+            <View className="mt-2">
+              <Button
+                label="Đăng nhập bằng Facebook"
+                secondary
+                busy={busy}
+                onPress={() => onSignIn("facebook")}
+              />
+            </View>
+          </Card>
+        </>
+      ) : null}
+
+      {gate.screen === "offline" ? (
         <Card>
-          <Title small>Đăng nhập để ghép nối</Title>
+          <Title small>Đang chờ xác nhận tài khoản</Title>
           <Note>
-            Bạn đăng nhập bằng Google hoặc Facebook; sau đó mỗi tài khoản có một
-            mã cố định để người thương nhập một lần duy nhất. Nếu dự án Supabase
-            chưa bật nhà cung cấp nào, hãy dùng nút đăng nhập nhanh bên dưới
-            (mục Authentication → Sign In / Providers → Anonymous).
+            Bấm “Lấy mã kết nối ngay” hoặc “Thử lại” để mở mã cố định 6 ký tự
+            của bạn.
           </Note>
           <View className="mt-3">
-            <Button
-              label="Đăng nhập bằng Google"
-              busy={busy}
-              onPress={() => onSignIn("google")}
-            />
+            <Button label="Thử lại" busy={busy} onPress={onRetry} />
           </View>
           <View className="mt-2">
             <Button
-              label="Đăng nhập bằng Facebook"
-              secondary
-              busy={busy}
-              onPress={() => onSignIn("facebook")}
-            />
-          </View>
-          <View className="mt-2">
-            <Button
-              label="Đăng nhập nhanh (không cần Google/Facebook)"
+              label="Lấy mã kết nối ngay"
               secondary
               busy={busy}
               onPress={onSignInAnonymous}
             />
           </View>
-          <Note>
-            Đăng nhập nhanh lưu tài khoản trong máy: gỡ app là mất tài khoản đó,
-            nên chỉ dùng khi bạn chưa cấu hình Google/Facebook.
-          </Note>
           <View className="mt-2">
-            <Button label="Thử kiểm tra lại" secondary onPress={onRetry} />
+            <Button label="Đổi tài khoản khác" secondary onPress={onSignOut} />
           </View>
         </Card>
       ) : null}
 
-      {gate.screen === "offline" ? (
-        <Card>
-          <Title small>Chưa liên lạc được máy chủ</Title>
-          <Note>
-            App cố ý KHÔNG kết nối tức thời khi chưa kiểm tra được trạng thái
-            ghép nối, để bạn không bị nối vào phòng cũ. Dữ liệu đã viết vẫn nằm
-            trong máy: mở mạng rồi bấm thử lại.
-          </Note>
-          <View className="mt-3">
-            <Button label="Thử lại" busy={busy} onPress={onRetry} />
-          </View>
-          {account?.uid ? (
-            <View className="mt-2">
-              <Button label="Đăng xuất" secondary onPress={onSignOut} />
-            </View>
-          ) : null}
-        </Card>
-      ) : null}
-
-      {gate.screen === "code" ? (
+      {account?.shortCode ? (
         <Card>
           <Title small>Mã cố định của bạn</Title>
           <Pressable accessibilityRole="button" onPress={shareCode}>
@@ -184,9 +254,9 @@ export default function PairGate({
             </Text>
           </Pressable>
           <Note>
-            Gửi mã này cho người thương (bấm vào mã để chia sẻ). Họ nhập mã của
-            bạn, HOẶC bạn nhập mã của họ — ai nhập trước cũng được, máy chủ sẽ
-            ghi cho cả hai máy.
+            Gửi mã 6 ký tự này cho người thương (bấm vào mã để chia sẻ). Chỉ cần
+            MỘT máy nhập mã của máy kia (hoặc cả hai cùng nhập mã của nhau) là
+            hai máy tự kết nối.
             {account?.displayName || email
               ? ` Tài khoản: ${account?.displayName || email}.`
               : ""}
@@ -195,7 +265,7 @@ export default function PairGate({
             <TextInput
               value={code}
               onChangeText={(value) => setCode(normalizePairCode(value))}
-              placeholder="Nhập mã của người thương"
+              placeholder="Nhập mã 6 ký tự của người thương"
               placeholderTextColor={theme.sub}
               autoCapitalize="characters"
               autoCorrect={false}
@@ -218,11 +288,15 @@ export default function PairGate({
             {busy ? (
               <ActivityIndicator />
             ) : (
-              <Button label="Kết nối" onPress={connect} />
+              <Button label="Kết nối với người thương" onPress={connect} />
             )}
           </View>
           <View className="mt-2">
-            <Button label="Thử kiểm tra lại" secondary onPress={onRetry} />
+            <Button
+              label="Chia sẻ mã của mình"
+              secondary
+              onPress={() => void shareCode()}
+            />
           </View>
         </Card>
       ) : null}
@@ -235,9 +309,18 @@ export default function PairGate({
             {account?.partnerCode
               ? ` (mã ${formatPairCode(account.partnerCode)})`
               : ""}
-            . Kết nối tức thời: {relayConnected ? "đang chạy" : "chưa chạy"}.
+            . Kết nối tức thời:{" "}
+            {relayConnected
+              ? "đang trực tuyến — nhắn tin và gọi điện ngay"
+              : "đang nối trạm trung chuyển…"}
+            .
           </Note>
-          <View className="mt-3">
+          {onOpenChat ? (
+            <View className="mt-2">
+              <Button label="✉ Mở Tin nhắn ngay" onPress={onOpenChat} />
+            </View>
+          ) : null}
+          <View className="mt-2">
             <Button
               label="Ngắt kết nối (cả hai máy)"
               secondary
@@ -265,23 +348,19 @@ export default function PairGate({
       ) : null}
 
       <Card>
-        <Title small>Cần gì khác?</Title>
+        <Title small>Tiện ích khác</Title>
         <View className="mt-1">
           <Button
-            label="Chuyển dữ liệu thủ công (không cần ghép nối)"
+            label="Chi tiết trạm kết nối & chuyển dữ liệu thủ công"
             secondary
             onPress={onManual}
           />
         </View>
-        {account?.uid ? (
+        {account?.uid || email ? (
           <View className="mt-2">
             <Button label="Đăng xuất tài khoản" secondary onPress={onSignOut} />
           </View>
         ) : null}
-        <Note>
-          Hai máy phải bật mạng mới ghép nối được. Mã kết nối cố định chỉ dùng
-          để ghép MỘT lần; sau đó muốn đổi người thương thì bấm Ngắt kết nối.
-        </Note>
       </Card>
     </ScrollView>
   );

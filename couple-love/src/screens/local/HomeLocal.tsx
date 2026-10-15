@@ -273,7 +273,16 @@ export default function HomeLocal({
               yêu nhau
             </Text>
           </View>
-          <View className="items-center flex-1">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              state.partner?.nickname || "Chưa ghép nối — bấm để ghép nối"
+            }
+            onPress={() => {
+              if (!state.partner) openPair();
+            }}
+            className="items-center flex-1"
+          >
             <LinearGradient
               colors={theme.deep}
               style={{ borderRadius: 46, padding: 3 }}
@@ -310,7 +319,7 @@ export default function HomeLocal({
                 {state.partner?.nickname || "Chưa ghép nối"}
               </Text>
             </View>
-          </View>
+          </Pressable>
         </View>
         {/* Cầu tình yêu: tranh vẽ vector theo đúng ảnh bạn gửi — nhẹ, không mở
             thêm vùng WebGL nào nên máy yếu vẫn mượt. */}
@@ -549,7 +558,8 @@ export default function HomeLocal({
         <Card>
           <Title small>Chưa ghép nối</Title>
           <Note>
-            Mở mục Ghép nối, một bạn tạo mã 6 số rồi bạn kia nhập đúng 6 số đó.
+            Mở mục Ghép nối để đăng nhập tài khoản, lấy mã cố định 6 ký tự của
+            bạn hoặc nhập mã 6 ký tự của người thương.
           </Note>
           <Button label="Mở mục Ghép nối" onPress={openPair} />
         </Card>

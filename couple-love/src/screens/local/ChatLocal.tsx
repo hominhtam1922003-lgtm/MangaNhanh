@@ -261,6 +261,7 @@ export default function ChatLocal({
   onReact,
   onRecall,
   onSavePhoto,
+  onOpenPair,
 }: {
   state: State;
   update: (action: Record<string, unknown>) => void;
@@ -280,6 +281,7 @@ export default function ChatLocal({
   onReact?: (id: string, emoji: string | null) => void;
   onRecall?: (id: string) => void;
   onSavePhoto?: (photo: string | null | undefined) => void;
+  onOpenPair?: () => void;
 }) {
   const { theme } = useTheme();
   const [text, setText] = useState("");
@@ -658,6 +660,26 @@ export default function ChatLocal({
             {partnerTyping ? typingText(partnerName) : statusText}
           </Text>
         </View>
+        {!state.partner && onOpenPair ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Mở mục Ghép nối"
+            onPress={onOpenPair}
+            style={{
+              backgroundColor: theme.soft,
+              borderWidth: 1,
+              borderColor: theme.border,
+              borderRadius: 18,
+              paddingHorizontal: 12,
+              paddingVertical: 9,
+              marginRight: 6,
+            }}
+          >
+            <Text className="font-bold" style={{ color: theme.text }}>
+              🔗 Ghép nối
+            </Text>
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Gọi cho người thương"

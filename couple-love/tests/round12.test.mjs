@@ -264,7 +264,9 @@ test("Bỏ tab Cảm xúc khỏi chế độ trên máy", () => {
     app.indexOf("];", app.indexOf("const localTabs = [")) + 2,
   );
   assert.doesNotMatch(tabs, /Cảm xúc/, "không còn mục Cảm xúc trên thanh dưới");
-  assert.match(tabs, /Nhật ký/, "vẫn giữ Nhật ký");
+  assert.doesNotMatch(tabs, /Nhật ký/, "đã thay Nhật ký bằng Thú Cưng");
+  assert.doesNotMatch(tabs, /Chăm sóc/, "đã thay Chăm sóc bằng Thú Cưng");
+  assert.match(tabs, /Thú Cưng/, "có tab Thú Cưng (Couple Pet)");
   assert.match(tabs, /Cài đặt/, "vẫn giữ Cài đặt");
   assert.doesNotMatch(
     app,

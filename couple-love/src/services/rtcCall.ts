@@ -378,18 +378,30 @@ export class RtcCall {
   private emitStreams() {
     if (this.closed) return;
     try {
-      const localHasVideo =
-        (this.mic?.getVideoTracks?.() ?? []).some(
-          (track: any) => track?.enabled !== false,
-        ) ?? false;
-      const localUrl = localHasVideo
-        ? String(this.mic?.toURL?.() ?? "") || null
-        : null;
-      const remoteHasVideo =
-        (this.remoteStream?.getVideoTracks?.() ?? []).length > 0;
-      const remoteUrl = remoteHasVideo
-        ? String(this.remoteStream?.toURL?.() ?? "") || null
-        : null;
+      const rtc = loadNative();
+      const localUrl =
+        typeof this.mic?.toURL === "function"
+          ? String(this.mic.toURL() ?? "") || null
+          : null;
+      // Nếu chưa gán this.remoteStream mà pc đã có remote stream hoặc receiver
+      // track thì gom lại ngay thành MediaStream để gọi remoteStream.toURL().
+      if (!this.remoteStream && this.pc) {
+        const remoteStreams = this.pc.getRemoteStreams?.() ?? [];
+        if (remoteStreams.length > 0 && remoteStreams[0]) {
+          this.remoteStream = remoteStreams[0];
+        } else if (rtc?.MediaStream) {
+          const receiverTracks = (this.pc.getReceivers?.() ?? [])
+            .map((r: any) => r?.track)
+            .filter(Boolean);
+          if (receiverTracks.some((t: any) => t?.kind === "video")) {
+            this.remoteStream = new rtc.MediaStream(receiverTracks);
+          }
+        }
+      }
+      const remoteUrl =
+        typeof this.remoteStream?.toURL === "function"
+          ? String(this.remoteStream.toURL() ?? "") || null
+          : null;
       this.opts.onStreams?.({ localUrl, remoteUrl });
     } catch {}
   }
@@ -522,8 +534,17 @@ export class RtcCall {
       pc.oniceconnectionstatechange = () => this.readPeerConnection(pc);
     }
     try {
-      media.on?.("stream", () => this.readPeerConnection(pc));
-      media.on?.("track", () => this.readPeerConnection(pc));
+      media.on?.("stream", (remoteStream: any) => {
+        if (remoteStream) {
+          this.remoteStream = remoteStream;
+          this.emitStreams();
+        }
+        this.readPeerConnection(pc);
+      });
+      media.on?.("track", () => {
+        this.emitStreams();
+        this.readPeerConnection(pc);
+      });
     } catch {}
     this.readPeerConnection(pc);
   }
@@ -561,6 +582,7 @@ export class RtcCall {
       } catch {}
       this.pc = null;
     }
+    this.emitStreams();
     this.report("live", `Tiếng nét trực tiếp (${engine})`);
     this.finishPeerWait();
   }
@@ -976,6 +998,9 @@ export class RtcCall {
       if (sub === "offer") {
         const sdp = String(message.sdp ?? "");
         if (!sdp) return;
+        if (/^m=video\b/im.test(sdp)) {
+          this.opts.video = true;
+        }
         await this.pc.setRemoteDescription(
           new (
             loadNative()!.RTCSessionDescription as new (value: unknown) => any
@@ -995,6 +1020,7 @@ export class RtcCall {
           this.lastAnswerSdp = sdp;
           this.sendSignal("answer", { sdp, round: this.round }, 1);
           this.resendLocalCandidates();
+          this.emitStreams();
         }
         return;
       }
@@ -1108,6 +1134,9 @@ export class RtcCall {
           }
           this.applyAdaptiveBitrate(this.pc);
           this.emitStreams();
+          if (this.pc && this.pc.signalingState === "stable") {
+            void this.offer();
+          }
         })
         ?.catch(() => {});
     } catch {}

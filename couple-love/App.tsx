@@ -145,8 +145,7 @@ import {
 } from "./src/services/localdb";
 import * as Location from "expo-location";
 import HomeLocal from "./src/screens/local/HomeLocal";
-import CycleLocal from "./src/screens/local/CycleLocal";
-import DiaryLocal from "./src/screens/local/DiaryLocal";
+import PetLocal from "./src/screens/local/PetLocal";
 import PairLocal from "./src/screens/local/PairLocal";
 import PairGate from "./src/screens/local/PairGate";
 import SettingsLocal from "./src/screens/local/SettingsLocal";
@@ -162,8 +161,7 @@ import {
 const localTabs = [
   { id: "home", label: "Yêu nhau", icon: "♡" },
   { id: "chat", label: "Tin nhắn", icon: "✉" },
-  { id: "cycle", label: "Chăm sóc", icon: "✿" },
-  { id: "diary", label: "Nhật ký", icon: "▤" },
+  { id: "pet", label: "Thú Cưng", icon: "🐣" },
   { id: "settings", label: "Cài đặt", icon: "⚙" },
 ];
 function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
@@ -1378,6 +1376,20 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             ? (message.ids as unknown[]).map((id) => String(id)).slice(0, 20)
             : [];
           if (ids.length) update({ type: "message.seen", ids });
+          return;
+        }
+        if (kind === "pet") {
+          if (message.pet && typeof message.pet === "object") {
+            update({ type: "pet.sync", pet: message.pet });
+          } else if (message.action) {
+            update({
+              type: "pet.interact",
+              action: String(message.action),
+              by: "partner",
+              species: message.species,
+              name: message.name,
+            });
+          }
           return;
         }
         if (kind === "call") {
@@ -3297,10 +3309,25 @@ function LocalShell({
                   />
                 );
               })()
-            ) : tab === "cycle" ? (
-              <CycleLocal {...props} />
-            ) : tab === "diary" ? (
-              <DiaryLocal {...props} />
+            ) : tab === "pet" ? (
+              <PetLocal
+                {...props}
+                onSyncPet={(action, extra) => {
+                  relayRef.current?.publish({
+                    kind: "pet",
+                    type: "pet",
+                    action,
+                    ...(extra ?? {}),
+                  });
+                  setTimeout(() => publishCurrent(true), 250);
+                }}
+                onSendPetNote={(text) => {
+                  try {
+                    update({ type: "message.add", kind: "nudge", body: text });
+                    flushMessages();
+                  } catch {}
+                }}
+              />
             ) : (
               <SettingsLocal
                 {...props}

@@ -277,6 +277,7 @@ export function buildRelayPayload(
           new Date().toISOString(),
       ),
     },
+    pet: state.pet ?? null,
     cycle: state.cycle ?? null,
     diary: [],
     // Tin nhắn của mình (40 tin mới nhất): phần mô tả đi ở đây, còn tệp tin
@@ -774,6 +775,7 @@ export class RelayClient {
             message?.kind === "pair.invite" ||
             message?.kind === "pair.unpair" ||
             message?.kind === "pair.check" ||
+            message?.kind === "pet" ||
             // Tín hiệu cuộc gọi (đổ chuông, nghe, từ chối, kết thúc) và báo đã xem.
             message?.kind === "call"
           ) {

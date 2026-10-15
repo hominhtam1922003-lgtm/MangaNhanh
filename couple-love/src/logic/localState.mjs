@@ -5,6 +5,7 @@ import {
   recallMessage,
   setReact,
 } from "./chatExtras.mjs";
+import { defaultPet, interactPet, mergePet, normalizePet } from "./pet.mjs";
 export const STATE_VERSION = 1;
 export const makeId = () =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -116,6 +117,8 @@ export function emptyState(now = new Date().toISOString()) {
       updatedAt: now,
       by: "me",
     },
+    // Thú cưng chung của hai người (Couple Pet phong cách Widgetable).
+    pet: defaultPet(Date.parse(now) || Date.now()),
   };
 }
 export const wallpaperFile = (id) =>
@@ -281,6 +284,7 @@ export function migrate(raw, now = new Date().toISOString()) {
           linkedAt: iso(l.linkedAt, now),
         }))
     : [];
+  state.pet = normalizePet(raw.pet, Date.parse(now) || Date.now());
   return state;
 }
 export function reduce(state, action) {
@@ -558,6 +562,12 @@ export function reduce(state, action) {
       },
       ...next.messages,
     ].slice(0, 300);
+    next.pet = interactPet(
+      next.pet,
+      kind === "call" ? "call" : "chat",
+      "me",
+      Date.now(),
+    );
   } else if (type === "message.received") {
     const id = text(action.id, 40);
     if (!id) throw new Error("Tin nhắn nhận được thiếu mã.");
@@ -611,6 +621,12 @@ export function reduce(state, action) {
       ]
         .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
         .slice(0, 300);
+      next.pet = interactPet(
+        next.pet,
+        kind === "call" ? "call" : "chat",
+        "partner",
+        Date.now(),
+      );
     }
   } else if (type === "message.audio") {
     const id = text(action.id, 40);
@@ -867,6 +883,9 @@ export function reduce(state, action) {
       };
       next.settings = { ...next.settings, theme: next.appearance.theme };
     }
+    if (raw.pet) {
+      next.pet = mergePet(next.pet, raw.pet, Date.now());
+    }
     next.links = [
       ...next.links.filter((link) => link.id !== incomingId),
       {
@@ -885,6 +904,20 @@ export function reduce(state, action) {
     next.partner = null;
   } else if (type === "autoLove.sent") {
     next.autoLoveAt = Math.max(0, Number(action.at) || Date.now());
+  } else if (type === "pet.interact") {
+    next.pet = interactPet(
+      next.pet,
+      String(action.action || "poke"),
+      action.by === "partner" ? "partner" : "me",
+      Date.now(),
+      {
+        species:
+          typeof action.species === "string" ? action.species : undefined,
+        name: typeof action.name === "string" ? action.name : undefined,
+      },
+    );
+  } else if (type === "pet.sync") {
+    next.pet = mergePet(next.pet, action.pet, Date.now());
   } else if (type === "state.replace") {
     return migrate(action.state);
   } else {

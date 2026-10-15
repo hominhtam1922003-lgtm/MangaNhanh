@@ -352,44 +352,6 @@ export default function HomeLocal({
             </Chip>
           </View>
         </View>
-        <View className="flex-row mb-2">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Gọi thoại cho người thương"
-            onPress={() => onStartCall?.(false)}
-            style={{
-              flex: 1,
-              marginRight: 4,
-              backgroundColor: theme.deep[1],
-              borderRadius: 18,
-              paddingVertical: 11,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text className="font-bold text-sm" style={{ color: theme.onDeep }}>
-              📞 Gọi thoại
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Gọi Video cho người thương"
-            onPress={() => onStartCall?.(true)}
-            style={{
-              flex: 1,
-              marginLeft: 4,
-              backgroundColor: theme.deep[0],
-              borderRadius: 18,
-              paddingVertical: 11,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text className="font-bold text-sm" style={{ color: theme.onDeep }}>
-              📹 Gọi Video
-            </Text>
-          </Pressable>
-        </View>
         <View className="flex-row">
           <View className="flex-1 mr-1">
             <Button

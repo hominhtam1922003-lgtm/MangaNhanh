@@ -495,7 +495,7 @@ export default function CallLocal({
         {isVideoCall && active ? (
           <View
             style={{
-              height: 190,
+              height: 200,
               borderRadius: 22,
               overflow: "hidden",
               backgroundColor: "#111827",
@@ -506,9 +506,13 @@ export default function CallLocal({
               justifyContent: "center",
             }}
           >
-            {RTCView && rtcStreams?.remoteUrl ? (
+            {RTCView &&
+            (rtcStreams?.remoteUrl || (camOn && rtcStreams?.localUrl)) ? (
               <RTCView
-                streamURL={rtcStreams.remoteUrl}
+                streamURL={
+                  rtcStreams?.remoteUrl || (camOn ? rtcStreams?.localUrl : "")
+                }
+                mirror={!rtcStreams?.remoteUrl}
                 objectFit="cover"
                 style={{ width: "100%", height: "100%" }}
               />
@@ -521,12 +525,15 @@ export default function CallLocal({
                 />
                 <Text className="text-xs mt-2" style={{ color: "#e5e7eb" }}>
                   {camOn
-                    ? "Đang truyền hình ảnh trực tiếp…"
-                    : "Camera của người thương đang tắt"}
+                    ? "Camera của người thương đang tắt"
+                    : "Bấm Bật cam để mở hình ảnh"}
                 </Text>
               </View>
             )}
-            {RTCView && rtcStreams?.localUrl && camOn ? (
+            {RTCView &&
+            rtcStreams?.remoteUrl &&
+            rtcStreams?.localUrl &&
+            camOn ? (
               <View
                 style={{
                   position: "absolute",
@@ -698,19 +705,26 @@ export default function CallLocal({
 
         {/* Thanh công cụ cuộc gọi (Call Toolbar): Micro, Loa ngoài, Kết thúc (đỏ ở giữa), Camera */}
         {ringing && call.role === "callee" ? (
-          <View className="flex-row justify-center items-end mt-5">
+          <View
+            className="flex-row justify-between items-center mt-6"
+            style={{
+              width: "100%",
+              paddingHorizontal: 36,
+              justifyContent: "space-between",
+            }}
+          >
             <CallButton
-              emoji="📴"
+              emoji="📵"
               label="Từ chối"
               tone="red"
-              size={68}
+              size={72}
               onPress={onReject}
             />
             <CallButton
-              emoji={isVideoCall ? "📹" : "📞"}
+              emoji="📞"
               label="Nghe"
               tone="green"
-              size={76}
+              size={72}
               onPress={onAccept}
             />
           </View>

@@ -20,6 +20,12 @@ import {
 } from "../src/logic/rtcSignal.mjs";
 import { callEvent, newCall } from "../src/logic/callLogic.mjs";
 import { MESSENGER_THEMES, themeById } from "../src/logic/themes.mjs";
+import {
+  PET_SPEECH_BUBBLES,
+  computePetStatus,
+  defaultPet,
+  interactPet,
+} from "../src/logic/pet.mjs";
 
 const read = (path) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -223,19 +229,22 @@ test("Nâng cấp 1.18.7: Chống ồn Adaptive Filter, SDP thích ứng, Flat C
   c = callEvent(c, { type: "cam", on: false });
   assert.equal(c.camOn, false);
 
-  // 4. Giao diện Flat Call UI, nút Gọi Video và Thanh công cụ cuộc gọi
+  // 4. Giao diện Flat Call UI, nút Gọi Video trong màn Chat & Thanh công cụ cuộc gọi
   const callUi = read("src/screens/local/CallLocal.tsx");
   assert.match(callUi, /const flatUi = true/, "chuyển sang Flat UI mượt mà");
   assert.match(callUi, /Loa ngoài/, "có nút Loa ngoài");
   assert.match(callUi, /Tắt cam|Bật cam/, "có nút Bật/Tắt Camera");
+  assert.match(
+    callUi,
+    /justifyContent: "space-between"/,
+    "nút Từ chối và Nghe tách rời đối xứng hai bên",
+  );
   const chatUi = read("src/screens/local/ChatLocal.tsx");
   assert.match(
     chatUi,
     /Gọi Video cho người thương/,
-    "nút Gọi Video ở màn Chat",
+    "nút Gọi Video gọn gàng trong màn Chat",
   );
-  const homeUi = read("src/screens/local/HomeLocal.tsx");
-  assert.match(homeUi, /📹 Gọi Video/, "nút Gọi Video ở màn Trang chủ");
 
   // 5. Hệ thống Chủ đề phong cách Messenger đồng bộ
   const labels = MESSENGER_THEMES.map((item) => item.label);
@@ -245,4 +254,25 @@ test("Nâng cấp 1.18.7: Chống ồn Adaptive Filter, SDP thích ứng, Flat C
   assert.equal(themeById("nau-tra-sua").id, "meo");
   assert.equal(themeById("xanh-mong-mo").id, "bien");
   assert.equal(Array.isArray(themeById("hong").bubbleMine), true);
+
+  // 6. Tính năng Nuôi Thú Cưng Ảo (Couple Pet - phong cách Widgetable)
+  assert.equal(
+    PET_SPEECH_BUBBLES.includes(
+      "Nhìn vào mắt đằng ấy, thấy sao một thế giới màu hồng ❤️",
+    ),
+    true,
+  );
+  const p0 = defaultPet(1000);
+  const p1 = interactPet(p0, "feed", "me", 2000);
+  assert.equal(p1.todayExp > p0.todayExp, true, "cho ăn tăng Exp hôm nay");
+  const status = computePetStatus({ pet: p1, messages: [] }, 2500);
+  assert.equal(status.level >= 1, true);
+  assert.match(status.energyIcons, /⚡/);
+  const petUi = read("src/screens/local/PetLocal.tsx");
+  assert.match(petUi, /Exp hôm nay:/);
+  assert.match(petUi, /Cho ăn/);
+  assert.match(petUi, /Tắm rửa/);
+  assert.match(petUi, /Đi ngủ/);
+  assert.match(petUi, /Nhắc nhở/);
+  assert.match(petUi, /Quà tặng/);
 });

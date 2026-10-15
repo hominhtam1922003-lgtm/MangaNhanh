@@ -1,6 +1,7 @@
 import { Directory, File, Paths } from "expo-file-system";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { emptyState, migrate } from "../logic/localState.mjs";
+import type { PetState } from "../logic/pet.mjs";
 export type Profile = {
   id: string;
   nickname: string;
@@ -115,6 +116,8 @@ export type State = {
     updatedAt: string;
     by: string;
   };
+  /** Thú cưng ảo chung của hai người (Couple Pet). */
+  pet?: PetState;
 };
 const stateFile = () => new File(Paths.document, "love-state.json");
 const backupKey = "love-state-backup";

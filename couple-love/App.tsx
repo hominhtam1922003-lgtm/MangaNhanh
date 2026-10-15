@@ -89,8 +89,11 @@ import type { AudioFrame } from "./src/logic/callAudio.mjs";
 import { AudioModule, setAudioModeAsync, useAudioRecorder } from "expo-audio";
 import { RtcCall, rtcSupport } from "./src/services/rtcCall";
 import {
+  applyCallAudioRoute,
+  onCallServiceAnswer,
   onCallServiceHangup,
   startCallService,
+  startIncomingCallService,
   stopCallService,
 } from "./src/services/callService";
 // Giữ kết nối khi app ở nền / tắt màn hình để tin nhắn vẫn nổi thông báo.
@@ -690,14 +693,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     }
     if (event.type === "speaker") {
       const speakerOn = event.on !== false;
-      void setAudioModeAsync({
-        allowsRecording: true,
-        playsInSilentMode: true,
-        shouldPlayInBackground: true,
-        ...(Platform.OS === "android"
-          ? { shouldRouteThroughEarpiece: !speakerOn }
-          : {}),
-      }).catch(() => {});
+      void applyCallAudioRoute(speakerOn);
     }
     if (
       event.type === "hangup" &&
@@ -1390,6 +1386,13 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               name: message.name,
             });
           }
+          if (message.notify === true || message.action === "poke") {
+            const reminderBody = String(
+              message.reminderText ||
+                "Boss đang đòi ăn kìa, vào cho Boss ăn cùng em đi anh ơi!",
+            );
+            void notifyNow("🐾 Nhắc nhở chăm Boss!", reminderBody, false);
+          }
           return;
         }
         if (kind === "call") {
@@ -1422,6 +1425,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
                 video: isVideo,
               }),
             );
+            void startIncomingCallService(who, isVideo);
             void notifyNow(
               `${who} đang gọi ${isVideo ? "video " : ""}cho bạn 📞`,
               "Mở app để nghe máy.",
@@ -1879,18 +1883,16 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   // Nhắc lại vài giây một lần vì trình quản lý âm thanh của máy có thể đổi lại.
   useEffect(() => {
     if (call?.phase !== "active") return;
-    const android = Platform.OS === "android";
     const speakerOn = call?.speakerOn !== false;
     const route = () => {
+      void applyCallAudioRoute(speakerOn);
       void setAudioModeAsync({
         allowsRecording: true,
         playsInSilentMode: true,
         shouldPlayInBackground: true,
-        ...(android
-          ? speakerOn
-            ? { shouldRouteThroughEarpiece: false }
-            : { shouldRouteThroughEarpiece: true }
-          : {}),
+        ...(speakerOn
+          ? { shouldRouteThroughEarpiece: false }
+          : { shouldRouteThroughEarpiece: true }),
       }).catch(() => {});
     };
     route();
@@ -1909,9 +1911,13 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [call?.phase, call?.id]);
-  // Nút "Cúp máy" trên thông báo làm y như nút trên màn hình cuộc gọi.
+  // Nút "Cúp máy", "Nghe máy", "Từ chối" trên thông báo làm y như trên màn hình gọi.
   useEffect(() => {
     onCallServiceHangup(() => callAction({ type: "hangup" }));
+    onCallServiceAnswer(
+      () => callAction({ type: "accept" }),
+      () => callAction({ type: "hangup" }),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // Cuộc gọi vừa được nghe máy: mở ngay đường tiếng trực tiếp. Bên gọi mời
@@ -2497,7 +2503,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
    */
   useEffect(() => {
     const wanted =
-      state?.settings?.keepAlive === true &&
+      state?.settings?.keepAlive !== false &&
       state?.settings?.relay !== false &&
       Boolean(state?.relay?.id);
     if (wanted) void startRelayService(state?.partner?.nickname ?? null);
@@ -2509,6 +2515,25 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     state?.relay?.id,
     state?.partner?.nickname,
   ]);
+  // Duy trì kết nối MQTT ngầm khi khoá màn hình / chuyển background hoặc quay lại app.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      const client = relayRef.current;
+      if (client) {
+        for (const slot of client.slots) {
+          if (!slot.subscribed) {
+            clearTimeout(slot.timer);
+            slot.retry = 0;
+            client.connect(slot);
+          }
+        }
+      }
+      if (nextState === "active" && callRef.current?.phase === "active") {
+        void applyCallAudioRoute(callRef.current.speakerOn !== false);
+      }
+    });
+    return () => sub.remove();
+  }, []);
   /** Nút "Tắt" trên thông báo giữ kết nối → tắt công tắc trong Cài đặt. */
   const stopKeepAliveRef = useRef<() => void>(() => {});
   stopKeepAliveRef.current = () =>

@@ -35,7 +35,7 @@ module.exports = {
   expo: {
     name: "Mật Mã Yêu",
     slug: "hai-trai-tim",
-    version: "1.18.8",
+    version: "1.18.9",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
@@ -59,10 +59,11 @@ module.exports = {
         // Thông báo tin nhắn trên Android 13+ (hệ thống vẫn hỏi người dùng).
         "android.permission.POST_NOTIFICATIONS",
       ],
-      // 1.18.8: tính năng Nuôi Thú Cưng Ảo (Couple Pet phong cách Widgetable),
-      // thay tab Nhật ký & Chăm sóc bằng Thú Cưng, sửa triệt để hiển thị Video
-      // Call (remoteStream.toURL) và tách đối xứng nút Từ chối / Nghe.
-      versionCode: 28,
+      // 1.18.9: giao diện Cuộc gọi Full-screen nền tối sang trọng, Video Call
+      // phủ kín 100% + PiP góc phải, sửa dứt điểm Loa ngoài (Speakerphone vs
+      // Earpiece), đánh thức màn hình khi có cuộc gọi đến lúc tắt màn hình, và
+      // chuẩn hoá logic Thú Cưng (Exp 0/1000, +1000 mỗi cấp, chu kỳ 15 phút).
+      versionCode: 29,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#fff1f2",

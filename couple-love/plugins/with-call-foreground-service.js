@@ -1,22 +1,20 @@
 /**
- * Plugin Expo: đổi kiểu dịch vụ chạy nổi của Notifee thành "microphone|dataSync"
- * và thêm các quyền cần thiết.
- *
- * Vì sao phải viết plugin: Notifee khai dịch vụ `app.notifee.core.ForegroundService`
- * trong thư viện của họ với kiểu mặc định `shortService`. Kiểu đó (a) chỉ sống
- * tối đa ~3 phút nên cuộc gọi dài là tắt, (b) KHÔNG được phép dùng micro khi app
- * ở chế độ nền. Trên Android 14, xin kiểu không nằm trong khai báo của manifest
- * sẽ bị ném lỗi ngay (`foregroundServiceType … is not a subset …`). Vì vậy ta ghi
- * đè thành `microphone` bằng `tools:replace` — đúng cách Notifee hướng dẫn.
- *
- * Quyền thì khai trong `app.config.js` (`android.permissions`) cho dễ đọc:
- * `FOREGROUND_SERVICE` (bắt buộc từ Android 9), `FOREGROUND_SERVICE_MICROPHONE`
- * và `FOREGROUND_SERVICE_DATA_SYNC` (bắt buộc từ Android 14), `WAKE_LOCK`;
- * `RECORD_AUDIO` đã có sẵn từ plugin expo-audio. Plugin này chỉ lo phần manifest mà app.config.js không viết được.
- *
- * Chạy tự động trong `expo prebuild` nên APK dựng trên CI cũng có đủ.
+ * Plugin Expo:
+ * 1. Đổi kiểu dịch vụ chạy nổi của Notifee thành "microphone|dataSync" và thêm
+ *    các quyền cần thiết trên Android 14+.
+ * 2. Vá trực tiếp `expo-audio` trên cả Android (`AudioModule.kt`) và iOS
+ *    (`AudioRecords.swift` + `AudioModule.swift`) khi chạy `expo prebuild` để
+ *    nút Loa ngoài (Speakerphone) / Loa thoại trong (Earpiece) chuyển luồng âm
+ *    thanh phần cứng 100% chính xác trong cuộc gọi WebRTC (kể cả Android 12–15
+ *    dùng `setCommunicationDevice`).
  */
-const { AndroidConfig, withAndroidManifest } = require("@expo/config-plugins");
+const fs = require("fs");
+const path = require("path");
+const {
+  AndroidConfig,
+  withAndroidManifest,
+  withDangerousMod,
+} = require("@expo/config-plugins");
 
 const SERVICE_NAME = "app.notifee.core.ForegroundService";
 /**
@@ -24,12 +22,105 @@ const SERVICE_NAME = "app.notifee.core.ForegroundService";
  * · `microphone` — cuộc gọi tiếp tục thu tiếng khi tắt màn hình (1.15.0);
  * · `dataSync`   — giữ kết nối để tin nhắn vẫn nổi thông báo khi app ở chế độ
  *   nền / tắt màn hình (1.16.0, bật trong Cài đặt).
- * Android 14 bắt buộc kiểu xin phép phải nằm trong khai báo này.
  */
 const FGS_TYPE = "microphone|dataSync";
 
+function patchExpoAudioAndroid(projectRoot) {
+  const ktFile = path.join(
+    projectRoot,
+    "node_modules",
+    "expo-audio",
+    "android",
+    "src",
+    "main",
+    "java",
+    "expo",
+    "modules",
+    "audio",
+    "AudioModule.kt",
+  );
+  if (!fs.existsSync(ktFile)) return;
+  const src = fs.readFileSync(ktFile, "utf8");
+  if (src.includes("availableCommunicationDevices")) return;
+  const oldFn = `  @Suppress("DEPRECATION")
+  private fun updatePlaySoundThroughEarpiece(playThroughEarpiece: Boolean) {
+    audioManager.mode = if (playThroughEarpiece) AudioManager.MODE_IN_COMMUNICATION else AudioManager.MODE_NORMAL
+    audioManager.setSpeakerphoneOn(!playThroughEarpiece)
+  }`;
+  const newFn = `  @Suppress("DEPRECATION")
+  private fun updatePlaySoundThroughEarpiece(playThroughEarpiece: Boolean) {
+    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+    audioManager.isSpeakerphoneOn = !playThroughEarpiece
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+      try {
+        val targetType = if (playThroughEarpiece) {
+          android.media.AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+        } else {
+          android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+        }
+        val device = audioManager.availableCommunicationDevices.firstOrNull { it.type == targetType }
+        if (device != null) {
+          audioManager.setCommunicationDevice(device)
+        } else if (!playThroughEarpiece) {
+          audioManager.clearCommunicationDevice()
+        }
+      } catch (_: Throwable) {}
+    }
+  }`;
+  if (src.includes(oldFn)) {
+    fs.writeFileSync(ktFile, src.replace(oldFn, newFn), "utf8");
+  }
+}
+
+function patchExpoAudioIos(projectRoot) {
+  const recordsFile = path.join(
+    projectRoot,
+    "node_modules",
+    "expo-audio",
+    "ios",
+    "AudioRecords.swift",
+  );
+  const moduleFile = path.join(
+    projectRoot,
+    "node_modules",
+    "expo-audio",
+    "ios",
+    "AudioModule.swift",
+  );
+  if (fs.existsSync(recordsFile)) {
+    const rec = fs.readFileSync(recordsFile, "utf8");
+    if (!rec.includes("shouldRouteThroughEarpiece")) {
+      const updated = rec.replace(
+        "@Field var shouldPlayInBackground: Bool = false",
+        "@Field var shouldPlayInBackground: Bool = false\n  @Field var shouldRouteThroughEarpiece: Bool = false",
+      );
+      fs.writeFileSync(recordsFile, updated, "utf8");
+    }
+  }
+  if (fs.existsSync(moduleFile)) {
+    const mod = fs.readFileSync(moduleFile, "utf8");
+    if (!mod.includes("overrideOutputAudioPort")) {
+      const target = `      if category == .playAndRecord {
+        categoryOptions.insert(.allowBluetooth)
+      }`;
+      const replacement = `      if category == .playAndRecord {
+        categoryOptions.insert(.allowBluetooth)
+        if !mode.shouldRouteThroughEarpiece {
+          categoryOptions.insert(.defaultToSpeaker)
+        }
+      }`;
+      let next = mod.replace(target, replacement);
+      next = next.replace(
+        "try session.setCategory(category, options: sessionOptions)",
+        "try session.setCategory(category, options: sessionOptions)\n    if category == .playAndRecord {\n      try? session.overrideOutputAudioPort(mode.shouldRouteThroughEarpiece ? .none : .speaker)\n    }",
+      );
+      fs.writeFileSync(moduleFile, next, "utf8");
+    }
+  }
+}
+
 function withCallForegroundService(config) {
-  return withAndroidManifest(config, (current) => {
+  config = withAndroidManifest(config, (current) => {
     const manifest = current.modResults;
     manifest.manifest.$ = manifest.manifest.$ || {};
     if (!manifest.manifest.$["xmlns:tools"]) {
@@ -51,6 +142,24 @@ function withCallForegroundService(config) {
     else application.service.push({ $: attributes });
     return current;
   });
+
+  config = withDangerousMod(config, [
+    "android",
+    async (current) => {
+      patchExpoAudioAndroid(current.modRequest.projectRoot);
+      return current;
+    },
+  ]);
+
+  config = withDangerousMod(config, [
+    "ios",
+    async (current) => {
+      patchExpoAudioIos(current.modRequest.projectRoot);
+      return current;
+    },
+  ]);
+
+  return config;
 }
 
 module.exports = withCallForegroundService;

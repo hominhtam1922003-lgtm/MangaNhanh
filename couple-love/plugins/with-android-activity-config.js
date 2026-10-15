@@ -1,23 +1,13 @@
 /**
- * Vì sao cần plugin này — lỗi "Chưa gửi được ảnh" mà app từng gặp:
+ * Vì sao cần plugin này — lỗi "Chưa gửi được ảnh" + đánh thức màn hình khi có
+ * cuộc gọi đến:
  *
- * Trên Android, expo-image-picker (và mọi thư viện mở hộp thoại hệ thống như
- * hộp chọn ảnh, máy ảnh, chọn thư mục) đăng ký một `ActivityResultLauncher`
- * gắn với Activity đang chạy. Khi Android HUỶ rồi TẠO LẠI Activity vì một thay
- * đổi cấu hình (người dùng đổi cỡ chữ, đổi ngôn ngữ, đổi chế độ sáng/tối, đổi
- * mật độ màn hình…), launcher cũ bị bỏ đăng ký nhưng không đăng ký lại — từ đó
- * mọi lần mở hộp chọn ảnh đều lỗi:
- *
- *   java.lang.IllegalStateException: Attempting to launch an unregistered
- *   ActivityResultLauncher with contract …ImageLibraryContract…
- *
- * Cách chữa chắc ăn nhất (và cũng là cách React Native khuyên dùng): khai báo
- * các thay đổi cấu hình đó trong `android:configChanges` của MainActivity để
- * Android KHÔNG huỷ Activity nữa — app tự vẽ lại giao diện khi cấu hình đổi.
- * Không còn huỷ Activity thì không còn launcher chết, hộp chọn ảnh và máy ảnh
- * luôn mở được.
- *
- * Xem: expo/expo#50386, expo/expo#19512, expo/expo#41252.
+ * 1. Trên Android, expo-image-picker đăng ký `ActivityResultLauncher` gắn với
+ *    Activity đang chạy. Khai báo đầy đủ `android:configChanges` để Android
+ *    KHÔNG huỷ MainActivity khi đổi cỡ chữ / ngôn ngữ / sáng tối.
+ * 2. Bật `android:showWhenLocked="true"` và `android:turnScreenOn="true"` trên
+ *    MainActivity để khi có cuộc gọi đến lúc đang tắt/khoá màn hình, hệ thống
+ *    đánh thức màn hình và hiển thị giao diện cuộc gọi Full-screen ngay lập tức.
  */
 const { withAndroidManifest } = require("expo/config-plugins");
 
@@ -48,9 +38,10 @@ module.exports = function withAndroidActivityConfig(config) {
     let patched = 0;
     for (const activity of activities) {
       const name = String(activity?.$?.["android:name"] ?? "");
-      // Chỉ đụng vào Activity chính của app (MainActivity).
       if (!name.endsWith("MainActivity")) continue;
       activity.$["android:configChanges"] = CONFIG_CHANGES;
+      activity.$["android:showWhenLocked"] = "true";
+      activity.$["android:turnScreenOn"] = "true";
       patched += 1;
     }
     if (patched === 0)

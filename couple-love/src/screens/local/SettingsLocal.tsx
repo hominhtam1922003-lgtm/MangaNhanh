@@ -661,7 +661,7 @@ export default function SettingsLocal({
           </View>
           <Switch
             accessibilityLabel="Giữ kết nối khi tắt màn hình"
-            value={state.settings.keepAlive === true}
+            value={state.settings.keepAlive !== false}
             onValueChange={(value) =>
               update({
                 type: "settings.set",

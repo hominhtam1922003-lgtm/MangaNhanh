@@ -21,10 +21,15 @@ import {
 import { callEvent, newCall } from "../src/logic/callLogic.mjs";
 import { MESSENGER_THEMES, themeById } from "../src/logic/themes.mjs";
 import {
+  PET_DECAY_INTERVAL_MS,
   PET_SPEECH_BUBBLES,
+  applyBiologicalDecay,
+  buildPetReminderText,
+  computeLevelProgress,
   computePetStatus,
   defaultPet,
   interactPet,
+  levelExpRequirement,
 } from "../src/logic/pet.mjs";
 
 const read = (path) =>
@@ -255,7 +260,7 @@ test("Nâng cấp 1.18.7: Chống ồn Adaptive Filter, SDP thích ứng, Flat C
   assert.equal(themeById("xanh-mong-mo").id, "bien");
   assert.equal(Array.isArray(themeById("hong").bubbleMine), true);
 
-  // 6. Tính năng Nuôi Thú Cưng Ảo (Couple Pet - phong cách Widgetable)
+  // 6. Tính năng Nuôi Thú Cưng Ảo (Couple Pet - phong cách Widgetable chuẩn 1.18.9)
   assert.equal(
     PET_SPEECH_BUBBLES.includes(
       "Nhìn vào mắt đằng ấy, thấy sao một thế giới màu hồng ❤️",
@@ -263,10 +268,70 @@ test("Nâng cấp 1.18.7: Chống ồn Adaptive Filter, SDP thích ứng, Flat C
     true,
   );
   const p0 = defaultPet(1000);
-  const p1 = interactPet(p0, "feed", "me", 2000);
-  assert.equal(p1.todayExp > p0.todayExp, true, "cho ăn tăng Exp hôm nay");
-  const status = computePetStatus({ pet: p1, messages: [] }, 2500);
-  assert.equal(status.level >= 1, true);
+  assert.equal(p0.totalExp, 0, "khởi tạo Exp = 0/1000 ở Level 1");
+  assert.equal(p0.todayExp, 0, "khởi tạo Exp hôm nay = 0/100");
+  assert.equal(levelExpRequirement(1), 1000, "Lv.1 cần 1000 Exp");
+  assert.equal(levelExpRequirement(2), 2000, "Lv.2 cần 2000 Exp");
+  assert.equal(computeLevelProgress(0).level, 1);
+  assert.equal(computeLevelProgress(0).levelExp, 0);
+  assert.equal(computeLevelProgress(0).levelGoal, 1000);
+  assert.equal(computeLevelProgress(1000).level, 2);
+  assert.equal(computeLevelProgress(1000).levelGoal, 2000);
+
+  // Điểm cộng dồn: Tương tác phòng (+5), Nhắn tin (+10), Gọi thoại/video (+25)
+  const pFeed = interactPet(p0, "feed", "me", 2000);
+  assert.equal(pFeed.totalExp, 5, "tương tác phòng +5 Exp");
+  const pChat = interactPet(pFeed, "chat", "me", 3000);
+  assert.equal(pChat.totalExp, 15, "nhắn tin +10 Exp");
+  const pCall = interactPet(pChat, "call", "me", 4000);
+  assert.equal(pCall.totalExp, 40, "gọi thoại/video +25 Exp");
+
+  // Giới hạn tối đa 100 Exp mỗi ngày cho mỗi người dùng
+  let pCap = p0;
+  for (let i = 0; i < 10; i += 1) {
+    pCap = interactPet(pCap, "call", "me", 5000 + i * 100);
+  }
+  assert.equal(pCap.meTodayExp, 100, "mỗi người tối đa 100 Exp/ngày");
+  assert.equal(
+    pCap.totalExp,
+    100,
+    "vượt 100 Exp/ngày của 1 người không cộng thêm",
+  );
+
+  // Chu kỳ 15 phút giảm chỉ số sinh học (Đói, Dơ, Yêu thương)
+  assert.equal(PET_DECAY_INTERVAL_MS, 15 * 60 * 1000);
+  const decayed = applyBiologicalDecay(p0, 1000 + 2 * PET_DECAY_INTERVAL_MS);
+  assert.equal(decayed.decayCycles, 2);
+  assert.equal(decayed.hunger < p0.hunger, true, "đói giảm sau mỗi 15 phút");
+  assert.equal(
+    decayed.cleanliness < p0.cleanliness,
+    true,
+    "sạch sẽ giảm sau mỗi 15 phút",
+  );
+  assert.equal(
+    decayed.affection < p0.affection,
+    true,
+    "yêu thương giảm sau mỗi 15 phút",
+  );
+
+  // Nhắc nhở thời gian thực
+  assert.match(
+    buildPetReminderText(p0, 2000),
+    /Boss.*đang đòi ăn kìa, vào cho Boss ăn cùng em đi anh ơi!/,
+  );
+
+  // Giao diện Full-screen Call + RTCView cover + Loa ngoài
+  assert.match(callUi, /Modal/, "màn hình gọi Full-screen Modal");
+  assert.match(
+    callUi,
+    /StyleSheet\.absoluteFillObject/,
+    "RTCView phủ kín màn hình",
+  );
+  assert.match(callUi, /objectFit="cover"/, "RTCView objectFit cover");
+
+  const status = computePetStatus({ pet: pFeed, messages: [] }, 2500);
+  assert.equal(status.level, 1);
+  assert.equal(status.levelGoal, 1000);
   assert.match(status.energyIcons, /⚡/);
   const petUi = read("src/screens/local/PetLocal.tsx");
   assert.match(petUi, /Exp hôm nay:/);

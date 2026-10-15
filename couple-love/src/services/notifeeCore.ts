@@ -4,7 +4,8 @@
  * Vì sao phải gom lại: Notifee chỉ có MỘT hàm xử lý sự kiện cho cả app. Nếu
  * cuộc gọi và phần "giữ kết nối nền" mỗi thứ tự đăng ký riêng thì cái sau đè
  * cái trước — bấm "Cúp máy" trên thông báo sẽ không còn tác dụng. Ở đây đăng ký
- * một lần rồi chia sự kiện cho từng người dùng.
+ * một lần (cả `onForegroundEvent` lẫn `onBackgroundEvent`) rồi chia sự kiện cho
+ * từng người dùng.
  *
  * Nạp muộn (`require` trong try/catch): máy nào thiếu thư viện native thì app
  * vẫn chạy bình thường, chỉ mất phần chạy nền.
@@ -43,6 +44,20 @@ export function notifeeSupport(): { ok: boolean; detail: string } {
   return { ok: false, detail: notifeeProblem || "máy này không có Notifee" };
 }
 
+function dispatchNotifeeEvent(mod: any, event: any) {
+  const { type, detail } = event ?? {};
+  if (type !== mod?.EventType?.ACTION_PRESS) return;
+  const actionId = String(detail?.pressAction?.id ?? "");
+  const notificationId = detail?.notification?.id
+    ? String(detail.notification.id)
+    : undefined;
+  for (const handler of handlers) {
+    try {
+      handler({ actionId, notificationId });
+    } catch {}
+  }
+}
+
 /**
  * Đăng ký dịch vụ chạy nổi (gọi bao nhiêu lần cũng được). Thân dịch vụ chỉ cần
  * một Promise không bao giờ kết thúc: hệ thống giữ app sống cho tới khi ta gọi
@@ -57,16 +72,13 @@ export function useNotifeeService(): any {
       notifee.registerForegroundService(() => new Promise(() => {}));
     } catch {}
     try {
-      notifee.onForegroundEvent(({ type, detail }: any) => {
-        if (type !== mod.EventType?.ACTION_PRESS) return;
-        const actionId = String(detail?.pressAction?.id ?? "");
-        const notificationId = detail?.notification?.id
-          ? String(detail.notification.id)
-          : undefined;
-        for (const handler of handlers)
-          try {
-            handler({ actionId, notificationId });
-          } catch {}
+      notifee.onForegroundEvent((event: any) => {
+        dispatchNotifeeEvent(mod, event);
+      });
+    } catch {}
+    try {
+      notifee.onBackgroundEvent(async (event: any) => {
+        dispatchNotifeeEvent(mod, event);
       });
     } catch {}
     listenerReady = true;

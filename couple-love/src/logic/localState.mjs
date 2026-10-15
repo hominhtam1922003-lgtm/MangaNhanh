@@ -102,6 +102,8 @@ export function emptyState(now = new Date().toISOString()) {
       // Nhạc chuông riêng lấy từ thư viện nhạc trong máy (rỗng = dùng nhạc mặc định).
       ringtone: "",
       ringtoneName: "",
+      // Mặc định bật giữ kết nối chạy nền để tắt màn hình vẫn nhận được cuộc gọi/tin nhắn.
+      keepAlive: true,
     },
     autoLoveAt: 0,
     relay: null,
@@ -201,8 +203,8 @@ export function migrate(raw, now = new Date().toISOString()) {
     replyNudge: raw.settings?.replyNudge !== false,
     ringtone: text(raw.settings?.ringtone, 80),
     ringtoneName: text(raw.settings?.ringtoneName, 60),
-    // Giữ kết nối chạy nền: thông báo tin nhắn vẫn nổi khi tắt màn hình.
-    keepAlive: raw.settings?.keepAlive === true,
+    // Giữ kết nối chạy nền: mặc định bật để thông báo tin nhắn & cuộc gọi đến vẫn nổi khi tắt màn hình.
+    keepAlive: raw.settings?.keepAlive !== false,
   };
   state.autoLoveAt = Math.max(0, Number(raw.autoLoveAt) || 0);
   const messages = Array.isArray(raw.messages) ? raw.messages : [];

@@ -15,12 +15,12 @@ on:
       run_id:
         description: ID lần chạy "APK Mật Mã Yêu" đã thành công
         required: true
-        default: "38673090771"
+        default: "38678252483"
         type: string
       version:
-        description: Phiên bản ghi trên tên tệp/tag (ví dụ 1.18.3)
+        description: Phiên bản ghi trên tên tệp/tag (ví dụ 1.18.4)
         required: false
-        default: "1.18.3"
+        default: "1.18.4"
         type: string
 
 permissions:
@@ -42,10 +42,10 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      APP_VERSION: ${{ inputs.version || '1.18.3' }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38673090771' }}
+      APP_VERSION: ${{ inputs.version || '1.18.4' }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38678252483' }}
       ARTIFACT_NAME: MatMaYeu-APK
-      APK_FILE: MatMaYeu-${{ inputs.version || '1.18.3' }}.apk
+      APK_FILE: MatMaYeu-${{ inputs.version || '1.18.4' }}.apk
     steps:
       - name: Kiểm tra nguồn APK đã build thành công
         id: verify

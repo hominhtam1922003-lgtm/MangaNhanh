@@ -269,7 +269,20 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Mật Mã Yêu 1.18.8 (bản mới nhất) — Nuôi Thú Cưng Ảo (Couple Pet phong cách Widgetable), thay tab Nhật ký/Chăm sóc bằng Thú Cưng, sửa triệt để Video Call & UI cuộc gọi đến
+## Mật Mã Yêu 1.18.9 (bản mới nhất) — Giao diện Cuộc gọi Full-screen & Video Call cover+PiP, sửa dứt điểm Loa ngoài, đánh thức màn hình gọi nền & chuẩn hoá logic Thú Cưng
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.9-test-2fdfb6c/MatMaYeu-1.18.9.apk (kèm file kiểm tra `MatMaYeu-1.18.9.apk.sha256` trong Assets)
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.9-test-2fdfb6c/MatMaYeu-1.18.9-arm64.apk (kèm file `MatMaYeu-1.18.9-arm64.sha256`)
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.9-test-2fdfb6c/MatMaYeu-1.18.9-unsigned.ipa (kèm file `MatMaYeu-1.18.9-unsigned.ipa.sha256`)
+
+Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.9, bản dựng 29**. Dựng từ `2fdfb6c7e1304c9fdd73e69fd96461db47637331` (APK build `38702279994`; iOS build `38702279979`). **Cài đè lên 1.18.8 / 1.18.7 được, không mất dữ liệu.**
+
+- **Giao diện Cuộc gọi Full-screen & Video Call (`src/screens/local/CallLocal.tsx`):** Thiết kế lại toàn bộ màn hình cuộc gọi (Voice & Video) tràn màn hình (`Modal` nền tối sang trọng `#090d16` → `#111827` → `#1e1b4b`), `RTCView` của `remoteStream` phủ kín 100% màn hình chính (`StyleSheet.absoluteFillObject`, `objectFit="cover"`), camera cá nhân `localStream` ở góc trên bên phải dạng PiP, và tách rời hai nút **Từ chối** (Đỏ rực `#ef4444`, icon `📵`) / **Nghe** (Xanh lá `#22c55e`, icon `📞`) đối xứng dưới đáy.
+- **Sửa dứt điểm Loa ngoài (`plugins/with-call-foreground-service.js`, `src/services/callService.ts`):** Tách biệt hoàn toàn Loa thoại trong (Earpiece) và Loa ngoài (Speaker) bằng `applyCallAudioRoute` kết hợp bản vá native `AudioModule.kt` (`MODE_IN_COMMUNICATION` + `setCommunicationDevice` trên Android 12–15) và `AudioModule.swift` (`overrideOutputAudioPort(.speaker)` trên iOS).
+- **Duy trì Kết nối Nền & Đánh thức màn hình Cuộc gọi đến (`plugins/with-android-activity-config.js`, `src/services/callService.ts`, `src/services/notifeeCore.ts`, `App.tsx`):** Mặc định bật Foreground Service giữ kết nối MQTT, bổ sung `onBackgroundEvent` và thông báo cuộc gọi đến toàn màn hình (`fullScreenAction`, `showWhenLocked`, `turnScreenOn`) để máy đang khoá màn hình vẫn tự bật sáng và đổ chuông/rung.
+- **Chuẩn hoá logic & Giao diện Phòng Thú Cưng (`src/logic/pet.mjs`, `src/screens/local/PetLocal.tsx`):** Căn phòng ấm cúng có sàn gỗ, cửa sổ, kệ trang trí phẳng; phân tách rạch ròi giữa **Vịt** (lông trắng, mỏ cam, chân vịt cam) và **Mèo** (tai mèo nhọn lót hồng, lông kem sữa, mũi hồng, ria mép, đuôi mèo); khởi tạo Level 1 với `0/1000` Exp (`+1000` mỗi cấp), giới hạn `100 Exp/ngày` mỗi người (`+5` tương tác phòng, `+10` nhắn tin, `+25` gọi thoại/video); chỉ số sinh học (Đói, Dơ, Yêu thương) tự giảm mỗi **15 phút** và nút **Nhắc nhở** bắn thông báo đẩy thời gian thực sang máy người thương.
+
+## Mật Mã Yêu 1.18.8 (bản trước) — Nuôi Thú Cưng Ảo (Couple Pet phong cách Widgetable), thay tab Nhật ký/Chăm sóc bằng Thú Cưng, sửa triệt để Video Call & UI cuộc gọi đến
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.8-test-7993d3b/MatMaYeu-1.18.8.apk (kèm file kiểm tra `MatMaYeu-1.18.8.apk.sha256` trong Assets)
 **APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.8-test-7993d3b/MatMaYeu-1.18.8-arm64.apk (kèm file `MatMaYeu-1.18.8-arm64.sha256`)

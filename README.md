@@ -269,7 +269,19 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Mật Mã Yêu 1.18.5 (bản mới nhất) — thay cấu hình `iceServers` chuẩn chính thức của Metered.ca (`global.relay.metered.ca` + `stun.relay.metered.ca`)
+## Mật Mã Yêu 1.18.6 (bản mới nhất) — bật triệt để bộ lọc phần cứng chống vang/chống ồn (AEC, NS, AGC, `goog*`) & giải phóng sạch track âm thanh khi ngắt cuộc gọi
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.6-test-990309d/MatMaYeu-1.18.6.apk · **78.691.033 byte** (kèm file kiểm tra `MatMaYeu-1.18.6.apk.sha256` trong Assets)
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.6-test-990309d/MatMaYeu-1.18.6-arm64.apk · **56.294.782 byte** (kèm file `MatMaYeu-1.18.6-arm64.sha256`)
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.6-test-990309d/MatMaYeu-1.18.6-unsigned.ipa · **17.186.884 byte** (kèm file `MatMaYeu-1.18.6-unsigned.ipa.sha256`)
+
+Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.6, bản dựng 26**. Dựng từ `990309d54698fdafaedfa8a42ae7cb6dfc151de4` (APK build `38683585651`; iOS build `38683585599`). **Cài đè lên 1.18.5 / 1.18.4 được, không mất dữ liệu.**
+
+- **Bật triệt để các bộ lọc phần cứng chống vang, chống ồn trong `getUserMedia` (`couple-love/src/services/rtcCall.ts` & `couple-love/src/logic/rtcSignal.mjs`):**
+  - `echoCancellation: true`, `noiseSuppression: true`, `autoGainControl: true`, `googEchoCancellation: true`, `googAutoGainControl: true`, `googNoiseSuppression: true`, `googHighpassFilter: true`.
+- **Dọn sạch vòng đời âm thanh (`teardown()` / `fail()`):** Giải phóng hoàn toàn toàn bộ track âm thanh (`stream.getTracks().forEach(track => track.stop())`, `stream.release()`, `pc.getSenders()`, `pc.getReceivers()`) ngay khi kết thúc hoặc ngắt kết nối để không bao giờ chồng chéo luồng âm thanh gây vang.
+
+## Mật Mã Yêu 1.18.5 (bản trước) — thay cấu hình `iceServers` chuẩn chính thức của Metered.ca (`global.relay.metered.ca` + `stun.relay.metered.ca`)
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.5-test-959f634/MatMaYeu-1.18.5.apk · **78.690.425 byte** (kèm file kiểm tra `MatMaYeu-1.18.5.apk.sha256` trong Assets)
 **APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.5-test-959f634/MatMaYeu-1.18.5-arm64.apk · **56.294.174 byte** (kèm file `MatMaYeu-1.18.5-arm64.sha256`)

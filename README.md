@@ -269,7 +269,26 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Mật Mã Yêu 1.18.3 (bản mới nhất) — sửa cuộc gọi trực tiếp WebRTC + TURN riêng (`couple-love.metered.live`) trên LDPlayer
+## Mật Mã Yêu 1.18.4 (bản mới nhất) — sửa lỗi cuộc gọi tự ngắt sau 3–5 giây (do gói `ring` lặp tự bắn `reject`) & kết nối WebRTC + TURN riêng (`couple-love.metered.live`)
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.4-test-6dee560/MatMaYeu-1.18.4.apk · **78.690.297 byte** (kèm file kiểm tra `MatMaYeu-1.18.4.apk.sha256` trong Assets)
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.4-test-6dee560/MatMaYeu-1.18.4-arm64.apk · **56.294.046 byte** (kèm file `MatMaYeu-1.18.4-arm64.sha256`)
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.4-test-6dee560/MatMaYeu-1.18.4-unsigned.ipa · **17.186.801 byte** (kèm file `MatMaYeu-1.18.4-unsigned.ipa.sha256`)
+
+Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.4, bản dựng 24**. Dựng từ `6dee560eec1dfcbc941e5ca7f52e5d52b9ca067e` (APK build `38678252483`; iOS build `38678252474`). **Cài đè lên 1.18.3 / 1.18.2 được, không mất dữ liệu.**
+
+**Vì sao ở 1.18.3 bên A gọi B bắt máy thì tự ngắt sau 3–5 giây (và hiện cả *"Cuộc gọi nhỡ · người thương đang bận"* lẫn *"Cuộc gọi đến · 00:05"*)?**
+1. **Gói `ring` gửi nhắc sau `350ms` làm máy nhận tự bắn `reject` (`App.tsx:523` & `App.tsx:1365`):**
+   - Trong `startCall()`, máy A gửi gói `ring` (`callId = id`) ở `0ms` và gửi nhắc thêm 1 gói `ring` nữa ở `350ms`. Mỗi lần `publish()` tạo một mã `mid` mới nên máy B nhận cả 2 gói `ring`.
+   - Khi gói `ring` thứ 1 tới (`50ms`), máy B mở màn hình đổ chuông (`callRef.current = { id: callId, phase: "ringing" }`).
+   - Đúng `350ms` sau, khi gói `ring` thứ 2 (cùng `callId`!) tới, hàm `onMessage` kiểm tra `const busy = callRef.current && callRef.current.phase !== "ended"` mà **quên kiểm tra `callRef.current.id === callId`**, nên tưởng máy B đang bận cuộc gọi khác và **tự động bắn gói `reject` về cho máy A**, trong khi màn hình máy B vẫn đổ chuông!
+   - Máy A nhận `reject` ở `0,4s` → tự ngắt cuộc gọi ngay lập tức (ghi **`📞 Cuộc gọi nhỡ · người thương đang bận`**). Còn máy B vẫn thấy chuông reo → khi bấm **Nghe máy**, máy B vào cuộc gọi một mình (`00:00` → `00:02`), không nhận được nhịp sống `alive` từ máy A (đã thoát từ lúc `0,4s`) nên đúng 5 giây sau (`CALL_SILENT_END_MS`) tự ngắt và ghi **`📞 Cuộc gọi đến · 00:05`**!
+2. **Đã sửa dứt điểm ở 1.18.4:**
+   - Gói `ring` trùng `callId` được bỏ qua ngay (`if (callRef.current && callRef.current.id === callId) return;`), tuyệt đối không tự bắn `reject`.
+   - Gửi ngay gói `alive` ngay khi bấm *Nghe máy* và khi nhận `accept`, đồng thời coi mọi gói tín hiệu `rtc` (`offer`/`answer`/`ice`/`pid`) và `audio` là nhịp sống hợp lệ.
+   - Ưu tiên cụm STUN Google + TURN riêng `couple-love.metered.live` (`primaryIceServers`) và không mở PeerJS chồng lên WebRTC cùng lúc để nối trực tiếp nhanh, không nghẽn gói ICE.
+
+## Mật Mã Yêu 1.18.3 (bản trước) — sửa cuộc gọi trực tiếp WebRTC + TURN riêng (`couple-love.metered.live`) trên LDPlayer
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.3-test-b19b6bf/MatMaYeu-1.18.3.apk · **78.688.409 byte** (kèm file kiểm tra `MatMaYeu-1.18.3.apk.sha256` trong Assets)
 **APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.3-test-b19b6bf/MatMaYeu-1.18.3-arm64.apk · **56.292.158 byte** (kèm file `MatMaYeu-1.18.3-arm64.sha256`)

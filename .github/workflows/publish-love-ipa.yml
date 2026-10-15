@@ -1,6 +1,5 @@
-# Nguồn IPA 1.18.0 "Mật Mã Yêu": run_id 38605801446 (commit d313f4b, artifact MatMaYeu-iOS-unsigned-IPA).
-# Ghi chú: Release nháp mat-ma-yeu-ios-v1.18.0-test-d313f4b đã tạo sẵn ở máy,
-# runner chỉ tải artifact của run 38605801446 lên rồi mở công khai sau khi kiểm tra.
+# Đăng IPA "Mật Mã Yêu" (chưa ký) đã build sẵn lên Release (tải trực tiếp).
+# Không gắn cứng số phiên bản: truyền `version` khi chạy, tên tệp/tag suy ra từ đó.
 # Lưu ý: runner không tạo được Release (403) — luôn tạo Release nháp cục bộ trước rồi push file này để runner tải IPA lên.
 name: Đăng IPA Mật Mã Yêu (iOS) tải trực tiếp
 
@@ -13,7 +12,12 @@ on:
       run_id:
         description: ID lần chạy "IPA Mật Mã Yêu (iOS, chưa ký)" đã thành công
         required: true
-        default: "38605801446"
+        default: "38660107403"
+        type: string
+      version:
+        description: Phiên bản ghi trên tên tệp/tag (ví dụ 1.18.1)
+        required: false
+        default: "1.18.1"
         type: string
 
 permissions:
@@ -35,9 +39,10 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38605801446' }}
+      APP_VERSION: ${{ inputs.version || '1.18.1' }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38660107403' }}
       ARTIFACT_NAME: MatMaYeu-iOS-unsigned-IPA
-      IPA_FILE: MatMaYeu-1.18.0-unsigned.ipa
+      IPA_FILE: MatMaYeu-${{ inputs.version || '1.18.1' }}-unsigned.ipa
     steps:
       - name: Kiểm tra nguồn IPA đã build thành công
         id: verify
@@ -53,7 +58,7 @@ jobs:
           assert run['path'] == '.github/workflows/build-couple-ipa.yml', 'Sai workflow build iOS'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f"sha={run['head_sha']}\n")
-              output.write(f"tag=mat-ma-yeu-ios-v1.18.0-test-{run['head_sha'][:7]}\n")
+              output.write(f"tag=mat-ma-yeu-ios-v{os.environ['APP_VERSION']}-test-{run['head_sha'][:7]}\n")
           PY
       - name: Lấy IPA đã kiểm chứng qua REST API (không build lại)
         run: |
@@ -109,9 +114,9 @@ jobs:
             gh release upload "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --clobber --repo "$GITHUB_REPOSITORY"
           else
             cat > /tmp/ipa-notes.md <<EOF
-          Bản iOS **Mật Mã Yêu 1.18.0** (file .ipa **chưa ký**), lấy nguyên vẹn từ lần build trên macOS của GitHub Actions.
+          Bản iOS **Mật Mã Yêu $APP_VERSION** (file .ipa **chưa ký**), lấy nguyên vẹn từ lần build trên macOS của GitHub Actions.
 
-          Tải file **MatMaYeu-1.18.0-unsigned.ipa** trong Assets. Gói \`vn.haitraitim.app\`.
+          Tải file **MatMaYeu-$APP_VERSION-unsigned.ipa** trong Assets. Gói \`vn.haitraitim.app\`.
 
           Bản 1.16.0 đổi tên app thành Mật Mã Yêu và thêm: thu hồi tin nhắn cả hai bên, thả cảm xúc, vuốt để trả lời, giữ mic gửi tin thoại, chấm đang nhập…, báo đã xem, lưu ảnh người thương gửi, ảnh đại diện sang máy kia, sửa lỗi gửi và chụp ảnh trong chat, thanh nhập liệu dạng viên thuốc, trái tim đập theo giọng nói, nút Cúp máy đỏ to, thông báo bấm vào thẳng đoạn chat kèm nút Trả lời, công tắc Giữ kết nối khi tắt màn hình.
 
@@ -119,7 +124,7 @@ jobs:
 
           iPhone **không cài file trực tiếp như APK**: ký lại bằng Sideloadly/AltStore với Apple ID miễn phí (hết hạn sau 7 ngày) hoặc Apple Developer 99 USD/năm để dùng TestFlight.
           EOF
-            gh release create "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --target "$VERIFIED_SHA" --title "Mật Mã Yêu 1.18.0 — IPA iOS (chưa ký)" --notes-file /tmp/ipa-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
+            gh release create "$RELEASE_TAG" "release-ipa/$IPA_FILE" "release-ipa/$IPA_FILE.sha256" --target "$VERIFIED_SHA" --title "Mật Mã Yêu $APP_VERSION — IPA iOS (chưa ký)" --notes-file /tmp/ipa-notes.md --prerelease --repo "$GITHUB_REPOSITORY"
           fi
           gh release view "$RELEASE_TAG" --json tagName,isDraft,assets --repo "$GITHUB_REPOSITORY" | tee /tmp/ipa-release.json
           echo "IPA tải trực tiếp: https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$IPA_FILE" >> "$GITHUB_STEP_SUMMARY"

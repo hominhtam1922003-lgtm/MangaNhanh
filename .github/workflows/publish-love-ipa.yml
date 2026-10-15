@@ -12,12 +12,12 @@ on:
       run_id:
         description: ID lần chạy "IPA Mật Mã Yêu (iOS, chưa ký)" đã thành công
         required: true
-        default: "38669022958"
+        default: "38673090772"
         type: string
       version:
-        description: Phiên bản ghi trên tên tệp/tag (ví dụ 1.18.2)
+        description: Phiên bản ghi trên tên tệp/tag (ví dụ 1.18.3)
         required: false
-        default: "1.18.2"
+        default: "1.18.3"
         type: string
 
 permissions:
@@ -39,10 +39,10 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      APP_VERSION: ${{ inputs.version || '1.18.2' }}
-      BUILD_RUN_ID: ${{ inputs.run_id || '38669022958' }}
+      APP_VERSION: ${{ inputs.version || '1.18.3' }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38673090772' }}
       ARTIFACT_NAME: MatMaYeu-iOS-unsigned-IPA
-      IPA_FILE: MatMaYeu-${{ inputs.version || '1.18.2' }}-unsigned.ipa
+      IPA_FILE: MatMaYeu-${{ inputs.version || '1.18.3' }}-unsigned.ipa
     steps:
       - name: Kiểm tra nguồn IPA đã build thành công
         id: verify

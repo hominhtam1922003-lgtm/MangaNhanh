@@ -269,7 +269,23 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Mật Mã Yêu 1.18.4 (bản mới nhất) — sửa lỗi cuộc gọi tự ngắt sau 3–5 giây (do gói `ring` lặp tự bắn `reject`) & kết nối WebRTC + TURN riêng (`couple-love.metered.live`)
+## Mật Mã Yêu 1.18.5 (bản mới nhất) — thay cấu hình `iceServers` chuẩn chính thức của Metered.ca (`global.relay.metered.ca` + `stun.relay.metered.ca`)
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.5-test-959f634/MatMaYeu-1.18.5.apk · **78.690.425 byte** (kèm file kiểm tra `MatMaYeu-1.18.5.apk.sha256` trong Assets)
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.5-test-959f634/MatMaYeu-1.18.5-arm64.apk · **56.294.174 byte** (kèm file `MatMaYeu-1.18.5-arm64.sha256`)
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.5-test-959f634/MatMaYeu-1.18.5-unsigned.ipa · **17.186.731 byte** (kèm file `MatMaYeu-1.18.5-unsigned.ipa.sha256`)
+
+Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.5, bản dựng 25**. Dựng từ `959f6342723a886fcae19a2ada0f86b6af811911` (APK build `38681345413`; iOS build `38681345244`). **Cài đè lên 1.18.4 / 1.18.3 được, không mất dữ liệu.**
+
+- **Thay thế hoàn toàn `iceServers` trong `RTCPeerConnection` (`couple-love/src/services/rtcCall.ts`)** bằng đúng bộ cấu hình TURN/STUN chuẩn chính thức của Metered.ca:
+  - `stun:stun.relay.metered.ca:80`
+  - `turn:global.relay.metered.ca:80`
+  - `turn:global.relay.metered.ca:80?transport=tcp`
+  - `turn:global.relay.metered.ca:443`
+  - `turns:global.relay.metered.ca:443?transport=tcp`
+  - `username: "5cddad6cdc6b69bdedd42c87"`, `credential: "nYuBOYJvrOiMo6IG"` (trước đây cấu hình cũ ghi nhầm sang tên miền trang quản trị `couple-love.metered.live` và nhầm ký tự credential `nYUBQYjvrQIMo6lG` nên máy chủ TURN từ chối xác thực).
+
+## Mật Mã Yêu 1.18.4 (bản trước) — sửa lỗi cuộc gọi tự ngắt sau 3–5 giây (do gói `ring` lặp tự bắn `reject`) & kết nối WebRTC + TURN riêng (`couple-love.metered.live`)
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.4-test-6dee560/MatMaYeu-1.18.4.apk · **78.690.297 byte** (kèm file kiểm tra `MatMaYeu-1.18.4.apk.sha256` trong Assets)
 **APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.4-test-6dee560/MatMaYeu-1.18.4-arm64.apk · **56.294.046 byte** (kèm file `MatMaYeu-1.18.4-arm64.sha256`)

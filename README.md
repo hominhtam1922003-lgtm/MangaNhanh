@@ -269,7 +269,27 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Mật Mã Yêu 1.18.2 (bản mới nhất) — khôi phục đủ 5 tab + Theme, đăng nhập tài khoản trong app, mã cố định hai chiều không kẹt SQL
+## Mật Mã Yêu 1.18.3 (bản mới nhất) — sửa cuộc gọi trực tiếp WebRTC + TURN riêng (`couple-love.metered.live`) trên LDPlayer
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.3-test-b19b6bf/MatMaYeu-1.18.3.apk · **78.688.409 byte** (kèm file kiểm tra `MatMaYeu-1.18.3.apk.sha256` trong Assets)
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.3-test-b19b6bf/MatMaYeu-1.18.3-arm64.apk · **56.292.158 byte** (kèm file `MatMaYeu-1.18.3-arm64.sha256`)
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.3-test-b19b6bf/MatMaYeu-1.18.3-unsigned.ipa · **17.184.234 byte** (kèm file `MatMaYeu-1.18.3-unsigned.ipa.sha256`)
+
+Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.3, bản dựng 23**. Dựng từ `b19b6bf3a07735c77168cc8bb1ea82c05504b4b4` (APK build `38673090771`; iOS build `38673090772`). **Cài đè lên 1.18.2 / 1.18.1 được, không mất dữ liệu.**
+
+**Nguyên nhân vì sao 1.18.2 vẫn báo *"Chưa nối trực tiếp được, tiếng đang đi qua kênh ghép nối"* dù đã có TURN riêng & cách sửa ở 1.18.3:**
+
+1. **Lỗi khoá chết (`await this.ready` deadlock) tại `src/services/rtcCall.ts:331`:**
+   - Trong `constructor`, `this.ready = this.setup()`, mà `this.setup()` lại chờ hết `await this.peerStage()` (2,5 giây) rồi mới chạy `await this.nativeStage()`.
+   - Nhưng hàm nhận tín hiệu `handle(message)` lại viết `await this.ready` ngay dòng đầu tiên! Hệ quả: trong suốt 2,5 giây đầu, mọi gói tín hiệu (`pid`, `offer`, `answer`, `ice`) gửi từ máy kia sang đều bị **treo cứng ở dòng `await this.ready`** — đến khi mở khoá thì `peerStage()` đã hết giờ và tự huỷ (`stopPeer()`), còn mảng `this.early` cũng trống rỗng.
+   - **Đã sửa:** Tách riêng `this.micReady = this.openMic()`, bỏ hẳn `await this.ready`, mở thẳng `nativeStage` (WebRTC + TURN riêng `couple-love.metered.live`) ngay giây thứ 0 khi nhấc máy, và xếp hàng xử lý `offer`/`answer`/`ice` tuần tự qua `this.signalChain`.
+2. **Xung đột IP ảo nội bộ `10.0.2.15` (`typ host`) giữa hai máy ảo LDPlayer:**
+   - Mỗi cửa sổ LDPlayer đều được cấp cùng địa chỉ IP nội bộ `10.0.2.15` sau lớp NAT ảo của giả lập. Khi LDPlayer A gửi địa chỉ `10.0.2.15 typ host` cho LDPlayer B, WebRTC của LDPlayer B tưởng LDPlayer A nằm cùng mạng LAN `10.0.2.x` (ưu tiên cao nhất) nên tự bắn gói kiểm tra STUN vào chính `10.0.2.15` của mình thay vì dùng địa chỉ `typ relay` của máy chủ TURN `couple-love.metered.live`.
+   - **Đã sửa:** Lọc bỏ địa chỉ ảo `10.0.2.x typ host` (`isEmulatorLoopbackHost`), và nếu sau 4 giây chế độ ưu tiên P2P (`all`) vẫn bị tường lửa/NAT giả lập giữ lại thì tự động chuyển sang vòng 2 ép **100% đi qua máy chủ TURN (`iceTransportPolicy: "relay"`)** trước khi hạ xuống kênh ghép nối.
+3. **Bù gói `offer` / `answer` / `accept` bị trễ trên MQTT & dự phòng micro giả lập:**
+   - Gửi lặp gói `accept` (0ms, 250ms, 500ms); bên gọi tự gửi nhắc `offer` mỗi 1,2 giây khi chưa nhận được `answer`; bên nghe tự gửi lại `lastAnswerSdp` kèm danh sách ICE khi nhận lại `offer`. Nếu 1 cửa sổ LDPlayer trên PC không gắn mic (hoặc mic bị cửa sổ kia giữ), vẫn tạo luồng `MediaStream` / `recvonly` để kết nối WebRTC trực tiếp không bị huỷ.
+
+## Mật Mã Yêu 1.18.2 (bản trước) — khôi phục đủ 5 tab + Theme, đăng nhập tài khoản trong app, mã cố định hai chiều không kẹt SQL
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.2-test-56303e4/MatMaYeu-1.18.2.apk · **78.685.217 byte** (kèm file kiểm tra `MatMaYeu-1.18.2.apk.sha256` trong Assets)
 **APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.2-test-56303e4/MatMaYeu-1.18.2-arm64.apk · **56.288.966 byte** (kèm file `MatMaYeu-1.18.2-arm64.sha256`)

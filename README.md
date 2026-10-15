@@ -269,7 +269,30 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Mật Mã Yêu 1.18.1 (bản mới nhất) — bản sạch mã nguồn sau tổng vệ sinh
+## Mật Mã Yêu 1.18.2 (bản mới nhất) — khôi phục đủ 5 tab + Theme, đăng nhập tài khoản trong app, mã cố định hai chiều không kẹt SQL
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.2-test-56303e4/MatMaYeu-1.18.2.apk · **78.685.217 byte** (kèm file kiểm tra `MatMaYeu-1.18.2.apk.sha256` trong Assets)
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.2-test-56303e4/MatMaYeu-1.18.2-arm64.apk · **56.288.966 byte** (kèm file `MatMaYeu-1.18.2-arm64.sha256`)
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.2-test-56303e4/MatMaYeu-1.18.2-unsigned.ipa · **17.182.615 byte** (kèm file `MatMaYeu-1.18.2-unsigned.ipa.sha256`)
+
+Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.2, bản dựng 22**. Dựng từ `56303e4cdca4cc3f51c026cf4f0d9636c95824af` (APK build `38669023110`; iOS build `38669022958`). **Cài đè lên 1.18.1 / 1.18.0 được, không mất dữ liệu** (gói `vn.haitraitim.app`, slug và khoá ký giữ nguyên). **Không gỡ app** nếu chưa chấp nhận mất dữ liệu.
+
+**Sửa 3 lỗi trên LDPlayer của bản 1.18.1:**
+
+1. **Khôi phục đầy đủ thanh 5 tab (`Yêu nhau`, `Tin nhắn`, `Chăm sóc`, `Nhật ký`, `Cài đặt`), Chủ đề (Theme), Ảnh nền và toàn bộ tính năng cũ:**
+   - Bản 1.18.0/1.18.1 có 2 lỗi chặn giao diện: ① `Root()` đọc `readConfig()` thấy sẵn cấu hình Supabase nên đẩy nhầm sang `CloudApp` 1.0 cũ (chỉ có 4 tab cũ, không có `Tin nhắn`, không có `Theme`, bấm tạo mã báo *“Chưa tạo được mã — Chưa hoàn tất thao tác”*); ② Ở chế độ trên máy, màn chắn `PairGate` chặn trước `LocalShell` làm mất hẳn thanh 5 tab dưới đáy và nền chủ đề.
+   - Bản 1.18.2 mở thẳng vào `LocalApp` (`love-mode-v2`), luôn hiển thị đủ 5 tab dưới đáy + chủ đề + ảnh nền; phần ghép nối nằm ở nút **“🔗 Ghép nối”** trên đầu màn hình hoặc trong Cài đặt. Khi chưa ghép nối thì app chỉ khoá mở phòng mạng (vẫn chống “kết nối ảo”), không che mất ứng dụng.
+2. **Đăng nhập / Đăng ký tài khoản ngay trong app (không còn lệ thuộc trình duyệt Google trên giả lập):**
+   - Thêm khung **Đăng nhập** và **Đăng ký** bằng **Tên tài khoản hoặc Email + Mật khẩu (≥ 6 ký tự)** ngay trong màn Ghép nối, kèm nút **Dùng ngay trên máy này (tạo mã tức thì)** và vẫn giữ nút Google/Facebook.
+   - Nếu Supabase chưa bật xác nhận hoặc chưa chạy SQL, tài khoản vẫn tạo phiên ổn định từ đúng email + mật khẩu để cùng một tài khoản luôn ra **đúng một mã cố định 6 ký tự** trên mọi máy.
+3. **Kết nối hai chiều bằng mã cố định 6 ký tự chạy được ngay cả khi chưa chạy `002_pairing.sql`:**
+   - Khi hàm RPC `ensure_profile` / `pair_with_code` trên Supabase chưa được tạo hoặc lỗi mạng, app tự suy **mã cố định 6 ký tự** từ tài khoản (`shortCodeFromUid`) và tạo **khoá phòng đối xứng** (`pairSecretFromCodes(mã_A, mã_B)`), đồng thời lắng nghe trên kênh hộp thư lời mời của mã mình (`inviteSecretForCode`).
+   - Máy A chỉ cần nhập mã 6 ký tự của máy B (hoặc ngược lại) → máy A gửi gói lời mời `pair.invite` → máy B tự nhận người thương và tự nhảy sang cùng phòng kết nối hai chiều. Nút **Ngắt kết nối (cả hai máy)** gửi `pair.unpair` để cả hai máy cùng rời phòng.
+   - Sửa thêm bộ lọc `RelayClient.handle` trong `relayProtocol.mjs` để không làm rơi gói `typing`, `reaction`, `unsend`, `profile`, `read`, `chatAck`, `pair.invite`, `pair.unpair`.
+
+**141/141 bài kiểm thử xanh**, `tsc` sạch, Prettier sạch. **Chưa thử trực tiếp trên LDPlayer của bạn nên chưa khẳng định 100% đã hết lỗi** — hãy cài đè bản 1.18.2 (không gỡ app) và kiểm tra đủ 5 tab + Theme + ghép nối hai máy.
+
+## Mật Mã Yêu 1.18.1 (bản trước) — bản sạch mã nguồn sau tổng vệ sinh
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.1-test-e6d5cb6/MatMaYeu-1.18.1.apk · **78.669.445 byte** (kèm file kiểm tra `MatMaYeu-1.18.1.apk.sha256` trong Assets)
 **APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.1-test-e6d5cb6/MatMaYeu-1.18.1-arm64.apk · **56.273.194 byte** (kèm file `MatMaYeu-1.18.1-arm64.sha256`)

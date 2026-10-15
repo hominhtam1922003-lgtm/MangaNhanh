@@ -5,10 +5,10 @@ import { WebSocket } from "ws";
 import {
   BROKERS,
   RelayClient,
-  createRoom,
+  buildRelayPayload,
 } from "../src/services/relayProtocol.mjs";
+import { createRoom } from "../tests/helpers/rooms.mjs";
 import { emptyState, reduce } from "../src/logic/localState.mjs";
-import { buildRelayPayload } from "../src/services/relayProtocol.mjs";
 
 globalThis.WebSocket = WebSocket;
 const wait = (milliseconds) =>

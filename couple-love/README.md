@@ -24,7 +24,18 @@ Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo
 - **Không dùng `TextEncoder`/`TextDecoder` hay `crypto.getRandomValues`** (React Native không cấp): phần chuyển chữ ↔ byte được tự viết trong `relayProtocol.mjs` (đối chiếu từng byte với chuẩn UTF-8 của Node trong `tests/relay.test.mjs`, có bài chạy khi đã xóa hai lớp đó) và nguồn ngẫu nhiên an toàn lấy từ `expo-crypto` qua `installRandomBytes`. Mọi lỗi JavaScript được ghi vào **“Lỗi gần nhất”** trong Cài đặt thay vì làm văng app.
 - Giới hạn thật: cần Internet ở **cả hai** máy; dữ liệu mới chỉ sang nhau khi hai bên cùng mở app (một bên đóng app thì lần mở sau gửi bù); muốn ghép nối phải **đăng nhập tài khoản** (Google/Facebook hoặc Anonymous nếu bạn bật trong dự án) và **Ngắt kết nối** nằm trong Cài đặt khi cần đổi người thương.
 
-### Có gì mới ở 1.18.1 — bản sạch mã nguồn (không thêm tính năng)
+### Có gì mới ở 1.18.2 — khôi phục đủ 5 tab + Theme, đăng nhập tài khoản trong app, mã cố định hai chiều không kẹt SQL
+
+**Tải APK 1.18.2 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.2-test-56303e4/MatMaYeu-1.18.2.apk · 78.685.217 byte. **Bản nhẹ (chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.2-test-56303e4/MatMaYeu-1.18.2-arm64.apk · 56.288.966 byte. **iOS (.ipa chưa ký):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.2-test-56303e4/MatMaYeu-1.18.2-unsigned.ipa · 17.182.615 byte. Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.2, bản dựng 22**. Bản này dựng từ `56303e4cdca4cc3f51c026cf4f0d9636c95824af` (APK build `38669023110`, iOS build `38669022958`).
+
+- **Khôi phục đầy đủ 5 tab dưới đáy (`Yêu nhau`, `Tin nhắn`, `Chăm sóc`, `Nhật ký`, `Cài đặt`), Chủ đề (Theme) và Ảnh nền:** bỏ việc tự đẩy sang `CloudApp` 1.0 cũ và bỏ màn chắn toàn màn hình trước `LocalShell`. Nút **🔗 Ghép nối** nằm ngay trên thanh đầu trang; khi chưa ghép nối thì app chỉ khoá mở phòng mạng (chống kết nối ảo), mọi tính năng trong máy dùng bình thường.
+- **Đăng nhập / Đăng ký tài khoản ngay trong app:** nhập **Tên tài khoản hoặc Email + Mật khẩu** trực tiếp trong màn Ghép nối (không cần mở trình duyệt Google trên LDPlayer), hoặc bấm **Dùng ngay trên máy này** để có mã cố định tức thì.
+- **Kết nối hai chiều bằng mã cố định 6 ký tự không còn kẹt khi chưa chạy SQL:** tự suy mã 6 ký tự cố định từ tài khoản (`shortCodeFromUid`) và khoá phòng đối xứng (`pairSecretFromCodes`) + kênh lời mời trực tiếp (`inviteSecretForCode` / `pair.invite` / `pair.unpair`), nên một bên nhập mã của bên kia là cả hai máy tự vào chung phòng ngay cả khi máy chủ Supabase chưa chạy `002_pairing.sql`.
+- **Sửa bộ lọc gói tin `RelayClient.handle`:** cho phép đầy đủ `typing`, `reaction`, `unsend`, `profile`, `read`, `chatAck`, `pair.invite`, `pair.unpair`.
+
+**141/141 bài kiểm thử xanh**, `tsc` sạch, Prettier sạch. **Chưa thử trên LDPlayer của bạn nên chưa dám nói là đã hết lỗi** — hãy cài đè lên 1.18.1 (không gỡ app), rồi kiểm tra Cài đặt hiện đúng “1.18.2, bản dựng 22”.
+
+### Có gì mới ở 1.18.1 (bản trước) — bản sạch mã nguồn (không thêm tính năng)
 
 **Tải APK 1.18.1 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.1-test-e6d5cb6/MatMaYeu-1.18.1.apk · 78.669.445 byte. **Bản nhẹ (chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.1-test-e6d5cb6/MatMaYeu-1.18.1-arm64.apk · 56.273.194 byte. **iOS (.ipa chưa ký):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.1-test-e6d5cb6/MatMaYeu-1.18.1-unsigned.ipa · 17.170.132 byte. Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.1, bản dựng 21**. Bản này dựng từ `e6d5cb60c023f47e772949c080be916bf9788102` (APK build `38660107385`, iOS build `38660107403`).
 

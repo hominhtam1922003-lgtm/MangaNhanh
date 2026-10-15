@@ -269,7 +269,19 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Mật Mã Yêu 1.18.6 (bản mới nhất) — bật triệt để bộ lọc phần cứng chống vang/chống ồn (AEC, NS, AGC, `goog*`) & giải phóng sạch track âm thanh khi ngắt cuộc gọi
+## Mật Mã Yêu 1.18.7 (bản mới nhất) — nâng cấp Chống ồn Adaptive Filter & SDP thích ứng, Flat Call UI + Gọi Video + Loa ngoài/Camera và Chủ đề phong cách Messenger
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.7-test-c2654bf/MatMaYeu-1.18.7.apk · **78.704.125 byte** (kèm file kiểm tra `MatMaYeu-1.18.7.apk.sha256` trong Assets)
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.7-test-c2654bf/MatMaYeu-1.18.7-arm64.apk · **56.307.874 byte** (kèm file `MatMaYeu-1.18.7-arm64.sha256`)
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.7-test-c2654bf/MatMaYeu-1.18.7-unsigned.ipa · **17.195.140 byte** (kèm file `MatMaYeu-1.18.7-unsigned.ipa.sha256`)
+
+Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.7, bản dựng 27**. Dựng từ `c2654bfabc34ab9af826b51b03160d02c3d3dba7` (APK build `38690194514`; iOS build `38690194596`). **Cài đè lên 1.18.6 / 1.18.5 được, không mất dữ liệu.**
+
+- **Chống ồn thông minh & Tối ưu băng thông SDP (`src/logic/rtcSignal.mjs`, `src/services/rtcCall.ts`):** Bật bộ lọc phần cứng kết hợp Adaptive Filter (`echoCancellation`, `noiseSuppression`, `autoGainControl`, `googHighpassFilter`, `googEchoCancellation2`, `googDAEchoCancellation`, `googNoiseSuppression2`, `googAutoGainControl2`), tinh chỉnh SDP (`tuneAdaptiveSdp` cho Opus FEC + bitrate thích ứng `b=AS:380` / `x-google-*-bitrate` và `RTCRtpSender.setParameters`) trên mạng 4G và khi chuyển qua lại cổng TURN 80/443 của Metered.ca.
+- **Giao diện Cuộc gọi phẳng (Flat Call UI) & Gọi Video (`src/screens/local/CallLocal.tsx`, `ChatLocal.tsx`, `HomeLocal.tsx`):** Gỡ bỏ hiệu ứng 3D nặng trong cuộc gọi, thêm nút **Gọi Video (`📹 Video`)** cạnh **Gọi thoại (`📞 Gọi`)** ở cả màn Chat và Trang chủ, hiển thị khung hình `RTCView`, đồng hồ `00:16` và thanh công cụ gồm **Tắt/Bật Micro**, **Loa ngoài (Speakerphone)**, **Kết thúc cuộc gọi** (nút đỏ ở giữa) và **Bật/Tắt Camera**.
+- **Hệ thống Chủ đề phong cách Messenger (`src/logic/themes.mjs`, `MessageRow.tsx`, `ChatLocal.tsx`, `SettingsLocal.tsx`):** Bổ sung thanh chọn nhanh chủ đề ngay trong màn Chat & Cài đặt (*Hồng ngọt ngào*, *Nâu trà sữa*, *Xanh mộng mơ*, *Tím mộng mơ*, *Trà xanh Matcha*, *Đào kem*, *Hoàng hôn ấm*, *Đêm ngân hà*...), đồng bộ màu sắc bóng chat, khung nhập liệu và toàn bộ giao diện.
+
+## Mật Mã Yêu 1.18.6 (bản trước) — bật triệt để bộ lọc phần cứng chống vang/chống ồn (AEC, NS, AGC, `goog*`) & giải phóng sạch track âm thanh khi ngắt cuộc gọi
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.6-test-990309d/MatMaYeu-1.18.6.apk · **78.691.033 byte** (kèm file kiểm tra `MatMaYeu-1.18.6.apk.sha256` trong Assets)
 **APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.6-test-990309d/MatMaYeu-1.18.6-arm64.apk · **56.294.782 byte** (kèm file `MatMaYeu-1.18.6-arm64.sha256`)

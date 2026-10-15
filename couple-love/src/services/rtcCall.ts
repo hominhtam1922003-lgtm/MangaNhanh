@@ -26,6 +26,7 @@ import {
   RTC_PEER_MS,
   RTC_STATS_MS,
   RTC_TRY_MS,
+  RTC_TURN_SERVERS,
   hasSignal,
   rememberSignal,
   rtcAudioIsDead,
@@ -137,6 +138,24 @@ export function isEmulatorLoopbackHost(candidateText: string): boolean {
   );
 }
 
+/**
+ * Ưu tiên cụm STUN Google/Cloudflare + máy chủ TURN riêng `couple-love.metered.live`
+ * để `libwebrtc` cấp phát thẳng địa chỉ `typ relay` trên TURN riêng mà không bị
+ * kẹt chờ các máy chủ TURN công cộng miễn phí đã quá tải/ngừng hoạt động.
+ */
+function primaryIceServers() {
+  const ownTurn = RTC_TURN_SERVERS.filter((server) => {
+    const list = Array.isArray(server.urls) ? server.urls : [server.urls];
+    return list.some((url) => String(url).includes("couple-love.metered.live"));
+  });
+  if (!ownTurn.length) return RTC_ICE_SERVERS;
+  const stuns = RTC_ICE_SERVERS.filter((server) => {
+    const list = Array.isArray(server.urls) ? server.urls : [server.urls];
+    return list.every((url) => String(url).startsWith("stun:"));
+  });
+  return [...stuns, ...ownTurn];
+}
+
 /** Máy có sẵn WebRTC không (dùng cho màn hình Cài đặt và nhật ký kết nối). */
 export function rtcSupport(): { ok: boolean; detail: string } {
   const rtc = loadNative();
@@ -179,6 +198,7 @@ export class RtcCall {
   private dropTimer: ReturnType<typeof setTimeout> | null = null;
   private watchdog: ReturnType<typeof setTimeout> | null = null;
   private offerRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private candidateSyncTimer: ReturnType<typeof setTimeout> | null = null;
   private peerTimer: ReturnType<typeof setTimeout> | null = null;
   private statsTimer: ReturnType<typeof setInterval> | null = null;
   /** Mức tiếng nói đã làm mượt + mốc byte lần trước (cho trái tim đập). */
@@ -242,10 +262,9 @@ export class RtcCall {
     if (this.closed) return;
     this.statsTimer = setInterval(() => void this.pollStats(), RTC_STATS_MS);
     // Mở ngay kết nối WebRTC + cụm TURN riêng (couple-love.metered.live) qua kênh
-    // ghép nối đã thông sẵn (không chờ 2,5 giây ở PeerJS làm lệch nhịp hai máy),
-    // đồng thời mở thêm PeerJS song song để đường nào thông trước thì lấy ngay.
+    // ghép nối đã thông sẵn; KHÔNG mở PeerJS cùng lúc để tránh 2 RTCPeerConnection
+    // tranh nhau micro và cổng TURN trên cùng máy Android.
     await this.nativeStage(false);
-    if (!this.closed && !this.live) void this.peerStage();
   }
 
   private async openMic(): Promise<boolean> {
@@ -395,7 +414,20 @@ export class RtcCall {
       clearTimeout(this.offerRetryTimer);
       this.offerRetryTimer = null;
     }
+    if (this.candidateSyncTimer) {
+      clearTimeout(this.candidateSyncTimer);
+      this.candidateSyncTimer = null;
+    }
     if (engine === "WebRTC") this.stopPeer();
+    else if (this.pc) {
+      try {
+        this.pc.onicecandidate = null;
+        this.pc.onconnectionstatechange = null;
+        this.pc.oniceconnectionstatechange = null;
+        this.pc.close?.();
+      } catch {}
+      this.pc = null;
+    }
     this.report("live", `Tiếng nét trực tiếp (${engine})`);
     this.finishPeerWait();
   }
@@ -437,16 +469,17 @@ export class RtcCall {
     this.lastOfferSdp = "";
     this.lastAnswerSdp = "";
     const relayOnly = "relay" as const;
+    const iceServers = primaryIceServers();
     const config = forceRelay
       ? {
-          iceServers: RTC_ICE_SERVERS,
+          iceServers,
           iceTransportPolicy: relayOnly,
           iceCandidatePoolSize: 6,
           bundlePolicy: "max-bundle",
           rtcpMuxPolicy: "require",
         }
       : {
-          iceServers: RTC_ICE_SERVERS,
+          iceServers,
           // Ưu tiên P2P: chỉ nhờ máy chủ trung chuyển khi không nối thẳng được.
           iceTransportPolicy: ICE_POLICY,
           // Giữ sẵn vài địa chỉ: mạng 4G đổi trạm hoặc Wi-Fi ↔ 4G thì có sẵn đường
@@ -468,15 +501,15 @@ export class RtcCall {
         sdpMLineIndex: candidate.sdpMLineIndex ?? null,
       };
       if (this.localCandidates.length < 32) this.localCandidates.push(item);
-      // Mỗi địa chỉ mạng gửi hai lần: kênh công cộng thỉnh thoảng mất gói mà
-      // thiếu địa chỉ thì không nối được.
+      // Gửi từng địa chỉ 1 lần lúc thu thập (tránh dồn hàng chục gói làm nghẽn
+      // MQTT), các địa chỉ TURN/STUN quan trọng sẽ được đồng bộ nhắc sau 1,2 giây.
       this.sendSignal(
         "ice",
         {
           round: this.round,
           candidate: item,
         },
-        1,
+        0,
       );
     };
     pc.onconnectionstatechange = () => this.readConnection();
@@ -496,6 +529,27 @@ export class RtcCall {
     this.watchdog = setTimeout(
       () => {
         if (this.live || this.closed) return;
+        const iceState = String(this.pc?.iceConnectionState ?? "");
+        const connState = String(this.pc?.connectionState ?? "");
+        // Đang trong bước bắt tay DTLS/ICE ("checking" / "connecting") thì cho
+        // thêm 3 giây để hoàn tất thay vì cắt ngang làm đứt kết nối sắp thành.
+        if (
+          !this.forcedRelay &&
+          (iceState === "checking" || connState === "connecting")
+        ) {
+          this.forcedRelay = true;
+          this.resendLocalCandidates();
+          this.watchdog = setTimeout(() => {
+            if (this.live || this.closed) return;
+            this.round += 1;
+            this.report(
+              "trying",
+              "Đang nối qua máy chủ trung chuyển TURN riêng…",
+            );
+            void this.nativeStage(true);
+          }, 3000);
+          return;
+        }
         if (!this.forcedRelay) {
           this.forcedRelay = true;
           this.round += 1;
@@ -506,6 +560,7 @@ export class RtcCall {
           void this.nativeStage(true);
           return;
         }
+        void this.peerStage();
         this.report(
           "failed",
           "Chưa nối trực tiếp được, tiếng đang đi qua kênh ghép nối.",
@@ -513,6 +568,7 @@ export class RtcCall {
       },
       forceRelay ? RTC_TRY_MS + 2500 : RTC_TRY_MS,
     );
+    this.scheduleCandidateSync();
     // Tín hiệu của máy kia tới sớm (máy kia đang chạy bản cũ) thì áp dụng ngay.
     const early = this.early.splice(0);
     for (const message of early) void this.handle(message);
@@ -555,9 +611,28 @@ export class RtcCall {
   }
 
   private resendLocalCandidates() {
-    for (const candidate of this.localCandidates.slice(0, 12)) {
+    // Ưu tiên gửi lại địa chỉ TURN (typ relay) và STUN (typ srflx) trước.
+    const sorted = [...this.localCandidates].sort((a, b) => {
+      const score = (text: string) =>
+        /\btyp\s+relay\b/i.test(text)
+          ? 0
+          : /\btyp\s+srflx\b/i.test(text)
+            ? 1
+            : 2;
+      return score(a.candidate) - score(b.candidate);
+    });
+    for (const candidate of sorted.slice(0, 10)) {
       this.sendSignal("ice", { round: this.round, candidate }, 0);
     }
+  }
+
+  private scheduleCandidateSync() {
+    if (this.candidateSyncTimer) clearTimeout(this.candidateSyncTimer);
+    if (this.closed || this.live) return;
+    this.candidateSyncTimer = setTimeout(() => {
+      if (this.closed || this.live || !this.pc) return;
+      this.resendLocalCandidates();
+    }, 1300);
   }
 
   private readConnection() {
@@ -710,7 +785,6 @@ export class RtcCall {
       }
       return;
     }
-    this.seen = rememberSignal(this.seen, sid);
     try {
       if (sub === "offer") {
         const sdp = String(message.sdp ?? "");
@@ -723,6 +797,7 @@ export class RtcCall {
             sdp,
           }),
         );
+        this.seen = rememberSignal(this.seen, sid);
         await this.flushPending();
         if (this.mic) {
           const answer = await this.pc.createAnswer();
@@ -748,6 +823,7 @@ export class RtcCall {
             sdp: String(message.sdp ?? ""),
           }),
         );
+        this.seen = rememberSignal(this.seen, sid);
         await this.flushPending();
         this.resendLocalCandidates();
         return;
@@ -760,6 +836,7 @@ export class RtcCall {
         const ice = new (
           loadNative()!.RTCIceCandidate as new (value: unknown) => any
         )(candidate);
+        this.seen = rememberSignal(this.seen, sid);
         // Chưa có mô tả của máy kia thì giữ lại, thêm sau (nếu không sẽ lỗi).
         if (!this.pc.remoteDescription) {
           this.pending.push(ice);
@@ -769,6 +846,7 @@ export class RtcCall {
         return;
       }
       if (sub === "bye") {
+        this.seen = rememberSignal(this.seen, sid);
         this.fail("Người thương đã chuyển sang đường tiếng khác.");
       }
     } catch {}
@@ -814,6 +892,10 @@ export class RtcCall {
     if (this.offerRetryTimer) {
       clearTimeout(this.offerRetryTimer);
       this.offerRetryTimer = null;
+    }
+    if (this.candidateSyncTimer) {
+      clearTimeout(this.candidateSyncTimer);
+      this.candidateSyncTimer = null;
     }
     if (this.dropTimer) {
       clearTimeout(this.dropTimer);

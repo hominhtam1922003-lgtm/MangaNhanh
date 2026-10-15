@@ -457,4 +457,14 @@ test("1.18.3: cuộc gọi WebRTC + TURN riêng không còn khoá chết await t
     /this\.lastAnswerSdp/,
     "gửi lại answer khi gói trả lời bị rớt trên MQTT",
   );
+  assert.match(
+    app,
+    /if \(callRef\.current && callRef\.current\.id === callId\) \{\s*return;\s*\}/,
+    "1.18.4: gói ring gửi nhắc cùng callId không tự bắn reject làm cuộc gọi ngắt sau 3-5 giây",
+  );
+  assert.match(
+    rtcCallSource,
+    /primaryIceServers/,
+    "1.18.4: ưu tiên cụm TURN riêng couple-love.metered.live + STUN Google",
+  );
 });

@@ -4,8 +4,8 @@
 export const CALL_RING_TIMEOUT_MS = 45 * 1000;
 /** Hai bên gửi nhịp "còn đây" cách nhau từng này; quá lâu không thấy thì tự kết
  *  thúc — máy A tắt thì máy B cũng tắt theo, không còn cảnh treo cuộc gọi. */
-export const CALL_ALIVE_MS = 1500;
-export const CALL_SILENT_END_MS = 5000;
+export const CALL_ALIVE_MS = 1000;
+export const CALL_SILENT_END_MS = 6000;
 export function newCall({ id, role, name, at = Date.now() }) {
   if (!id) throw new Error("Cuộc gọi thiếu mã.");
   return {
@@ -28,21 +28,27 @@ export function callEvent(call, event, now = Date.now()) {
   const type = String(event?.type ?? "");
   // Nhịp "còn đây" của máy kia — cập nhật mốc để biết máy kia còn trong cuộc gọi.
   if (type === "alive") return { ...call, lastSeen: now };
-  if (type === "accept" && call.phase === "ringing")
-    return {
-      ...call,
-      phase: "active",
-      startedAt: now,
-      minimized: false,
-      lastSeen: now,
-    };
-  if (type === "reject")
+  if (type === "accept") {
+    if (call.phase === "ringing")
+      return {
+        ...call,
+        phase: "active",
+        startedAt: now,
+        minimized: false,
+        lastSeen: now,
+      };
+    if (call.phase === "active") return { ...call, lastSeen: now };
+    return call;
+  }
+  if (type === "reject") {
+    if (call.phase === "active") return call;
     return {
       ...call,
       phase: "ended",
       endedAt: now,
       reason: "Người thương đang bận",
     };
+  }
   if (type === "hangup")
     return {
       ...call,

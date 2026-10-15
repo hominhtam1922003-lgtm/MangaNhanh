@@ -658,6 +658,15 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       [250, 500].forEach((delay) =>
         setTimeout(() => relayRef.current?.publish(packet), delay),
       );
+      if (event.type === "accept") {
+        lastAliveSentRef.current = Date.now();
+        client?.publish({
+          kind: "call",
+          event: "alive",
+          callId: active.id,
+          name,
+        });
+      }
     }
     if (event.type === "mic") rtcRef.current?.setMic(Boolean(event.on));
     if (
@@ -1348,14 +1357,11 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             stateRef.current?.partner?.nickname ||
             "Người thương";
           if (event === "ring") {
-            const busy = callRef.current && callRef.current.phase !== "ended";
-            if (busy) {
-              relayRef.current?.publish({
-                kind: "call",
-                event: "reject",
-                callId,
-                name: stateRef.current?.me.nickname ?? "",
-              });
+            // Gói "ring" gửi nhắc (sau 350 ms hoặc qua nhiều trạm MQTT) của
+            // CHÍNH cuộc gọi đang mở: bỏ qua ngay, tuyệt đối không gửi "reject"
+            // ngược lại làm máy gọi tự ngắt ("người thương đang bận") rồi máy
+            // nghe tự ngắt sau vài giây vì mất nhịp sống.
+            if (callRef.current && callRef.current.id === callId) {
               return;
             }
             closeRtc();
@@ -1379,14 +1385,18 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             if (active.phase === "ended") return;
             if (active.phase === "ringing" && active.role === "caller") {
               applyCall(callEvent(active, { type: "accept" }));
+            } else if (active.phase === "active") {
+              applyCall(callEvent(active, { type: "alive" }));
             }
-            const controller = rtcRef.current ?? ensureRtc(active);
+            const currentCall = callRef.current ?? active;
+            const controller = rtcRef.current ?? ensureRtc(currentCall);
             void controller?.handle(message);
             return;
           }
           if (event === "audio") {
             // Tiếng nói của người thương: lưu ra tệp rồi xếp hàng cho loa phát.
             if (active.phase !== "active") return;
+            applyCall(callEvent(active, { type: "alive" }));
             const data = String(message.data ?? "");
             const seq = Number(message.seq);
             if (!data || !Number.isFinite(seq)) return;
@@ -1408,9 +1418,16 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               applyCall(callEvent(active, { type: "alive" }));
             return;
           }
-          if (event === "accept")
+          if (event === "accept") {
             applyCall(callEvent(active, { type: "accept" }));
-          else if (event === "reject")
+            lastAliveSentRef.current = Date.now();
+            relayRef.current?.publish({
+              kind: "call",
+              event: "alive",
+              callId: active.id,
+              name: stateRef.current?.me.nickname ?? "",
+            });
+          } else if (event === "reject")
             applyCall(callEvent(active, { type: "reject" }));
           else if (event === "hangup")
             applyCall(callEvent(active, { type: "hangup" }));
@@ -1876,9 +1893,14 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             name: stateRef.current?.me.nickname ?? "",
           });
         }
-        if (rtcLiveRef.current) {
-          // WebRTC cho biết máy kia còn sống qua chính luồng tiếng; không chờ
-          // nhịp qua kênh ghép nối nữa (kênh mất gói là mình tưởng máy kia tắt).
+        if (
+          rtcLiveRef.current ||
+          (rtcRef.current?.currentState() === "trying" &&
+            now - (active.startedAt || active.at) < 10000)
+        ) {
+          // WebRTC cho biết máy kia còn sống qua chính luồng tiếng (hoặc đang
+          // bắt tay TURN trong 10 giây đầu); không chờ nhịp qua kênh ghép nối
+          // nữa (kênh mất gói là mình tưởng máy kia tắt).
           applyCall(callEvent(active, { type: "alive" }, now));
         } else if (callTimedOut(active, now)) {
           applyCall(callEvent(active, { type: "lost" }, now));

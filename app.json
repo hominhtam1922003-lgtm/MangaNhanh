@@ -33,6 +33,9 @@
           "microphonePermission": false
         }
       ]
-    ]
+    ],
+    "splash": {
+      "backgroundColor": "#0c0e12"
+    }
   }
 }

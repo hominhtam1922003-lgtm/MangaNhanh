@@ -269,7 +269,26 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Mật Mã Yêu 1.18.0 (bản mới nhất) — ghép nối theo tài khoản, hết “kết nối ảo”
+## Mật Mã Yêu 1.18.1 (bản mới nhất) — bản sạch mã nguồn sau tổng vệ sinh
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.1-test-e6d5cb6/MatMaYeu-1.18.1.apk · **78.669.445 byte** (kèm file kiểm tra `MatMaYeu-1.18.1.apk.sha256` trong Assets)
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.1-test-e6d5cb6/MatMaYeu-1.18.1-arm64.apk · **56.273.194 byte** (kèm file `MatMaYeu-1.18.1-arm64.sha256`)
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.1-test-e6d5cb6/MatMaYeu-1.18.1-unsigned.ipa · **17.170.132 byte** (kèm file `MatMaYeu-1.18.1-unsigned.ipa.sha256`)
+
+Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.1, bản dựng 21**. Dựng từ `e6d5cb60c023f47e772949c080be916bf9788102` (APK build `38660107385`; iOS build `38660107403`). **Cài đè lên 1.18.0 được, không mất dữ liệu** (gói `vn.haitraitim.app`, slug và khoá ký giữ nguyên). **Không gỡ app** nếu chưa chấp nhận mất dữ liệu.
+
+**Tính năng y hệt 1.18.0 — bản này chỉ dọn mã nguồn:**
+
+- **Xoá code chết:** giao thức mã 6 số/QR cũ (`createRoom`, `roomFromCode`, `makeCode`, `roomToQr`, `roomFromQr`, `codePattern`), hàm dựng phòng từ bộ nhớ máy `roomFromState` (nguồn của lỗi “kết nối ảo”), `lastMessageTimes`, `callStatusText`, `isCallPhase`, `PHASES`, `sameDay`, `randomBytesProblem`, `relayServiceNotificationId`, `getCurrentUser`, kiểu `RelayStatus`, và cả tệp `src/screens/local/MoodLocal.tsx` (125 dòng, không còn đường tới).
+- **Bỏ gói thừa:** gỡ `aedes-server-factory` (npm gỡ theo 5 gói phụ thuộc). Vẫn **giữ** `nativewind` / `tailwindcss` / `babel-preset-expo` / `react-native-worklets` / `expo-system-ui` / `expo-asset` / `expo-splash-screen` / `react-native-svg` vì chúng là cấu hình babel/metro, plugin hay gói ngang hàng — gỡ là vỡ build.
+- **Tách tệp dài:** `App.tsx` 3589 → 3184 dòng (`screens/CloudApp.tsx`, `screens/ModeChooser.tsx`, `components/LockScreen.tsx`); `src/screens/local/ChatLocal.tsx` 1728 → 1217 dòng (`components/MessageRow.tsx`, `components/SwipeRow.tsx`); `relayProtocol.mjs` 876 → 799 dòng.
+- **Rà vòng đời:** mọi `setInterval` / `addEventListener` / kênh Supabase MQTT-Realtime đều có hàm dọn; thêm `clearTimeout` cho hẹn “đã đọc” trong ChatLocal. CI có bước kiểm tra mỗi `setInterval` phải có `clearInterval`.
+- **Bộ nhớ/APK gần như không đổi:** bundle JS −1.526 byte, APK −752 byte. Code chết vốn đã bị tree-shake, nên **không nhận là “giải phóng bộ nhớ”** — lợi ích thật là mã dễ đọc/sửa, hết rò rỉ hẹn giờ và bộ kiểm thử bám đúng tệp mới.
+- **Không đổi gì về ghép nối:** vẫn phải làm **3 bước Supabase** (chạy `002_pairing.sql`, bật Google/Facebook, thêm Redirect URL `haitraitim://auth-callback`) như mục 1.18.0 bên dưới. Máy ảo LDPlayer cũng phải bật mạng.
+
+**140/140 bài kiểm thử xanh**, `tsc` sạch, Prettier sạch, `expo export` chạy được, workflow CI tự đọc phiên bản từ `app.config.js` để đặt tên APK (lần sau tăng bản chỉ sửa một chỗ). **Vẫn chưa thử trên LDPlayer của bạn nên chưa dám nói là đã hết mọi lỗi** — bạn cài đè lên 1.18.0 rồi kiểm tra: mở Cài đặt xem đúng “1.18.1, bản dựng 21”, tin nhắn/cuộc gọi như cũ, và tình trạng “kết nối ảo” đã hết chưa.
+
+## Mật Mã Yêu 1.18.0 (bản trước) — ghép nối theo tài khoản, hết “kết nối ảo”
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.0-test-d313f4b/MatMaYeu-1.18.0.apk · **78.670.197 byte** (kèm file kiểm tra `MatMaYeu-1.18.0.apk.sha256` trong Assets)
 **APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.0-test-d313f4b/MatMaYeu-1.18.0-arm64.apk · **56.273.946 byte** (kèm file `MatMaYeu-1.18.0-arm64.sha256`)

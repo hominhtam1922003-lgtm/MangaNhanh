@@ -24,7 +24,22 @@ Không có máy chủ nào được nhúng sẵn trong APK và tôi không tạo
 - **Không dùng `TextEncoder`/`TextDecoder` hay `crypto.getRandomValues`** (React Native không cấp): phần chuyển chữ ↔ byte được tự viết trong `relayProtocol.mjs` (đối chiếu từng byte với chuẩn UTF-8 của Node trong `tests/relay.test.mjs`, có bài chạy khi đã xóa hai lớp đó) và nguồn ngẫu nhiên an toàn lấy từ `expo-crypto` qua `installRandomBytes`. Mọi lỗi JavaScript được ghi vào **“Lỗi gần nhất”** trong Cài đặt thay vì làm văng app.
 - Giới hạn thật: cần Internet ở **cả hai** máy; dữ liệu mới chỉ sang nhau khi hai bên cùng mở app (một bên đóng app thì lần mở sau gửi bù); muốn ghép nối phải **đăng nhập tài khoản** (Google/Facebook hoặc Anonymous nếu bạn bật trong dự án) và **Ngắt kết nối** nằm trong Cài đặt khi cần đổi người thương.
 
-### Có gì mới ở 1.18.0 — ghép nối theo tài khoản, hết “kết nối ảo”
+### Có gì mới ở 1.18.1 — bản sạch mã nguồn (không thêm tính năng)
+
+**Tải APK 1.18.1 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.1-test-e6d5cb6/MatMaYeu-1.18.1.apk · 78.669.445 byte. **Bản nhẹ (chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.1-test-e6d5cb6/MatMaYeu-1.18.1-arm64.apk · 56.273.194 byte. **iOS (.ipa chưa ký):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.1-test-e6d5cb6/MatMaYeu-1.18.1-unsigned.ipa · 17.170.132 byte. Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.1, bản dựng 21**. Bản này dựng từ `e6d5cb60c023f47e772949c080be916bf9788102` (APK build `38660107385`, iOS build `38660107403`).
+
+Bản 1.18.1 **giữ nguyên hành vi của 1.18.0**, chỉ dọn lại mã nguồn:
+
+- **Xoá code chết:** `createRoom`, `makeCode`, `roomFromCode`, `roomToQr`, `roomFromQr`, `codePattern` (giao thức mã 6 số/QR cũ), `roomFromState` (đường dựng phòng từ bộ nhớ máy — nguồn của “kết nối ảo”), `lastMessageTimes`, `callStatusText`, `isCallPhase`, `PHASES`, `sameDay`, `randomBytesProblem`, `relayServiceNotificationId`, `getCurrentUser`, kiểu `RelayStatus`; xoá tệp `src/screens/local/MoodLocal.tsx` (125 dòng, không còn đường tới).
+- **Bỏ gói thừa:** `aedes-server-factory` (npm gỡ theo 5 gói phụ thuộc). Các gói trông “không được import” nhưng **phải giữ**: `nativewind`, `tailwindcss`, `babel-preset-expo`, `react-native-worklets` (cấu hình babel/metro), `expo-system-ui`, `expo-asset` + `expo-splash-screen` (plugin), `react-native-svg` (gói ngang hàng của `react-native-qrcode-svg`).
+- **Tách tệp dài:** `App.tsx` 3589 → **3184** dòng (`src/screens/CloudApp.tsx` 359 dòng, `src/screens/ModeChooser.tsx` 53 dòng, `src/components/LockScreen.tsx` 30 dòng); `src/screens/local/ChatLocal.tsx` 1728 → **1217** dòng (`src/components/MessageRow.tsx` 451 dòng kèm `VoiceBubble`, `src/components/SwipeRow.tsx` 64 dòng); `src/services/relayProtocol.mjs` 876 → **799** dòng.
+- **Vòng đời:** mọi `setInterval` / `addEventListener` / kênh realtime đều có hàm dọn trong cùng `useEffect`; thêm `clearTimeout` cho hẹn “đã đọc” trong `ChatLocal`. Bước kiểm tra trong CI bắt buộc mỗi `setInterval` phải có `clearInterval`.
+- **Nói thẳng về dung lượng:** bundle JS chỉ giảm **1.526 byte**, APK giảm **752 byte** — code chết vốn đã bị tree-shake nên đây **không phải** bản “nhẹ hơn” đáng kể. Lợi ích thật: mã dễ đọc/sửa, hết rò rỉ hẹn giờ, kiểm thử bám đúng tệp mới.
+- **CI tự đọc phiên bản:** workflow APK lấy số phiên bản từ `app.config.js` để đặt tên tệp và tag Release, lần sau tăng bản chỉ sửa một chỗ.
+
+**140/140 bài kiểm thử xanh**, `tsc` sạch, Prettier sạch, `expo export` chạy được. **Chưa thử trên LDPlayer của bạn nên chưa dám nói là đã hết lỗi** — hãy cài đè lên 1.18.0 (không gỡ app), rồi kiểm tra Cài đặt hiện đúng “1.18.1, bản dựng 21”.
+
+### Có gì mới ở 1.18.0 (bản trước) — ghép nối theo tài khoản, hết “kết nối ảo”
 
 **Tải APK 1.18.0 (Android 7.0+, API 24):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.0-test-d313f4b/MatMaYeu-1.18.0.apk · 78.670.197 byte. **Bản nhẹ (chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.0-test-d313f4b/MatMaYeu-1.18.0-arm64.apk · 56.273.946 byte. **iOS (.ipa chưa ký):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.0-test-d313f4b/MatMaYeu-1.18.0-unsigned.ipa · 17.170.425 byte. Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.0, bản dựng 20**. Bản này dựng từ `d313f4b1488d63b8fd997c97056656506360f910`.
 

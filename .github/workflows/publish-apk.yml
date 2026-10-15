@@ -25,7 +25,11 @@ jobs:
         run: |
           mv apk/app-release.apk apk/PipeTube.apk
           gh release create pipetube-android-v1.0.0-48d9255 apk/PipeTube.apk \
-            --target 48d9255 \
+            --target 48d92555f7ee46f7f2409c5d0c018db69547f202 \
             --title "PipeTube Android 1.0.0 — bản cài thử" \
             --notes "Tải PipeTube.apk bên dưới và mở trên điện thoại Android để cài trực tiếp. Không cần giải nén. Bản thử nghiệm dùng debug signing; không dành để phát hành Google Play. APK lấy từ build thành công #38742183106." \
-            --prerelease
+            --prerelease 2> /tmp/publish-error || {
+              message=$(cat /tmp/publish-error)
+              echo "::error::$message"
+              exit 1
+            }

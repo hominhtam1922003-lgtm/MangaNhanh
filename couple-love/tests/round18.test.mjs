@@ -464,7 +464,17 @@ test("1.18.3: cuộc gọi WebRTC + TURN riêng không còn khoá chết await t
   );
   assert.match(
     rtcCallSource,
-    /primaryIceServers/,
-    "1.18.4: ưu tiên cụm TURN riêng couple-love.metered.live + STUN Google",
+    /stun:stun\.relay\.metered\.ca:80/,
+    "1.18.5: dùng đúng cấu hình STUN/TURN chính thức của Metered.ca",
+  );
+  assert.match(
+    rtcCallSource,
+    /turns:global\.relay\.metered\.ca:443\?transport=tcp/,
+    "1.18.5: có đủ 4 cổng TURN/TURNS global.relay.metered.ca",
+  );
+  assert.match(
+    rtcCallSource,
+    /nYuBOYJvrOiMo6IG/,
+    "1.18.5: đúng credential Metered.ca",
   );
 });

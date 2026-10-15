@@ -19,14 +19,13 @@
  */
 import {
   ICE_POLICY,
+  METERED_ICE_SERVERS,
   PEER_CLOUD,
   RTC_DROP_MS,
-  RTC_ICE_SERVERS,
   RTC_MEDIA,
   RTC_PEER_MS,
   RTC_STATS_MS,
   RTC_TRY_MS,
-  RTC_TURN_SERVERS,
   hasSignal,
   rememberSignal,
   rtcAudioIsDead,
@@ -139,21 +138,38 @@ export function isEmulatorLoopbackHost(candidateText: string): boolean {
 }
 
 /**
- * Ưu tiên cụm STUN Google/Cloudflare + máy chủ TURN riêng `couple-love.metered.live`
- * để `libwebrtc` cấp phát thẳng địa chỉ `typ relay` trên TURN riêng mà không bị
- * kẹt chờ các máy chủ TURN công cộng miễn phí đã quá tải/ngừng hoạt động.
+ * Cấu hình STUN/TURN chính thức của Metered.ca cho RTCPeerConnection.
  */
+const METERED_STANDARD_ICE_SERVERS = [
+  {
+    urls: "stun:stun.relay.metered.ca:80",
+  },
+  {
+    urls: "turn:global.relay.metered.ca:80",
+    username: "5cddad6cdc6b69bdedd42c87",
+    credential: "nYuBOYJvrOiMo6IG",
+  },
+  {
+    urls: "turn:global.relay.metered.ca:80?transport=tcp",
+    username: "5cddad6cdc6b69bdedd42c87",
+    credential: "nYuBOYJvrOiMo6IG",
+  },
+  {
+    urls: "turn:global.relay.metered.ca:443",
+    username: "5cddad6cdc6b69bdedd42c87",
+    credential: "nYuBOYJvrOiMo6IG",
+  },
+  {
+    urls: "turns:global.relay.metered.ca:443?transport=tcp",
+    username: "5cddad6cdc6b69bdedd42c87",
+    credential: "nYuBOYJvrOiMo6IG",
+  },
+];
+
 function primaryIceServers() {
-  const ownTurn = RTC_TURN_SERVERS.filter((server) => {
-    const list = Array.isArray(server.urls) ? server.urls : [server.urls];
-    return list.some((url) => String(url).includes("couple-love.metered.live"));
-  });
-  if (!ownTurn.length) return RTC_ICE_SERVERS;
-  const stuns = RTC_ICE_SERVERS.filter((server) => {
-    const list = Array.isArray(server.urls) ? server.urls : [server.urls];
-    return list.every((url) => String(url).startsWith("stun:"));
-  });
-  return [...stuns, ...ownTurn];
+  return METERED_STANDARD_ICE_SERVERS.length
+    ? METERED_STANDARD_ICE_SERVERS
+    : METERED_ICE_SERVERS;
 }
 
 /** Máy có sẵn WebRTC không (dùng cho màn hình Cài đặt và nhật ký kết nối). */
@@ -311,7 +327,7 @@ export class RtcCall {
         secure: PEER_CLOUD.secure,
         debug: 0,
         config: {
-          iceServers: RTC_ICE_SERVERS,
+          iceServers: primaryIceServers(),
           // Ưu tiên P2P: chỉ nhờ máy chủ trung chuyển khi không nối thẳng được.
           iceTransportPolicy: ICE_POLICY,
           sdpSemantics: "unified-plan",
@@ -469,7 +485,31 @@ export class RtcCall {
     this.lastOfferSdp = "";
     this.lastAnswerSdp = "";
     const relayOnly = "relay" as const;
-    const iceServers = primaryIceServers();
+    const iceServers = [
+      {
+        urls: "stun:stun.relay.metered.ca:80",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:80",
+        username: "5cddad6cdc6b69bdedd42c87",
+        credential: "nYuBOYJvrOiMo6IG",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:80?transport=tcp",
+        username: "5cddad6cdc6b69bdedd42c87",
+        credential: "nYuBOYJvrOiMo6IG",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:443",
+        username: "5cddad6cdc6b69bdedd42c87",
+        credential: "nYuBOYJvrOiMo6IG",
+      },
+      {
+        urls: "turns:global.relay.metered.ca:443?transport=tcp",
+        username: "5cddad6cdc6b69bdedd42c87",
+        credential: "nYuBOYJvrOiMo6IG",
+      },
+    ];
     const config = forceRelay
       ? {
           iceServers,

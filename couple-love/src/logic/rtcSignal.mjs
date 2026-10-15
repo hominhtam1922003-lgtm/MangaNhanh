@@ -76,6 +76,32 @@ function turnFromEnv() {
  * lúc nào — đó là lý do app vẫn còn hai lớp dự phòng phía sau, và lý do có sẵn
  * cách thay bằng máy chủ riêng ở trên.
  */
+export const METERED_ICE_SERVERS = [
+  {
+    urls: "stun:stun.relay.metered.ca:80",
+  },
+  {
+    urls: "turn:global.relay.metered.ca:80",
+    username: "5cddad6cdc6b69bdedd42c87",
+    credential: "nYuBOYJvrOiMo6IG",
+  },
+  {
+    urls: "turn:global.relay.metered.ca:80?transport=tcp",
+    username: "5cddad6cdc6b69bdedd42c87",
+    credential: "nYuBOYJvrOiMo6IG",
+  },
+  {
+    urls: "turn:global.relay.metered.ca:443",
+    username: "5cddad6cdc6b69bdedd42c87",
+    credential: "nYuBOYJvrOiMo6IG",
+  },
+  {
+    urls: "turns:global.relay.metered.ca:443?transport=tcp",
+    username: "5cddad6cdc6b69bdedd42c87",
+    credential: "nYuBOYJvrOiMo6IG",
+  },
+];
+
 export const RTC_TURN_SERVERS = [
   ...turnFromEnv(),
   // Máy chủ trung chuyển RIÊNG của bạn (Metered, gói "couple-love"): có cổng 80,
@@ -90,7 +116,7 @@ export const RTC_TURN_SERVERS = [
       "turn:couple-love.metered.live:443?transport=tcp",
     ],
     username: "5cddad6cdc6b69bdedd42c87",
-    credential: "nYUBQYjvrQIMo6lG",
+    credential: "nYuBOYJvrOiMo6IG",
   },
   {
     urls: ["turn:eu-0.turn.peerjs.com:3478", "turn:us-0.turn.peerjs.com:3478"],

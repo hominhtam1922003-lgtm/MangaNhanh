@@ -9,6 +9,11 @@ export declare const RTC_DEAD_MS: number;
 export declare const RTC_OPUS_BITRATE: number;
 export declare const RTC_PEER_MS: number;
 export declare const ICE_POLICY: string;
+export declare const METERED_ICE_SERVERS: Array<{
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}>;
 export declare const RTC_TURN_SERVERS: Array<{
   urls: string[];
   username: string;

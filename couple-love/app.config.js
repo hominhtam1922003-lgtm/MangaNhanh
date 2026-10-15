@@ -35,7 +35,7 @@ module.exports = {
   expo: {
     name: "Mật Mã Yêu",
     slug: "hai-trai-tim",
-    version: "1.18.4",
+    version: "1.18.5",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
@@ -59,9 +59,9 @@ module.exports = {
         // Thông báo tin nhắn trên Android 13+ (hệ thống vẫn hỏi người dùng).
         "android.permission.POST_NOTIFICATIONS",
       ],
-      // 1.18.4: sửa lỗi gói ring gửi lặp sau 350ms làm máy nghe tự bắn reject
-      // khiến cuộc gọi tự ngắt sau 3–5 giây + ưu tiên cụm TURN riêng.
-      versionCode: 24,
+      // 1.18.5: thay thế hoàn toàn iceServers bằng cấu hình TURN/STUN chuẩn
+      // chính thức của Metered.ca (global.relay.metered.ca + stun.relay.metered.ca).
+      versionCode: 25,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#fff1f2",

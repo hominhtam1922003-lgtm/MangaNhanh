@@ -269,7 +269,19 @@ Mã nguồn đầy đủ của app đếm ngày yêu **Android ↔ iOS** nằm t
 
 ### Tải APK thử nghiệm (Android 7.0+, API 24)
 
-## Mật Mã Yêu 1.18.7 (bản mới nhất) — nâng cấp Chống ồn Adaptive Filter & SDP thích ứng, Flat Call UI + Gọi Video + Loa ngoài/Camera và Chủ đề phong cách Messenger
+## Mật Mã Yêu 1.18.8 (bản mới nhất) — Nuôi Thú Cưng Ảo (Couple Pet phong cách Widgetable), thay tab Nhật ký/Chăm sóc bằng Thú Cưng, sửa triệt để Video Call & UI cuộc gọi đến
+
+**APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.8-test-7993d3b/MatMaYeu-1.18.8.apk (kèm file kiểm tra `MatMaYeu-1.18.8.apk.sha256` trong Assets)
+**APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.8-test-7993d3b/MatMaYeu-1.18.8-arm64.apk (kèm file `MatMaYeu-1.18.8-arm64.sha256`)
+**iPhone (`.ipa` chưa ký, ký lại bằng Apple ID miễn phí):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-ios-v1.18.8-test-7993d3b/MatMaYeu-1.18.8-unsigned.ipa (kèm file `MatMaYeu-1.18.8-unsigned.ipa.sha256`)
+
+Trong app mở **Cài đặt**, dòng cuối phải là **Mật Mã Yêu 1.18.8, bản dựng 28**. Dựng từ `7993d3b71302b080aa0c0873f17976b4fcaa9315` (APK build `38694665437`; iOS build `38694665458`). **Cài đè lên 1.18.7 / 1.18.6 được, không mất dữ liệu.**
+
+- **Đại tu Tab Bar (`App.tsx`):** Thay thế hai tab *"Nhật ký"* và *"Chăm sóc"* bằng tab **"Thú Cưng" (`🐣`)**.
+- **Màn hình Thú Cưng chuẩn phong cách Widgetable (`src/screens/local/PetLocal.tsx`, `src/logic/pet.mjs`):** Bối cảnh căn phòng ấm cúng đồng bộ Chủ đề Messenger; nhân vật Vịt/Mèo trắng mỏ cam 2D kèm **Bong bóng thoại** (*"Nhìn vào mắt đằng ấy, thấy sao một thế giới màu hồng ❤️"*); Thanh trạng thái góc trên trái (`Lv.1`, `Exp hôm nay: 20/100`, `⚡⚡⚡⚡⚡`); Thanh công cụ tương tác bên dưới gồm **Cho ăn (`🍴`)**, **Tắm rửa (`🚿`)**, **Đi ngủ (`🌙`)**, **Nhắc nhở đối phương (`👥`)**, **Quà tặng (`💬`)** kèm hiệu ứng nhảy lên, thả tim bay và đồng bộ thời gian thực qua MQTT khi hai bạn nhắn tin, gọi thoại hoặc gọi video.
+- **Sửa triệt để Video Call & UI Cuộc gọi đến (`src/services/rtcCall.ts`, `src/screens/local/CallLocal.tsx`, `ChatLocal.tsx`):** Gán ngay `remoteStream.toURL()` vào `RTCView` (`streamURL={remoteStream.toURL()}`), tự thương lượng lại SDP khi bật camera, đặt gọn nút gọi thoại/video trong màn Chat và tách đối xứng hai nút **Từ chối** (màu đỏ, icon `📵`) / **Nghe** (màu xanh, icon `📞`) sang hai bên màn hình cuộc gọi đến.
+
+## Mật Mã Yêu 1.18.7 (bản trước) — nâng cấp Chống ồn Adaptive Filter & SDP thích ứng, Flat Call UI + Gọi Video + Loa ngoài/Camera và Chủ đề phong cách Messenger
 
 **APK Android (bản đầy đủ):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.7-test-c2654bf/MatMaYeu-1.18.7.apk · **78.704.125 byte** (kèm file kiểm tra `MatMaYeu-1.18.7.apk.sha256` trong Assets)
 **APK Android (bản NHẸ, chỉ arm64-v8a):** https://github.com/hominhtam1922003-lgtm/MangaNhanh/releases/download/mat-ma-yeu-v1.18.7-test-c2654bf/MatMaYeu-1.18.7-arm64.apk · **56.307.874 byte** (kèm file `MatMaYeu-1.18.7-arm64.sha256`)

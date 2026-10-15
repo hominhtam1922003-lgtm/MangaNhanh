@@ -1,63 +1,67 @@
-# 📖 MangaNhanh
+# PipeTube
 
-Trình đọc truyện tranh nhanh, ảnh nét, không quảng cáo – tổng hợp **NetTruyen** + **TruyenQQ**, tự quét toàn bộ chương (kể cả nút "Xem thêm" / phân trang). Đóng gói thành APK Android tự động qua GitHub Actions.
+A lightweight, ad-free Expo + TypeScript mobile client for the open-source Piped API. Replaces the previous MangaNhanh Next.js/Capacitor application (historical documentation is in README-legacy.md).
 
-## 📱 Tải APK không cần cài Android Studio
+## Features
 
-**Cách dễ nhất**: để GitHub Actions build APK giùm bạn – không cần cài gì cả, chỉ cần GitHub account (miễn phí).
+- Dark Home screen with US trending videos, pull-to-refresh, loading/error/retry states.
+- Dedicated video search screen (submit using the keyboard Search button).
+- Native `expo-av` playback with controls, HLS or muxed MP4 streams, and an audio-only switch.
+- No advertising SDKs, accounts, or YouTube API key.
+- Background/locked-screen audio configuration: `staysActiveInBackground`, silent-mode playback on iOS, and native iOS `UIBackgroundModes: [audio]`.
 
-### Bước 1: Upload project lên GitHub
-1. Tạo repo mới trên https://github.com/new (đặt tên `MangaNhanh`, để Public).
-2. Trên Arena này, bấm **Push to GitHub** / **Đẩy lên GitHub** (nút ở góc trên), chọn repo vừa tạo. Hoặc nếu bạn tải source về thì chạy:
-   ```bash
-   git init
-   git add .
-   git commit -m "MangaNhanh first commit"
-   git remote add origin https://github.com/<TÊN-BẠN>/MangaNhanh.git
-   git branch -M main
-   git push -u origin main
-   ```
+## Run
 
-### Bước 2: Đợi GitHub build APK
-File `.github/workflows/build-apk.yml` mình đã cài đặt sẵn. Sau khi push code lên:
-1. Vào repo GitHub → tab **Actions** → bạn sẽ thấy workflow **Build APK** đang chạy.
-2. Chờ khoảng 3-5 phút, khi nào có dấu ✅ xanh là xong.
-3. Bấm vào dòng chạy thành công → phần **Artifacts** sẽ có file `MangaNhanh-APK.zip` → tải về, giải ra được file `app-debug.apk`.
+Requires Node 20 and npm.
 
-### Bước 3: Cài APK lên điện thoại
-1. Copy file `.apk` vào điện thoại (gửi qua Zalo/Telegram/Google Drive cho chính bạn, hoặc chép qua cáp).
-2. Trên điện thoại bấm vào file `.apk` → khi báo "Không phép cài ứng dụng từ nguồn này" → vào **Cài đặt** bật cho phép → quay lại cài đặt.
-3. Mở app **MangaNhanh** lên và đọc truyện thôi 🎉
-
-> 💡 Mỗi lần bạn push code mới lên GitHub, Action sẽ tự động build ra APK mới luôn.
-
----
-
-## 🚀 Chạy thử web trên máy
-
-```bash
-npm install
-npm run dev      # http://localhost:3000
-npm run export   # build web tĩnh vào out/
+```sh
+npm ci
+cp .env.example .env  # optional: choose a working Piped instance
+npm start
 ```
 
-## 📱 Build APK thủ công (khi có Android Studio)
+Use an Android emulator or a compatible Expo Go client for basic development. This project uses Expo SDK 51 to retain the explicitly requested `expo-av` integration. Current Expo Go releases may not support this older SDK; use a native build instead. `expo-av` has been deprecated in newer Expo SDKs; migrating to `expo-video`/`expo-audio` is a future upgrade.
 
-```bash
-bash scripts/build-apk.sh
+Piped public instances can be offline, rate-limited, or blocked by YouTube. Change `EXPO_PUBLIC_PIPED_API_URL` to an accessible HTTPS Piped API instance, then restart Metro (or rebuild the APK). Requests time out after 20 seconds. The API URL is public configuration, not a secret. The app does not silently send queries to other instances.
+
+## APK Android — không cần tài khoản Expo
+
+Workflow `.github/workflows/build.yml` tự chạy khi push lên `main`, hoặc chạy thủ công bằng **Actions → Build Android APK → Run workflow**.
+
+1. Đưa các thay đổi lên GitHub và merge vào `main`.
+2. Mở tab **Actions**, chọn lần chạy **Build Android APK**.
+3. Khi build thành công, tải artifact **PipeTube-APK** (lưu 14 ngày).
+4. Giải nén, mở `app-release.apk` trên Android và cho phép cài ứng dụng từ nguồn này khi được hỏi.
+
+Workflow dùng `expo prebuild` rồi Gradle `assembleRelease` — cách build native tương đương, không cần `EXPO_TOKEN`, Expo project ID hay EAS. JavaScript được đóng gói trong APK: không cần Metro hoặc Expo Go khi sử dụng. API Piped vẫn cần Internet.
+
+**Chữ ký:** bản này dùng debug keystore mặc định của template Expo/React Native để cài thử cá nhân, dù là release bundle. Không dùng bản này để phát hành Google Play. Muốn phát hành chính thức cần cấu hình release keystore riêng và lưu bí mật trong GitHub Secrets. Nếu đổi chữ ký, có thể phải gỡ APK cũ trước khi cài bản mới.
+
+Có thể đặt repository variable **EXPO_PUBLIC_PIPED_API_URL** để chọn instance Piped hoạt động, rồi chạy build lại.
+
+Build trên máy có Node 20, Java 17 và Android SDK:
+
+```sh
+npm ci
+npx expo prebuild --platform android
+cd android
+./gradlew assembleRelease
+# android/app/build/outputs/apk/release/app-release.apk (từ thư mục gốc)
 ```
 
-APK thành phẩm tại `android/app/build/outputs/apk/debug/app-debug.apk`.
+`eas.json` vẫn có profile preview APK nếu sau này muốn dùng EAS; quy trình Actions không phụ thuộc EAS.
 
-## ✨ Tính năng
+## Background audio and validation
 
-- Tổng hợp 2 nguồn: NetTruyen + TruyenQQ
-- Tự quét toàn bộ chương (xử lý phân trang/"Xem thêm")
-- Ảnh nét, dự phòng qua proxy ảnh khi bị chặn
-- 3 chế độ đọc: Dọc / Webtoon / Trang (← →)
-- Giao diện Tối/Sáng/Hệ thống
-- Yêu thích, lịch sử đọc (lưu local)
-- Mở nhanh bằng link, tìm kiếm trên cả 2 nguồn
-- Đóng gói APK Android bằng Capacitor, hoặc PWA "Thêm vào màn hình chính"
+Test background playback using a **native standalone APK / iOS build**, not Expo Go (iOS background audio is not supported in Expo Go). Start a video, lock the screen or switch to another app, and confirm audio continues. Try audio-only mode for less bandwidth. Android battery restrictions can affect playback; this app does not implement a media notification, lock-screen transport controls, or an Android foreground media service. Long-running playback under OS memory/battery pressure is not guaranteed by expo-av alone. Navigating back from the player intentionally unloads playback; switching stream modes restarts playback.
 
-Chi tiết xem ở README gốc trong repo.
+Only combined video/audio streams or HLS are used for video; separate DASH tracks cannot be muxed by expo-av. If no compatible video exists, try audio-only mode. Live stream availability depends on the instance.
+
+Checks:
+
+```sh
+npm run tsc
+npx expo export --platform android --output-dir dist
+```
+
+Device checklist: trending → search → open video → pause/resume/seek → switch to audio-only → background → lock/unlock → return → navigate back (audio stops). Also test an unavailable API instance, no search results, and stream failure/retry.

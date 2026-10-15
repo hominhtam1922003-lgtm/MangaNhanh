@@ -34,7 +34,19 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          set +e
+          ./gradlew assembleRelease --no-daemon --max-workers=2 > "$RUNNER_TEMP/gradle.log" 2>&1
+          result=$?
+          cat "$RUNNER_TEMP/gradle.log"
+          if [ "$result" -ne 0 ]; then
+            python3 - <<'PY'
+          import os
+          text = open(os.environ['RUNNER_TEMP'] + '/gradle.log').read()[-10000:]
+          text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print('::error title=Gradle build failed::' + text)
+          PY
+          fi
+          exit "$result"
       - uses: actions/upload-artifact@v4
         with:
           name: PipeTube-APK

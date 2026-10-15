@@ -543,16 +543,19 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       return;
     }
     const id = "c" + Date.now().toString(36);
+    void AudioModule.requestRecordingPermissionsAsync().catch(() => {});
     closeRtc();
     setRtcInfo({ state: "off", detail: "" });
     setRtcFallback(false);
     setRtcAudio({ inBytes: 0, outBytes: 0, level: 0, levelSource: "" });
-    const sent = client.publish({
+    const ringPacket = {
       kind: "call",
       event: "ring",
       callId: id,
       name: current.me.nickname,
-    });
+    };
+    const sent = client.publish(ringPacket);
+    setTimeout(() => relayRef.current?.publish(ringPacket), 350);
     applyCall(newCall({ id, role: "caller", name }));
     setRelayLog((lines) =>
       [
@@ -651,12 +654,10 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       };
       client?.publish(packet);
       // Tín hiệu nghe/từ chối/kết thúc gửi lại 3 lần cách nhau 250 ms: kênh công
-      // cộng thỉnh thoảng mất gói, gửi lại để máy kia tắt cuộc gọi chắc chắn.
-      if (event.type !== "accept") {
-        [250, 500].forEach((delay) =>
-          setTimeout(() => relayRef.current?.publish(packet), delay),
-        );
-      }
+      // cộng thỉnh thoảng mất gói, gửi lại để hai máy đồng bộ chắc chắn.
+      [250, 500].forEach((delay) =>
+        setTimeout(() => relayRef.current?.publish(packet), delay),
+      );
     }
     if (event.type === "mic") rtcRef.current?.setMic(Boolean(event.on));
     if (
@@ -1358,6 +1359,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
               return;
             }
             closeRtc();
+            void AudioModule.requestRecordingPermissionsAsync().catch(() => {});
             setRtcInfo({ state: "off", detail: "" });
             setRtcFallback(false);
             setRtcAudio({ inBytes: 0, outBytes: 0, level: 0, levelSource: "" });
@@ -1375,6 +1377,9 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             // Tín hiệu nối tiếng trực tiếp (mã máy PeerJS, offer/answer/ICE) của
             // người thương. Cuộc gọi đã kết thúc thì bỏ qua: không mở micro trở lại.
             if (active.phase === "ended") return;
+            if (active.phase === "ringing" && active.role === "caller") {
+              applyCall(callEvent(active, { type: "accept" }));
+            }
             const controller = rtcRef.current ?? ensureRtc(active);
             void controller?.handle(message);
             return;

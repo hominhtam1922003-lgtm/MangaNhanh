@@ -35,7 +35,7 @@ module.exports = {
   expo: {
     name: "Mật Mã Yêu",
     slug: "hai-trai-tim",
-    version: "1.18.2",
+    version: "1.18.3",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
@@ -59,10 +59,9 @@ module.exports = {
         // Thông báo tin nhắn trên Android 13+ (hệ thống vẫn hỏi người dùng).
         "android.permission.POST_NOTIFICATIONS",
       ],
-      // 1.18.2: khôi phục toàn bộ 5 tab (Tin nhắn, Theme, Chăm sóc, Nhật ký,
-      // Cài đặt), bổ sung Đăng nhập/Đăng ký tài khoản trong app + mã cố định
-      // 6 ký tự trên máy để kết nối hai chiều ngay cả khi chưa chạy SQL.
-      versionCode: 22,
+      // 1.18.3: sửa lỗi khoá chết await this.ready trong RtcCall + lọc IP ảo
+      // 10.0.2.15 của LDPlayer để cuộc gọi nối trực tiếp qua WebRTC/TURN riêng.
+      versionCode: 23,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#fff1f2",

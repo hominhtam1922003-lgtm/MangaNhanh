@@ -429,3 +429,32 @@ test("1.18.2: mã cố định suy từ tài khoản, khoá phòng đối xứng
   assert.match(app, /love-mode-v2/, "không tự đẩy sang CloudApp 1.0 cũ");
   assert.match(pairGateScreen, /Đăng nhập \/ Đăng ký tài khoản/);
 });
+
+test("1.18.3: cuộc gọi WebRTC + TURN riêng không còn khoá chết await this.ready hay kẹt IP 10.0.2.15 của LDPlayer", () => {
+  const rtcCallSource = read("src/services/rtcCall.ts");
+  assert.doesNotMatch(
+    rtcCallSource,
+    /await this\.ready;/,
+    "bỏ lỗi khoá chết khiến handle() chờ hết peerStage 2,5 giây mới nhận pid/offer/ice",
+  );
+  assert.match(
+    rtcCallSource,
+    /await this\.nativeStage\(false\);/,
+    "mở ngay WebRTC + TURN couple-love.metered.live ngay khi nhấc máy",
+  );
+  assert.match(
+    rtcCallSource,
+    /isEmulatorLoopbackHost/,
+    "lọc bỏ địa chỉ ảo 10.0.2.15 typ host của LDPlayer để dùng thẳng TURN/STUN",
+  );
+  assert.match(
+    rtcCallSource,
+    /this\.signalChain/,
+    "xử lý offer/answer/ice tuần tự, không đua luồng",
+  );
+  assert.match(
+    rtcCallSource,
+    /this\.lastAnswerSdp/,
+    "gửi lại answer khi gói trả lời bị rớt trên MQTT",
+  );
+});

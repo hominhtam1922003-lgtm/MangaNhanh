@@ -15,6 +15,7 @@ import { useTheme } from "../../theme/ThemeContext";
 import { callClock } from "../../logic/callLogic.mjs";
 import type { CallInfo } from "../../logic/callLogic.mjs";
 import { formatAudioBytes } from "../../logic/rtcSignal.mjs";
+import { rtcVideoView } from "../../services/rtcCall";
 import {
   CALL_CLOSE_MS,
   CALL_PLAY_GAP_MS,
@@ -61,12 +62,12 @@ function CallButton({
             ? theme.deep[0]
             : theme.soft;
   return (
-    <View className="items-center mx-2">
+    <View className="items-center mx-1.5">
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
         onPress={onPress}
-        style={{
+        style={({ pressed }) => ({
           width: size,
           height: size,
           borderRadius: size / 2,
@@ -75,11 +76,17 @@ function CallButton({
           borderColor: theme.border,
           alignItems: "center",
           justifyContent: "center",
-        }}
+          opacity: pressed ? 0.82 : 1,
+          transform: [{ scale: pressed ? 0.95 : 1 }],
+        })}
       >
-        <Text style={{ fontSize: size * 0.4 }}>{emoji}</Text>
+        <Text style={{ fontSize: size * 0.38 }}>{emoji}</Text>
       </Pressable>
-      <Text className="text-xs mt-1" style={{ color: theme.ink }}>
+      <Text
+        className="text-xs mt-1.5 font-medium"
+        style={{ color: theme.ink }}
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </View>
@@ -131,6 +138,8 @@ function Waveform({ color, live }: { color: string; live: boolean }) {
 export default function CallLocal({
   call,
   micOn,
+  camOn = false,
+  speakerOn = true,
   partnerName,
   partnerAvatar,
   ringtoneUri,
@@ -138,10 +147,13 @@ export default function CallLocal({
   playingRef,
   rtcInfo,
   rtcLive,
+  rtcStreams,
   reduced = false,
   rtcAudio,
   onUseLegacyAudio,
   onToggleMic,
+  onToggleCam,
+  onToggleSpeaker,
   onMinimize,
   onRestore,
   onAccept,
@@ -150,6 +162,8 @@ export default function CallLocal({
 }: {
   call: CallInfo;
   micOn: boolean;
+  camOn?: boolean;
+  speakerOn?: boolean;
   partnerName: string;
   partnerAvatar: string | null;
   ringtoneUri: string | null;
@@ -159,6 +173,8 @@ export default function CallLocal({
   /** Đường tiếng trực tiếp (WebRTC): đã nối thì tiếng đi thẳng, không qua tệp. */
   rtcInfo: { state: string; detail: string };
   rtcLive: boolean;
+  /** Luồng hình ảnh WebRTC (local/remote) khi gọi video. */
+  rtcStreams?: { localUrl: string | null; remoteUrl: string | null };
   /** Máy yếu / người dùng bật giảm chuyển động: không mở WebGL trong cuộc gọi. */
   reduced?: boolean;
   /** Số byte tiếng thật đang vào/ra + mức tiếng nói (0..1) cho trái tim đập. */
@@ -171,6 +187,8 @@ export default function CallLocal({
   /** Bấm khi không nghe được: chuyển về đường tiếng qua kênh ghép nối. */
   onUseLegacyAudio: () => void;
   onToggleMic: () => void;
+  onToggleCam?: () => void;
+  onToggleSpeaker?: () => void;
   onMinimize: () => void;
   onRestore: () => void;
   onAccept: () => void;
@@ -354,6 +372,13 @@ export default function CallLocal({
   const statusText = callBarText(call, Date.now());
   const endedText = call.reason || "Cuộc gọi đã kết thúc";
   const endedLog = callLogText(call, Date.now());
+  // Flat UI: tắt hoàn toàn hiệu ứng 3D WebGL rườm rà trong màn hình cuộc gọi
+  // để giao diện phẳng, tối giản, bo góc mềm mại và phản hồi chạm tức thì.
+  const flatUi = true;
+  const RTCView = rtcVideoView();
+  const isVideoCall = Boolean(
+    call.video || camOn || rtcStreams?.remoteUrl || rtcStreams?.localUrl,
+  );
 
   if (call.minimized && call.phase !== "ended") {
     // Thu nhỏ: thanh nổi vẫn thấy khi mở tab khác, chạm để mở lại.
@@ -365,25 +390,33 @@ export default function CallLocal({
         style={{
           marginHorizontal: 16,
           marginBottom: 8,
-          borderRadius: 26,
-          backgroundColor: theme.glass,
+          borderRadius: 24,
+          backgroundColor: theme.surface,
           borderWidth: 1,
           borderColor: theme.border,
-          paddingVertical: 8,
-          paddingHorizontal: 12,
+          paddingVertical: 10,
+          paddingHorizontal: 14,
           flexDirection: "row",
           alignItems: "center",
         }}
       >
-        <LocalAvatar name={partnerName} image={partnerAvatar} size={34} />
-        <View className="flex-1 ml-2">
+        <LocalAvatar name={partnerName} image={partnerAvatar} size={36} />
+        <View className="flex-1 ml-2.5">
           <Text className="font-semibold" style={{ color: theme.ink }}>
-            {partnerName}
+            {partnerName} {isVideoCall ? "· 📹" : ""}
           </Text>
           <Text className="text-xs" style={{ color: theme.sub }}>
             {call.phase === "active" ? `Đang gọi · ${statusText}` : statusText}
           </Text>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={speakerOn ? "Tắt loa ngoài" : "Bật loa ngoài"}
+          onPress={() => onToggleSpeaker?.()}
+          className="mr-3"
+        >
+          <Text className="text-lg">{speakerOn ? "🔊" : "🔈"}</Text>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={micOn ? "Tắt mic" : "Bật mic"}
@@ -405,112 +438,189 @@ export default function CallLocal({
 
   return (
     <View style={{ marginHorizontal: 16, marginBottom: 8 }}>
-      <LinearGradient
-        colors={theme.dark ? [theme.surface, theme.bg[0]] : theme.deep}
+      <View
         style={{
-          borderRadius: 30,
+          backgroundColor: theme.surface,
+          borderRadius: 28,
           paddingVertical: 18,
           paddingHorizontal: 16,
           borderWidth: 1,
           borderColor: theme.border,
-          shadowColor: theme.glow,
-          shadowOpacity: 0.35,
-          shadowRadius: 22,
-          shadowOffset: { width: 0, height: 10 },
-          elevation: 8,
         }}
       >
-        {/* Hàng trên: người thương + trạng thái */}
-        <View className="items-center">
+        {/* Thanh đầu Flat UI: nhãn loại cuộc gọi + nút Thu nhỏ */}
+        <View className="flex-row items-center justify-between mb-2">
           <View
             style={{
-              width: 156,
-              height: 156,
+              backgroundColor: theme.soft,
+              borderRadius: 14,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              borderWidth: 1,
+              borderColor: theme.border,
+            }}
+          >
+            <Text
+              className="text-xs font-semibold"
+              style={{ color: theme.text }}
+            >
+              {isVideoCall ? "📹 Cuộc gọi Video" : "📞 Cuộc gọi Thoại"}
+            </Text>
+          </View>
+          {active ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Thu nhỏ"
+              onPress={onMinimize}
+              style={{
+                backgroundColor: theme.soft,
+                borderRadius: 14,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderWidth: 1,
+                borderColor: theme.border,
+              }}
+            >
+              <Text
+                className="text-xs font-semibold"
+                style={{ color: theme.ink }}
+              >
+                ⤡ Thu nhỏ
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {/* Khung hình Video Call (RTCView) khi bật gọi hình */}
+        {isVideoCall && active ? (
+          <View
+            style={{
+              height: 190,
+              borderRadius: 22,
+              overflow: "hidden",
+              backgroundColor: "#111827",
+              borderWidth: 1,
+              borderColor: theme.border,
+              marginBottom: 12,
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <Animated.View
-              style={{
-                position: "absolute",
-                width: 156,
-                height: 156,
-                borderRadius: 78,
-                backgroundColor: theme.glow,
-                opacity: active ? haloOpacity : 0.14,
-                transform: [{ scale }],
-              }}
-            />
-            {/* Trái tim 3D (WebGL) đập theo cường độ giọng nói lấy từ track
-                WebRTC; máy yếu hoặc bật "giảm chuyển động" thì dùng tim vẽ sẵn
-                cho nhẹ máy. */}
-            {active && !reduced ? (
+            {RTCView && rtcStreams?.remoteUrl ? (
+              <RTCView
+                streamURL={rtcStreams.remoteUrl}
+                objectFit="cover"
+                style={{ width: "100%", height: "100%" }}
+              />
+            ) : (
+              <View className="items-center justify-center px-4">
+                <LocalAvatar
+                  name={partnerName}
+                  image={partnerAvatar}
+                  size={68}
+                />
+                <Text className="text-xs mt-2" style={{ color: "#e5e7eb" }}>
+                  {camOn
+                    ? "Đang truyền hình ảnh trực tiếp…"
+                    : "Camera của người thương đang tắt"}
+                </Text>
+              </View>
+            )}
+            {RTCView && rtcStreams?.localUrl && camOn ? (
               <View
-                pointerEvents="none"
                 style={{
                   position: "absolute",
-                  width: 320,
-                  alignItems: "center",
-                  justifyContent: "center",
+                  right: 10,
+                  bottom: 10,
+                  width: 78,
+                  height: 106,
+                  borderRadius: 14,
+                  overflow: "hidden",
+                  borderWidth: 1.5,
+                  borderColor: "#ffffffaa",
+                  backgroundColor: "#1f2937",
                 }}
               >
-                <ThreeHeart
-                  height={230}
-                  level={active && rtcLive ? rtcAudio.level : 0}
-                  interactive={false}
+                <RTCView
+                  streamURL={rtcStreams.localUrl}
+                  mirror
+                  objectFit="cover"
+                  style={{ width: "100%", height: "100%" }}
                 />
               </View>
-            ) : (
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Hàng trung tâm Flat UI: Avatar đối phương, Tên, Đồng hồ 00:16 & Trạng thái */}
+        <View className="items-center">
+          {!isVideoCall || !active ? (
+            <View
+              style={{
+                width: 112,
+                height: 112,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Animated.View
+                style={{
+                  position: "absolute",
+                  width: 108,
+                  height: 108,
+                  borderRadius: 54,
+                  backgroundColor: theme.soft,
+                  borderWidth: 1.5,
+                  borderColor: theme.border,
+                  opacity: active ? haloOpacity : 0.4,
+                  transform: [{ scale }],
+                }}
+              />
+              {!flatUi && active && !reduced ? (
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    width: 320,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <ThreeHeart
+                    height={230}
+                    level={active && rtcLive ? rtcAudio.level : 0}
+                    interactive={false}
+                  />
+                </View>
+              ) : null}
               <Animated.View
                 pointerEvents="none"
                 style={{
-                  position: "absolute",
-                  transform: [{ scale: active && rtcLive ? heartScale : 1 }],
+                  transform: [
+                    {
+                      scale:
+                        active && rtcLive ? heartScale : active ? scale : 1,
+                    },
+                  ],
                 }}
               >
-                <Text
-                  style={{
-                    fontSize: 150,
-                    lineHeight: 160,
-                    color: "#ef4466",
-                    opacity: active ? 0.95 : 0.5,
-                  }}
-                >
-                  ♥
-                </Text>
+                <LocalAvatar
+                  name={partnerName}
+                  image={partnerAvatar}
+                  size={84}
+                />
               </Animated.View>
-            )}
-            <Animated.View
-              pointerEvents="none"
-              style={{
-                transform: [
-                  {
-                    scale:
-                      active && !rtcLive
-                        ? scale
-                        : active && rtcLive && reduced
-                          ? heartScale
-                          : 1,
-                  },
-                ],
-              }}
-            >
-              <LocalAvatar
-                name={partnerName}
-                image={partnerAvatar}
-                size={active && !reduced ? 62 : 72}
-              />
-            </Animated.View>
-          </View>
-          <Text
-            className="text-xl font-bold mt-2"
-            style={{ color: theme.dark ? theme.ink : "#ffffff" }}
-          >
+            </View>
+          ) : null}
+          <Text className="text-xl font-bold mt-2" style={{ color: theme.ink }}>
             {partnerName}
           </Text>
           <Text
-            className="text-base mt-1"
-            style={{ color: theme.dark ? theme.sub : "#ffffffcc" }}
+            className="text-2xl font-bold mt-1"
+            style={{
+              color: active ? theme.deep[1] : theme.sub,
+              fontVariant: ["tabular-nums"],
+            }}
           >
             {ringing
               ? call.role === "caller"
@@ -522,14 +632,8 @@ export default function CallLocal({
           </Text>
           {active ? (
             <View className="mt-2 items-center">
-              <Waveform
-                color={theme.dark ? theme.deep[1] : "#ffffff"}
-                live={micOn}
-              />
-              <Text
-                className="text-xs mt-1"
-                style={{ color: theme.dark ? theme.sub : "#ffffffcc" }}
-              >
+              <Waveform color={theme.deep[1]} live={micOn} />
+              <Text className="text-xs mt-1" style={{ color: theme.sub }}>
                 {micOn
                   ? "Nói bình thường, không cần giữ nút"
                   : "Mic đang tắt — bấm mic để nói tiếp"}
@@ -538,27 +642,32 @@ export default function CallLocal({
                   : ""}
               </Text>
               {rtcInfo.state !== "off" && rtcInfo.detail ? (
-                <Text
-                  className="text-xs mt-1"
+                <View
                   style={{
-                    color: rtcLive
-                      ? "#86efac"
-                      : theme.dark
-                        ? theme.sub
-                        : "#ffffffaa",
+                    marginTop: 6,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 12,
+                    backgroundColor: theme.soft,
+                    borderWidth: 1,
+                    borderColor: theme.border,
                   }}
                 >
-                  {rtcLive ? "● " : "○ "}
-                  {rtcInfo.detail}
-                </Text>
+                  <Text
+                    className="text-xs font-medium"
+                    style={{
+                      color: rtcLive ? "#16a34a" : theme.sub,
+                    }}
+                  >
+                    {rtcLive ? "● " : "○ "}
+                    {rtcInfo.detail}
+                  </Text>
+                </View>
               ) : null}
               {rtcLive ? (
-                <Text
-                  className="text-xs mt-1"
-                  style={{ color: theme.dark ? theme.sub : "#ffffffaa" }}
-                >
+                <Text className="text-xs mt-1" style={{ color: theme.sub }}>
                   Tiếng vào {formatAudioBytes(rtcAudio.inBytes)} · tiếng ra{" "}
-                  {formatAudioBytes(rtcAudio.outBytes)} · tim đập theo giọng nói
+                  {formatAudioBytes(rtcAudio.outBytes)} · lọc ồn & chống vang
                 </Text>
               ) : null}
               {rtcLive ? (
@@ -570,7 +679,7 @@ export default function CallLocal({
                   style={{
                     borderWidth: 1,
                     borderColor: theme.border,
-                    backgroundColor: theme.glass,
+                    backgroundColor: theme.soft,
                   }}
                 >
                   <Text className="text-xs" style={{ color: theme.sub }}>
@@ -581,50 +690,66 @@ export default function CallLocal({
             </View>
           ) : null}
           {call.phase === "ended" ? (
-            <Text
-              className="text-xs mt-1"
-              style={{ color: theme.dark ? theme.sub : "#ffffffcc" }}
-            >
+            <Text className="text-xs mt-1" style={{ color: theme.sub }}>
               {endedLog} · tự đóng sau {Math.round(CALL_CLOSE_MS / 1000)} giây
             </Text>
           ) : null}
         </View>
 
-        {/* Hàng nút */}
+        {/* Thanh công cụ cuộc gọi (Call Toolbar): Micro, Loa ngoài, Kết thúc (đỏ ở giữa), Camera */}
         {ringing && call.role === "callee" ? (
-          <View className="flex-row justify-center mt-5">
+          <View className="flex-row justify-center items-end mt-5">
             <CallButton
               emoji="📴"
               label="Từ chối"
               tone="red"
+              size={68}
               onPress={onReject}
             />
             <CallButton
-              emoji="📞"
+              emoji={isVideoCall ? "📹" : "📞"}
               label="Nghe"
               tone="green"
+              size={76}
               onPress={onAccept}
             />
           </View>
         ) : ringing ? (
-          <View className="flex-row justify-center mt-5">
+          <View className="flex-row justify-center items-end mt-5">
             <CallButton
               emoji={micOn ? "🎙" : "🔇"}
-              label={micOn ? "Đang bật mic" : "Đang tắt mic"}
+              label={micOn ? "Tắt mic" : "Bật mic"}
               tone="soft"
-              size={58}
+              active={!micOn}
+              size={60}
               onPress={onToggleMic}
+            />
+            <CallButton
+              emoji={speakerOn ? "🔊" : "🔈"}
+              label={speakerOn ? "Loa ngoài" : "Loa trong"}
+              tone="soft"
+              active={speakerOn}
+              size={60}
+              onPress={() => onToggleSpeaker?.()}
             />
             <CallButton
               emoji="📴"
               label="Kết thúc"
               tone="red"
-              size={72}
+              size={76}
               onPress={onHangUp}
+            />
+            <CallButton
+              emoji={camOn ? "📹" : "📷"}
+              label={camOn ? "Tắt cam" : "Bật cam"}
+              tone="soft"
+              active={camOn}
+              size={60}
+              onPress={() => onToggleCam?.()}
             />
           </View>
         ) : active ? (
-          <View className="flex-row justify-center items-end mt-8">
+          <View className="flex-row justify-center items-end mt-6">
             <CallButton
               emoji={micOn ? "🎙" : "🔇"}
               label={micOn ? "Tắt mic" : "Bật mic"}
@@ -634,6 +759,14 @@ export default function CallLocal({
               onPress={onToggleMic}
             />
             <CallButton
+              emoji={speakerOn ? "🔊" : "🔈"}
+              label={speakerOn ? "Loa ngoài" : "Loa trong"}
+              tone="soft"
+              active={speakerOn}
+              size={60}
+              onPress={() => onToggleSpeaker?.()}
+            />
+            <CallButton
               emoji="📴"
               label="Kết thúc"
               tone="red"
@@ -641,11 +774,12 @@ export default function CallLocal({
               onPress={onHangUp}
             />
             <CallButton
-              emoji="⤡"
-              label="Thu nhỏ"
+              emoji={camOn ? "📹" : "📷"}
+              label={camOn ? "Tắt cam" : "Bật cam"}
               tone="soft"
-              size={56}
-              onPress={onMinimize}
+              active={camOn}
+              size={60}
+              onPress={() => onToggleCam?.()}
             />
           </View>
         ) : (
@@ -663,7 +797,7 @@ export default function CallLocal({
             </Note>
           </View>
         ) : null}
-      </LinearGradient>
+      </View>
     </View>
   );
 }

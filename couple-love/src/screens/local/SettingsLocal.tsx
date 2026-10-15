@@ -26,7 +26,7 @@ import {
 } from "../../services/localsync";
 import { requestNotifications } from "../../services/localnotify";
 import { restoreFromPayload } from "../../logic/localState.mjs";
-import { THEMES } from "../../logic/themes.mjs";
+import { MESSENGER_THEMES, THEMES } from "../../logic/themes.mjs";
 import { formatPairCode } from "../../logic/pairing.mjs";
 import { useTheme } from "../../theme/ThemeContext";
 import { peerSupport, rtcSupport } from "../../services/rtcCall";
@@ -325,10 +325,53 @@ export default function SettingsLocal({
       <Card>
         <Title small>Hình nền &amp; chủ đề</Title>
         <Note>
-          Chọn chủ đề cho cả app — thẻ, nút, thanh dưới đều đổi theo nên giao
-          diện hài hoà với nhau. Hai máy đang ghép nối sẽ dùng chung một giao
-          diện: ai đổi sau thì cả hai cùng đổi.
+          Chọn chủ đề cho cả app — thẻ, nút, bóng chat, khung nhập liệu và thanh
+          dưới đều đổi theo nên giao diện hài hoà với nhau. Hai máy đang ghép
+          nối sẽ dùng chung một giao diện: ai đổi sau thì cả hai cùng đổi.
         </Note>
+        <View className="flex-row flex-wrap mt-2 mb-1">
+          {MESSENGER_THEMES.map((preset) => {
+            const target =
+              THEMES.find((item) => item.id === preset.id) ?? THEMES[0];
+            const active =
+              (state.appearance?.theme ?? state.settings.theme) === target.id;
+            return (
+              <Pressable
+                key={preset.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Chủ đề ${preset.label}`}
+                onPress={() =>
+                  update({
+                    type: "appearance.set",
+                    theme: target.id,
+                    wallpaperId: state.appearance?.wallpaperId ?? null,
+                    wallpaper: state.appearance?.wallpaper ?? null,
+                  })
+                }
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingHorizontal: 11,
+                  paddingVertical: 7,
+                  borderRadius: 16,
+                  marginRight: 8,
+                  marginBottom: 8,
+                  backgroundColor: active ? target.deep[1] : target.soft,
+                  borderWidth: 1.5,
+                  borderColor: active ? target.deep[0] : target.border,
+                }}
+              >
+                <Text className="mr-1.5">{preset.emoji}</Text>
+                <Text
+                  className="text-xs font-bold"
+                  style={{ color: active ? target.onDeep : target.ink }}
+                >
+                  {preset.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
         <View className="flex-row flex-wrap mt-2">
           {THEMES.map((item) => {
             const active =

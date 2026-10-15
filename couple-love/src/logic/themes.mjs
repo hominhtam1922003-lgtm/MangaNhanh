@@ -336,11 +336,54 @@ export function withWallpaper(theme, tint = 0.5) {
   };
 }
 export const DEFAULT_THEME = "hong";
-export const isTheme = (id) => THEMES.some((theme) => theme.id === id);
+
+/**
+ * Danh sách Chủ đề phong cách Messenger nổi bật (đồng bộ bóng chat, khung nhập
+ * liệu và toàn bộ giao diện). Mỗi mục ánh xạ trực tiếp sang một chủ đề chuẩn
+ * trong THEMES để hai máy luôn đồng bộ 100%.
+ */
+export const MESSENGER_THEMES = [
+  { id: "hong", label: "Hồng ngọt ngào", emoji: "💗" },
+  { id: "meo", label: "Nâu trà sữa", emoji: "🧋" },
+  { id: "bien", label: "Xanh mộng mơ", emoji: "🫧" },
+  { id: "tim", label: "Tím mộng mơ", emoji: "💜" },
+  { id: "matcha", label: "Trà xanh Matcha", emoji: "🍵" },
+  { id: "dao", label: "Đào kem", emoji: "🍑" },
+  { id: "hoanghon", label: "Hoàng hôn ấm", emoji: "🌇" },
+  { id: "dem", label: "Đêm ngân hà", emoji: "🌌" },
+];
+
+const THEME_ALIASES = {
+  "hong-ngot-ngao": "hong",
+  "nau-tra-sua": "meo",
+  "xanh-mong-mo": "bien",
+  "tim-mong-mo": "tim",
+  "tra-xanh": "matcha",
+};
+
+function resolveThemeId(id) {
+  const key = String(id ?? "").trim();
+  return THEME_ALIASES[key] ?? key;
+}
+
+export const isTheme = (id) => {
+  const resolved = resolveThemeId(id);
+  return THEMES.some((theme) => theme.id === resolved);
+};
+
 export function themeById(id) {
-  return (
-    THEMES.find((theme) => theme.id === id) ??
+  const resolved = resolveThemeId(id);
+  const base =
+    THEMES.find((theme) => theme.id === resolved) ??
     THEMES.find((theme) => theme.id === DEFAULT_THEME) ??
-    THEMES[0]
-  );
+    THEMES[0];
+  const preset = MESSENGER_THEMES.find((item) => item.id === base.id);
+  return {
+    ...base,
+    messengerName: preset ? preset.label : base.name,
+    bubbleMine: base.deep,
+    bubblePartner: base.soft,
+    inputBg: base.surface,
+    inputBorder: base.border,
+  };
 }

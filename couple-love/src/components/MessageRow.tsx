@@ -165,7 +165,7 @@ export const MessageRow = React.memo(function MessageRow({
   ) : null;
   const mineGradient = (
     <LinearGradient
-      colors={theme.deep}
+      colors={theme.bubbleMine ?? theme.deep}
       style={{
         borderRadius: 20,
         borderBottomRightRadius: 6,
@@ -180,7 +180,7 @@ export const MessageRow = React.memo(function MessageRow({
   const theirBubble = (
     <View
       style={{
-        backgroundColor: theme.soft,
+        backgroundColor: theme.bubblePartner ?? theme.soft,
         borderWidth: 1,
         borderColor: theme.border,
         borderRadius: 20,

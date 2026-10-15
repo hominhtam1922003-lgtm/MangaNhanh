@@ -23,16 +23,20 @@ import {
   PEER_CLOUD,
   RTC_DROP_MS,
   RTC_MEDIA,
+  RTC_OPUS_BITRATE,
   RTC_PEER_MS,
   RTC_STATS_MS,
   RTC_TRY_MS,
+  RTC_VIDEO_BITRATE_KBPS,
   hasSignal,
   rememberSignal,
   rtcAudioIsDead,
+  rtcMediaConstraints,
   rtcPacket,
   rtcStateIsLive,
   rtcStateIsLost,
   rtcStatusText,
+  tuneAdaptiveSdp,
   tuneOpusSdp,
 } from "../logic/rtcSignal.mjs";
 import type { RtcState } from "../logic/rtcSignal.mjs";
@@ -54,6 +58,8 @@ type Signal = {
 type Options = {
   callId: string;
   role: "caller" | "callee";
+  /** Bật gọi hình (Video Call) ngay từ đầu. */
+  video?: boolean;
   /** Gửi một gói tín hiệu qua kênh ghép nối (retries = gửi lại thêm mấy lần). */
   send: (packet: Record<string, unknown>, retries?: number) => void;
   /** Báo cho giao diện biết đường tiếng đang ở bước nào. */
@@ -68,6 +74,11 @@ type Options = {
     level: number;
     levelSource: string;
   }) => void;
+  /** Báo URL luồng hình (local/remote) cho RTCView khi gọi video. */
+  onStreams?: (streams: {
+    localUrl: string | null;
+    remoteUrl: string | null;
+  }) => void;
 };
 
 // `require` muộn: chỉ nạp thư viện native khi thật sự gọi, để app vẫn chạy
@@ -78,7 +89,8 @@ let nativeModule: {
   RTCPeerConnection?: unknown;
   RTCSessionDescription?: unknown;
   RTCIceCandidate?: unknown;
-  MediaStream?: new () => any;
+  RTCView?: any;
+  MediaStream?: new (tracks?: any[]) => any;
   mediaDevices?: { getUserMedia?: (constraints: unknown) => Promise<any> };
   registerGlobals?: () => void;
 } | null = null;
@@ -179,6 +191,12 @@ export function rtcSupport(): { ok: boolean; detail: string } {
   return { ok: false, detail: nativeProblem || "Máy này không có WebRTC." };
 }
 
+/** Lấy thành phần RTCView của react-native-webrtc để hiển thị hình ảnh Video Call. */
+export function rtcVideoView(): any {
+  const rtc = loadNative();
+  return rtc?.RTCView ?? null;
+}
+
 /** Máy có nạp được PeerJS không (máy chủ chào hỏi + TURN miễn phí đi kèm). */
 export function peerSupport(): { ok: boolean; detail: string } {
   const peer = loadPeer();
@@ -197,6 +215,7 @@ export class RtcCall {
   private early: Signal[] = [];
   private peerWait: (() => void) | null = null;
   private mic: any = null;
+  private remoteStream: any = null;
   private closed = false;
   private live = false;
   private forcedRelay = false;
@@ -286,22 +305,39 @@ export class RtcCall {
   private async openMic(): Promise<boolean> {
     if (this.mic) return true;
     const rtc = loadNative();
+    const wantVideo = Boolean(this.opts.video);
     const constraints = {
       audio: {
         echoCancellation: true, // Bật khử vang âm thanh (AEC)
         noiseSuppression: true, // Bật khử tiếng ồn nền
         autoGainControl: true, // Tự động cân bằng âm lượng micro
         googEchoCancellation: true, // Cờ mở rộng cho WebRTC
+        googEchoCancellation2: true, // Adaptive Filter AEC bậc 2
+        googDAEchoCancellation: true, // Delay-Agnostic AEC
         googAutoGainControl: true,
+        googAutoGainControl2: true,
         googNoiseSuppression: true,
+        googNoiseSuppression2: true,
         googHighpassFilter: true, // Lọc tần số thấp (tiếng gió, tiếng ù)
+        googTypingNoiseDetection: true,
+        googAudioMirroring: false,
       },
-      video: false,
+      video: wantVideo
+        ? {
+            facingMode: "user",
+            width: { ideal: 640, max: 960 },
+            height: { ideal: 480, max: 720 },
+            frameRate: { ideal: 24, max: 30 },
+          }
+        : false,
     };
     try {
-      const stream = await rtc?.mediaDevices?.getUserMedia?.(
-        constraints ?? RTC_MEDIA,
+      let stream = await rtc?.mediaDevices?.getUserMedia?.(
+        constraints ?? rtcMediaConstraints(wantVideo),
       );
+      if (!stream && wantVideo) {
+        stream = await rtc?.mediaDevices?.getUserMedia?.(RTC_MEDIA);
+      }
       if (stream) {
         if (this.closed) {
           try {
@@ -311,19 +347,79 @@ export class RtcCall {
           return false;
         }
         this.mic = stream;
+        this.emitStreams();
         return true;
       }
-    } catch {}
+    } catch {
+      if (wantVideo) {
+        try {
+          const audioOnly = await rtc?.mediaDevices?.getUserMedia?.(RTC_MEDIA);
+          if (audioOnly && !this.closed) {
+            this.mic = audioOnly;
+            this.emitStreams();
+            return true;
+          }
+        } catch {}
+      }
+    }
     // Máy ảo LDPlayer thứ hai trên cùng PC không gắn micro (hoặc Windows đang
     // khoá mic cho cửa sổ kia): vẫn tạo luồng rỗng để WebRTC kết nối trực tiếp
     // và nghe được tiếng của bên kia.
     try {
       if (rtc?.MediaStream && !this.closed) {
         this.mic = new rtc.MediaStream();
+        this.emitStreams();
         return true;
       }
     } catch {}
     return false;
+  }
+
+  private emitStreams() {
+    if (this.closed) return;
+    try {
+      const localHasVideo =
+        (this.mic?.getVideoTracks?.() ?? []).some(
+          (track: any) => track?.enabled !== false,
+        ) ?? false;
+      const localUrl = localHasVideo
+        ? String(this.mic?.toURL?.() ?? "") || null
+        : null;
+      const remoteHasVideo =
+        (this.remoteStream?.getVideoTracks?.() ?? []).length > 0;
+      const remoteUrl = remoteHasVideo
+        ? String(this.remoteStream?.toURL?.() ?? "") || null
+        : null;
+      this.opts.onStreams?.({ localUrl, remoteUrl });
+    } catch {}
+  }
+
+  private applyAdaptiveBitrate(pc: any) {
+    try {
+      const senders = pc?.getSenders?.() ?? [];
+      for (const sender of senders) {
+        const kind = String(sender?.track?.kind ?? "");
+        const getParams = sender?.getParameters?.bind?.(sender);
+        const setParams = sender?.setParameters?.bind?.(sender);
+        if (!getParams || !setParams) continue;
+        const params = getParams() ?? {};
+        const encodings =
+          Array.isArray(params.encodings) && params.encodings.length
+            ? params.encodings
+            : [{}];
+        if (kind === "audio") {
+          encodings[0].maxBitrate = RTC_OPUS_BITRATE;
+          encodings[0].priority = "high";
+          encodings[0].networkPriority = "high";
+        } else if (kind === "video") {
+          encodings[0].maxBitrate = RTC_VIDEO_BITRATE_KBPS * 1000;
+          encodings[0].maxFramerate = 24;
+          params.degradationPreference = "maintain-framerate";
+        }
+        params.encodings = encodings;
+        void Promise.resolve(setParams(params)).catch(() => {});
+      }
+    } catch {}
   }
 
   /**
@@ -575,14 +671,40 @@ export class RtcCall {
     };
     pc.onconnectionstatechange = () => this.readConnection();
     pc.oniceconnectionstatechange = () => this.readConnection();
+    pc.ontrack = (event: any) => {
+      if (this.closed) return;
+      const incoming = event?.streams?.[0];
+      if (incoming) {
+        this.remoteStream = incoming;
+      } else if (event?.track && rtc?.MediaStream) {
+        if (!this.remoteStream) this.remoteStream = new rtc.MediaStream();
+        try {
+          this.remoteStream.addTrack?.(event.track);
+        } catch {}
+      }
+      this.emitStreams();
+    };
+    pc.onaddstream = (event: any) => {
+      if (this.closed || !event?.stream) return;
+      this.remoteStream = event.stream;
+      this.emitStreams();
+    };
     try {
-      const tracks = this.mic?.getAudioTracks?.() ?? [];
+      const tracks =
+        this.mic?.getTracks?.() ?? this.mic?.getAudioTracks?.() ?? [];
       if (tracks.length > 0) {
         for (const track of tracks) pc.addTrack(track, this.mic);
       } else {
         pc.addTransceiver?.("audio", { direction: "recvonly" });
       }
+      if (
+        this.opts.video &&
+        (this.mic?.getVideoTracks?.() ?? []).length === 0
+      ) {
+        pc.addTransceiver?.("video", { direction: "recvonly" });
+      }
     } catch {}
+    this.applyAdaptiveBitrate(pc);
     if (this.watchdog) clearTimeout(this.watchdog);
     // Hết thời gian chờ đợt 1 mà chưa nối trực tiếp được: thử ép đi 100% qua
     // máy chủ trung chuyển TURN (couple-love.metered.live) cho trường hợp 2 máy
@@ -643,10 +765,13 @@ export class RtcCall {
     try {
       const offer = await this.pc.createOffer({
         offerToReceiveAudio: true,
-        offerToReceiveVideo: false,
+        offerToReceiveVideo: Boolean(this.opts.video),
       });
-      // Chỉnh Opus: bật FEC (mất gói vẫn nghe được) và tắt DTX (tiếng đi liên tục).
-      const sdp = tuneOpusSdp(offer.sdp);
+      // Chỉnh Opus: bật FEC (mất gói vẫn nghe được) và tắt DTX (tiếng đi liên tục)
+      // kèm bitrate thích ứng cho Audio/Video trên mạng 4G và cổng TURN 80/443.
+      const sdp = tuneAdaptiveSdp(tuneOpusSdp(offer.sdp), {
+        video: Boolean(this.opts.video),
+      });
       await this.pc.setLocalDescription({ type: "offer", sdp });
       this.lastOfferSdp = sdp;
       this.sendSignal("offer", { sdp, round: this.round }, 1);
@@ -863,7 +988,9 @@ export class RtcCall {
         await this.flushPending();
         if (this.mic) {
           const answer = await this.pc.createAnswer();
-          const sdp = tuneOpusSdp(answer.sdp);
+          const sdp = tuneAdaptiveSdp(tuneOpusSdp(answer.sdp), {
+            video: Boolean(this.opts.video),
+          });
           await this.pc.setLocalDescription({ type: "answer", sdp });
           this.lastAnswerSdp = sdp;
           this.sendSignal("answer", { sdp, round: this.round }, 1);
@@ -941,6 +1068,51 @@ export class RtcCall {
     } catch {}
   }
 
+  /** Bật/tắt camera trong cuộc gọi video (hoặc mở thêm camera khi đang gọi thoại). */
+  setCamera(on: boolean) {
+    try {
+      const want = Boolean(on);
+      this.opts.video = want || Boolean(this.opts.video);
+      const tracks = this.mic?.getVideoTracks?.() ?? [];
+      if (tracks.length > 0) {
+        for (const track of tracks) track.enabled = want;
+        this.emitStreams();
+        return;
+      }
+      if (!want || this.closed) {
+        this.emitStreams();
+        return;
+      }
+      const rtc = loadNative();
+      void rtc?.mediaDevices
+        ?.getUserMedia?.({
+          audio: false,
+          video: {
+            facingMode: "user",
+            width: { ideal: 640, max: 960 },
+            height: { ideal: 480, max: 720 },
+            frameRate: { ideal: 24, max: 30 },
+          },
+        })
+        ?.then((camStream: any) => {
+          if (this.closed || !camStream) {
+            camStream?.getTracks?.()?.forEach?.((t: any) => t.stop());
+            return;
+          }
+          const vTracks = camStream.getVideoTracks?.() ?? [];
+          for (const vt of vTracks) {
+            try {
+              this.mic?.addTrack?.(vt);
+              this.pc?.addTrack?.(vt, this.mic);
+            } catch {}
+          }
+          this.applyAdaptiveBitrate(this.pc);
+          this.emitStreams();
+        })
+        ?.catch(() => {});
+    } catch {}
+  }
+
   /** Dọn sạch tài nguyên native (mic, peer connection, các nhịp đếm). */
   private teardown() {
     this.closed = true;
@@ -981,6 +1153,15 @@ export class RtcCall {
     } catch {}
     this.peer = null;
     this.peerMedia = null;
+    const remote = this.remoteStream;
+    this.remoteStream = null;
+    try {
+      remote?.getTracks?.()?.forEach?.((track: any) => {
+        track.enabled = false;
+        track.stop();
+      });
+      remote?.release?.();
+    } catch {}
     const stream = this.mic;
     this.mic = null;
     try {
@@ -989,6 +1170,9 @@ export class RtcCall {
         track.stop();
       });
       stream?.release?.();
+    } catch {}
+    try {
+      this.opts.onStreams?.({ localUrl: null, remoteUrl: null });
     } catch {}
     const pc = this.pc;
     this.pc = null;

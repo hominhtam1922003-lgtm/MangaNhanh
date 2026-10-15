@@ -35,7 +35,7 @@ module.exports = {
   expo: {
     name: "Mật Mã Yêu",
     slug: "hai-trai-tim",
-    version: "1.18.6",
+    version: "1.18.7",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
@@ -59,10 +59,10 @@ module.exports = {
         // Thông báo tin nhắn trên Android 13+ (hệ thống vẫn hỏi người dùng).
         "android.permission.POST_NOTIFICATIONS",
       ],
-      // 1.18.6: bật triệt để bộ lọc phần cứng chống vang/ồn (AEC, NS, AGC,
-      // googEchoCancellation, googAutoGainControl, googNoiseSuppression,
-      // googHighpassFilter) và giải phóng sạch toàn bộ track âm thanh khi ngắt.
-      versionCode: 26,
+      // 1.18.7: nâng cấp toàn diện WebRTC (Adaptive Filter + Opus/Video SDP
+      // bitrate thích ứng, gọi Video + nút Loa ngoài / Camera / Kết thúc trên
+      // giao diện Flat UI, và hệ thống chủ đề phong cách Messenger đồng bộ).
+      versionCode: 27,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#fff1f2",

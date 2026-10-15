@@ -40,6 +40,7 @@ import {
   replyPreview,
   typingText,
 } from "../../logic/chatExtras.mjs";
+import { MESSENGER_THEMES, THEMES } from "../../logic/themes.mjs";
 /** Lời nhắn nhanh: bấm một cái là máy người thương nổi thông báo như tin nhắn. */
 const NUDGES = [
   {
@@ -271,7 +272,7 @@ export default function ChatLocal({
     partnerName?: string | null;
   };
   onSendMessage?: () => void;
-  onStartCall?: () => void;
+  onStartCall?: (video?: boolean) => void;
   /** App tự nén, lưu và gửi ảnh; màn hình chỉ chọn ảnh. */
   onSendPhoto?: (uri: string, caption: string) => void;
   onSendLocation?: () => void;
@@ -285,9 +286,9 @@ export default function ChatLocal({
 }) {
   const { theme } = useTheme();
   const [text, setText] = useState("");
-  const [pad, setPad] = useState<"none" | "actions" | "emoji" | "sticker">(
-    "none",
-  );
+  const [pad, setPad] = useState<
+    "none" | "actions" | "emoji" | "sticker" | "theme"
+  >("none");
   const [pack, setPack] = useState(0);
   const [reply, setReply] = useState<{
     id: string;
@@ -670,32 +671,133 @@ export default function ChatLocal({
               borderWidth: 1,
               borderColor: theme.border,
               borderRadius: 18,
-              paddingHorizontal: 12,
-              paddingVertical: 9,
+              paddingHorizontal: 10,
+              paddingVertical: 8,
               marginRight: 6,
             }}
           >
-            <Text className="font-bold" style={{ color: theme.text }}>
+            <Text className="font-bold text-xs" style={{ color: theme.text }}>
               🔗 Ghép nối
             </Text>
           </Pressable>
         ) : null}
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Đổi chủ đề cuộc trò chuyện"
+          onPress={() => setPad(pad === "theme" ? "none" : "theme")}
+          style={{
+            backgroundColor: pad === "theme" ? theme.deep[0] : theme.soft,
+            borderWidth: 1,
+            borderColor: theme.border,
+            borderRadius: 18,
+            paddingHorizontal: 10,
+            paddingVertical: 8,
+            marginRight: 6,
+          }}
+        >
+          <Text
+            className="font-bold text-xs"
+            style={{ color: pad === "theme" ? theme.onDeep : theme.text }}
+          >
+            🎨
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           accessibilityLabel="Gọi cho người thương"
-          onPress={() => onStartCall?.()}
+          onPress={() => onStartCall?.(false)}
           style={{
             backgroundColor: theme.deep[1],
             borderRadius: 18,
-            paddingHorizontal: 14,
-            paddingVertical: 9,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            marginRight: 6,
           }}
         >
-          <Text className="font-bold" style={{ color: theme.onDeep }}>
+          <Text className="font-bold text-xs" style={{ color: theme.onDeep }}>
             📞 Gọi
           </Text>
         </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Gọi Video cho người thương"
+          onPress={() => onStartCall?.(true)}
+          style={{
+            backgroundColor: theme.deep[0],
+            borderRadius: 18,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+          }}
+        >
+          <Text className="font-bold text-xs" style={{ color: theme.onDeep }}>
+            📹 Video
+          </Text>
+        </Pressable>
       </View>
+      {pad === "theme" ? (
+        <View
+          className="mb-2 p-2.5"
+          style={{
+            backgroundColor: theme.surface,
+            borderRadius: 18,
+            borderWidth: 1,
+            borderColor: theme.border,
+          }}
+        >
+          <View className="flex-row items-center justify-between mb-1.5 px-1">
+            <Text className="text-xs font-bold" style={{ color: theme.ink }}>
+              🎨 Chủ đề cuộc trò chuyện (đồng bộ hai máy)
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Đóng bảng chủ đề"
+              onPress={() => setPad("none")}
+            >
+              <Text className="text-xs" style={{ color: theme.sub }}>
+                Đóng ✕
+              </Text>
+            </Pressable>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {MESSENGER_THEMES.map((preset) => {
+              const target =
+                THEMES.find((item) => item.id === preset.id) ?? THEMES[0];
+              const selected = theme.id === target.id;
+              return (
+                <Pressable
+                  key={preset.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Chủ đề ${preset.label}`}
+                  onPress={() => {
+                    update({ type: "appearance.set", theme: target.id });
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: 11,
+                    paddingVertical: 7,
+                    borderRadius: 16,
+                    marginRight: 8,
+                    backgroundColor: selected ? target.deep[1] : target.soft,
+                    borderWidth: 1.5,
+                    borderColor: selected ? target.deep[0] : target.border,
+                  }}
+                >
+                  <Text className="mr-1.5">{preset.emoji}</Text>
+                  <Text
+                    className="text-xs font-bold"
+                    style={{
+                      color: selected ? target.onDeep : target.ink,
+                    }}
+                  >
+                    {preset.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      ) : null}
       {oldPartner ? (
         <View
           className="mb-2 p-3"
@@ -981,9 +1083,9 @@ export default function ChatLocal({
         style={{
           flexDirection: "row",
           alignItems: "flex-end",
-          backgroundColor: theme.glass,
+          backgroundColor: theme.inputBg ?? theme.glass,
           borderWidth: 1,
-          borderColor: theme.border,
+          borderColor: theme.inputBorder ?? theme.border,
           borderRadius: 28,
           paddingHorizontal: 6,
           paddingVertical: 6,
@@ -1045,7 +1147,7 @@ export default function ChatLocal({
             style={{ marginLeft: 4 }}
           >
             <LinearGradient
-              colors={theme.deep}
+              colors={theme.bubbleMine ?? theme.deep}
               style={{
                 width: 42,
                 height: 42,

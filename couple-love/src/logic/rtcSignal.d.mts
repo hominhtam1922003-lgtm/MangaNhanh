@@ -7,6 +7,7 @@ export declare const RTC_DROP_MS: number;
 export declare const RTC_STATS_MS: number;
 export declare const RTC_DEAD_MS: number;
 export declare const RTC_OPUS_BITRATE: number;
+export declare const RTC_VIDEO_BITRATE_KBPS: number;
 export declare const RTC_PEER_MS: number;
 export declare const ICE_POLICY: string;
 export declare const METERED_ICE_SERVERS: Array<{
@@ -32,11 +33,28 @@ export declare const RTC_MEDIA: {
     noiseSuppression: boolean;
     autoGainControl: boolean;
     googEchoCancellation: boolean;
+    googEchoCancellation2: boolean;
+    googDAEchoCancellation: boolean;
     googAutoGainControl: boolean;
+    googAutoGainControl2: boolean;
     googNoiseSuppression: boolean;
+    googNoiseSuppression2: boolean;
     googHighpassFilter: boolean;
+    googTypingNoiseDetection: boolean;
+    googAudioMirroring: boolean;
   };
   video: boolean;
+};
+export declare function rtcMediaConstraints(video?: boolean): {
+  audio: typeof RTC_MEDIA.audio;
+  video:
+    | boolean
+    | {
+        facingMode: string;
+        width: { ideal: number; max: number };
+        height: { ideal: number; max: number };
+        frameRate: { ideal: number; max: number };
+      };
 };
 export declare const RTC_SUBS: string[];
 export declare function signalFingerprint(value: unknown): string;
@@ -76,6 +94,10 @@ export declare function rtcWaitingTooLong(
 export declare function tuneOpusSdp(
   sdp: unknown,
   options?: { bitrate?: number },
+): string;
+export declare function tuneAdaptiveSdp(
+  sdp: unknown,
+  options?: { bitrate?: number; videoBitrateKbps?: number; video?: boolean },
 ): string;
 export declare function formatAudioBytes(bytes: unknown): string;
 export declare function rtcAudioText(

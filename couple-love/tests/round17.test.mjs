@@ -10,10 +10,16 @@ import {
   ICE_POLICY,
   PEER_CLOUD,
   RTC_ICE_SERVERS,
+  RTC_MEDIA,
   RTC_PEER_MS,
   RTC_TRY_MS,
   RTC_TURN_SERVERS,
+  RTC_VIDEO_BITRATE_KBPS,
+  rtcMediaConstraints,
+  tuneAdaptiveSdp,
 } from "../src/logic/rtcSignal.mjs";
+import { callEvent, newCall } from "../src/logic/callLogic.mjs";
+import { MESSENGER_THEMES, themeById } from "../src/logic/themes.mjs";
 
 const read = (path) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -177,4 +183,66 @@ test("Đổi tên app đã sạch, gói cài vẫn giữ nguyên nên cài đè 
     );
   const settings = read("src/screens/local/SettingsLocal.tsx");
   assert.match(settings, /Mật Mã Yêu \{Constants\.expoConfig\?\.version/);
+});
+
+test("Nâng cấp 1.18.7: Chống ồn Adaptive Filter, SDP thích ứng, Flat Call UI + Gọi Video & Chủ đề Messenger", () => {
+  // 1. Chống ồn phần cứng + Adaptive Filter
+  assert.equal(RTC_MEDIA.audio.echoCancellation, true);
+  assert.equal(RTC_MEDIA.audio.noiseSuppression, true);
+  assert.equal(RTC_MEDIA.audio.autoGainControl, true);
+  assert.equal(RTC_MEDIA.audio.googHighpassFilter, true);
+  assert.equal(RTC_MEDIA.audio.googEchoCancellation2, true);
+  assert.equal(RTC_MEDIA.audio.googDAEchoCancellation, true);
+  assert.equal(RTC_MEDIA.audio.googNoiseSuppression2, true);
+  assert.equal(RTC_MEDIA.audio.googAutoGainControl2, true);
+  const videoMedia = rtcMediaConstraints(true);
+  assert.equal(typeof videoMedia.video, "object");
+
+  // 2. SDP thích ứng cho cả Audio (Opus FEC) và Video (b=AS + x-google-*-bitrate)
+  const rawSdp = [
+    "v=0",
+    "m=audio 9 UDP/TLS/RTP/SAVPF 111",
+    "a=rtpmap:111 opus/48000/2",
+    "m=video 9 UDP/TLS/RTP/SAVPF 96",
+    "c=IN IP4 0.0.0.0",
+    "a=rtpmap:96 VP8/90000",
+    "a=fmtp:96 max-fr=30",
+  ].join("\r\n");
+  const tuned = tuneAdaptiveSdp(rawSdp, { videoBitrateKbps: 380 });
+  assert.match(tuned, /useinbandfec=1;usedtx=0/);
+  assert.match(tuned, new RegExp(`b=AS:${RTC_VIDEO_BITRATE_KBPS}`));
+  assert.match(tuned, /x-google-max-bitrate=380/);
+
+  // 3. Trạng thái cuộc gọi hỗ trợ Video, Camera & Loa ngoài (Speakerphone)
+  let c = newCall({ id: "v1", role: "caller", name: "Ngọc", video: true });
+  assert.equal(c.video, true);
+  assert.equal(c.camOn, true);
+  assert.equal(c.speakerOn, true);
+  c = callEvent(c, { type: "speaker", on: false });
+  assert.equal(c.speakerOn, false);
+  c = callEvent(c, { type: "cam", on: false });
+  assert.equal(c.camOn, false);
+
+  // 4. Giao diện Flat Call UI, nút Gọi Video và Thanh công cụ cuộc gọi
+  const callUi = read("src/screens/local/CallLocal.tsx");
+  assert.match(callUi, /const flatUi = true/, "chuyển sang Flat UI mượt mà");
+  assert.match(callUi, /Loa ngoài/, "có nút Loa ngoài");
+  assert.match(callUi, /Tắt cam|Bật cam/, "có nút Bật/Tắt Camera");
+  const chatUi = read("src/screens/local/ChatLocal.tsx");
+  assert.match(
+    chatUi,
+    /Gọi Video cho người thương/,
+    "nút Gọi Video ở màn Chat",
+  );
+  const homeUi = read("src/screens/local/HomeLocal.tsx");
+  assert.match(homeUi, /📹 Gọi Video/, "nút Gọi Video ở màn Trang chủ");
+
+  // 5. Hệ thống Chủ đề phong cách Messenger đồng bộ
+  const labels = MESSENGER_THEMES.map((item) => item.label);
+  assert.equal(labels.includes("Hồng ngọt ngào"), true);
+  assert.equal(labels.includes("Nâu trà sữa"), true);
+  assert.equal(labels.includes("Xanh mộng mơ"), true);
+  assert.equal(themeById("nau-tra-sua").id, "meo");
+  assert.equal(themeById("xanh-mong-mo").id, "bien");
+  assert.equal(Array.isArray(themeById("hong").bubbleMine), true);
 });

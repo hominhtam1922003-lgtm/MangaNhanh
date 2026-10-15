@@ -10,6 +10,12 @@ export type CallInfo = {
   reason: string;
   minimized: boolean;
   micOn: boolean;
+  /** Cuộc gọi có bật hình (Video Call) hay gọi thoại thường. */
+  video?: boolean;
+  /** Trạng thái bật/tắt camera trong cuộc gọi. */
+  camOn?: boolean;
+  /** Trạng thái bật/tắt loa ngoài (Speakerphone). */
+  speakerOn?: boolean;
   /** Mốc cuối cùng còn nghe được nhịp "còn đây" của máy kia. */
   lastSeen: number;
 };
@@ -20,6 +26,7 @@ export declare function newCall(input: {
   id: string;
   role: "caller" | "callee";
   name?: string;
+  video?: boolean;
   at?: number;
 }): CallInfo;
 export declare function callEvent(

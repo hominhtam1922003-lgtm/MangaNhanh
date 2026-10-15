@@ -253,6 +253,10 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     state: "off",
     detail: "",
   });
+  const [rtcStreams, setRtcStreams] = useState<{
+    localUrl: string | null;
+    remoteUrl: string | null;
+  }>({ localUrl: null, remoteUrl: null });
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistPending = useRef<State | null>(null);
   const lastLiteRef = useRef("");
@@ -522,8 +526,8 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     );
   }
   // ---------- Cuộc gọi ----------
-  // Bấm Gọi: gửi tín hiệu đổ chuông sang máy người thương rồi hiện màn hình gọi.
-  function startCall() {
+  // Bấm Gọi (thoại hoặc video): gửi tín hiệu đổ chuông sang máy người thương rồi hiện màn hình gọi.
+  function startCall(video = false) {
     const current = stateRef.current;
     const client = relayRef.current;
     const name = current?.partner?.nickname || "Người thương";
@@ -543,6 +547,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       return;
     }
     const id = "c" + Date.now().toString(36);
+    const isVideo = Boolean(video);
     void AudioModule.requestRecordingPermissionsAsync().catch(() => {});
     closeRtc();
     setRtcInfo({ state: "off", detail: "" });
@@ -553,14 +558,17 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       event: "ring",
       callId: id,
       name: current.me.nickname,
+      video: isVideo,
     };
     const sent = client.publish(ringPacket);
     setTimeout(() => relayRef.current?.publish(ringPacket), 350);
-    applyCall(newCall({ id, role: "caller", name }));
+    applyCall(newCall({ id, role: "caller", name, video: isVideo }));
     setRelayLog((lines) =>
       [
         ...lines,
-        sent ? `Đang gọi ${name}…` : "Chưa gửi được tín hiệu gọi, thử lại nhé.",
+        sent
+          ? `Đang gọi ${isVideo ? "video " : ""}${name}…`
+          : "Chưa gửi được tín hiệu gọi, thử lại nhé.",
       ].slice(-12),
     );
   }
@@ -576,6 +584,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     const controller = new RtcCall({
       callId: active.id,
       role: active.role === "caller" ? "caller" : "callee",
+      video: Boolean(active.video || active.camOn),
       // Gửi lại tín hiệu quan trọng: kênh công cộng thỉnh thoảng mất gói, mất
       // lời mời là hai máy không nối được với nhau.
       send: (packet, retries = 0) => {
@@ -586,6 +595,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         }
       },
       onStats: (info) => setRtcAudio(info),
+      onStreams: (streams) => setRtcStreams(streams),
       onState: (state, detail) => {
         setRtcInfo({ state, detail: detail || rtcStatusText(state) });
         const live = state === "live";
@@ -613,6 +623,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     setRtcLive(false);
     setRtcFallback(true);
     setRtcAudio({ inBytes: 0, outBytes: 0, level: 0, levelSource: "" });
+    setRtcStreams({ localUrl: null, remoteUrl: null });
     setRtcInfo({
       state: "failed",
       detail: "Đang dùng đường tiếng qua kênh ghép nối (bạn chọn).",
@@ -626,11 +637,12 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     rtcRef.current = null;
     rtcLiveRef.current = false;
     setRtcLive(false);
+    setRtcStreams({ localUrl: null, remoteUrl: null });
     try {
       controller?.close();
     } catch {}
   }
-  // Nghe / Từ chối / Kết thúc / thu nhỏ / bật tắt mic.
+  // Nghe / Từ chối / Kết thúc / thu nhỏ / bật tắt mic, loa ngoài, camera.
   function callAction(event: { type: string; on?: boolean; min?: boolean }) {
     const active = callRef.current;
     if (!active) return;
@@ -669,6 +681,26 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       }
     }
     if (event.type === "mic") rtcRef.current?.setMic(Boolean(event.on));
+    if (event.type === "cam") {
+      rtcRef.current?.setCamera(Boolean(event.on));
+      client?.publish({
+        kind: "call",
+        event: "cam",
+        callId: active.id,
+        on: Boolean(event.on),
+      });
+    }
+    if (event.type === "speaker") {
+      const speakerOn = event.on !== false;
+      void setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        ...(Platform.OS === "android"
+          ? { shouldRouteThroughEarpiece: !speakerOn }
+          : {}),
+      }).catch(() => {});
+    }
     if (
       event.type === "hangup" &&
       !active.startedAt &&
@@ -1364,14 +1396,22 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
             if (callRef.current && callRef.current.id === callId) {
               return;
             }
+            const isVideo = message.video === true;
             closeRtc();
             void AudioModule.requestRecordingPermissionsAsync().catch(() => {});
             setRtcInfo({ state: "off", detail: "" });
             setRtcFallback(false);
             setRtcAudio({ inBytes: 0, outBytes: 0, level: 0, levelSource: "" });
-            applyCall(newCall({ id: callId, role: "callee", name: who }));
+            applyCall(
+              newCall({
+                id: callId,
+                role: "callee",
+                name: who,
+                video: isVideo,
+              }),
+            );
             void notifyNow(
-              `${who} đang gọi cho bạn 📞`,
+              `${who} đang gọi ${isVideo ? "video " : ""}cho bạn 📞`,
               "Mở app để nghe máy.",
               true,
             );
@@ -1379,6 +1419,12 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           }
           const active = callRef.current;
           if (!active || active.id !== callId) return;
+          if (event === "cam") {
+            if (message.on === true && !active.video) {
+              applyCall({ ...active, video: true });
+            }
+            return;
+          }
           if (event === "rtc") {
             // Tín hiệu nối tiếng trực tiếp (mã máy PeerJS, offer/answer/ICE) của
             // người thương. Cuộc gọi đã kết thúc thì bỏ qua: không mở micro trở lại.
@@ -1822,19 +1868,24 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
   useEffect(() => {
     if (call?.phase !== "active") return;
     const android = Platform.OS === "android";
+    const speakerOn = call?.speakerOn !== false;
     const route = () => {
       void setAudioModeAsync({
         allowsRecording: true,
         playsInSilentMode: true,
         shouldPlayInBackground: true,
-        ...(android ? { shouldRouteThroughEarpiece: false } : {}),
+        ...(android
+          ? speakerOn
+            ? { shouldRouteThroughEarpiece: false }
+            : { shouldRouteThroughEarpiece: true }
+          : {}),
       }).catch(() => {});
     };
     route();
     const timer = setInterval(route, 3000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [call?.phase, call?.id, rtcLive]);
+  }, [call?.phase, call?.id, call?.speakerOn, rtcLive]);
   // Giữ cuộc gọi sống khi tắt màn hình: Android cần dịch vụ chạy nổi kèm thông
   // báo "Cuộc gọi đang diễn ra…" (có nút Cúp máy); cuộc gọi kết thúc là tắt ngay
   // để không hao pin. iOS chỉ cần chế độ chạy nền khai trong app.config.js.
@@ -2707,6 +2758,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         callPlayingRef={callPlayingRef}
         rtcInfo={rtcInfo}
         rtcLive={rtcLive}
+        rtcStreams={rtcStreams}
         rtcAudio={rtcAudio}
         onUseLegacyAudio={useLegacyAudio}
         onSendPhoto={sendChatPhoto}
@@ -2778,6 +2830,7 @@ function LocalShell({
   callPlayingRef,
   rtcInfo,
   rtcLive,
+  rtcStreams,
   rtcAudio,
   onUseLegacyAudio,
   onPickRingtone,
@@ -2861,6 +2914,8 @@ function LocalShell({
   /** Trạng thái đường tiếng trực tiếp (WebRTC) của cuộc gọi đang mở. */
   rtcInfo: { state: string; detail: string };
   rtcLive: boolean;
+  /** Luồng hình ảnh trực tiếp (WebRTC Video Call) của mình và người thương. */
+  rtcStreams: { localUrl: string | null; remoteUrl: string | null };
   /** Số byte tiếng thật đang vào/ra + cường độ tiếng nói (0..1). */
   rtcAudio: {
     inBytes: number;
@@ -2872,7 +2927,7 @@ function LocalShell({
   onUseLegacyAudio: () => void;
   onPickRingtone: () => void;
   onResetRingtone: () => void;
-  onStartCall: () => void;
+  onStartCall: (video?: boolean) => void;
   onSendPhoto: (uri: string, caption: string) => void;
   onSendLocation: () => void;
   /** Người thương đang gõ chữ (ba chấm nhảy ở đầu khung chat). */
@@ -3173,6 +3228,7 @@ function LocalShell({
                 openPair={() => setTab("pair")}
                 relayStatus={relayStatus}
                 onSendMoment={flushMoments}
+                onStartCall={onStartCall}
                 onQuickNote={(text) => {
                   try {
                     update({ type: "message.add", kind: "nudge", body: text });
@@ -3274,6 +3330,8 @@ function LocalShell({
           <CallLocal
             call={call}
             micOn={call.micOn}
+            camOn={Boolean(call.camOn)}
+            speakerOn={call.speakerOn !== false}
             partnerName={call.name}
             partnerAvatar={state.partner?.avatar ?? null}
             ringtoneUri={
@@ -3285,11 +3343,21 @@ function LocalShell({
             playingRef={callPlayingRef}
             rtcInfo={rtcInfo}
             rtcLive={rtcLive}
+            rtcStreams={rtcStreams}
             reduced={reduceMotion}
             rtcAudio={rtcAudio}
             onUseLegacyAudio={onUseLegacyAudio}
             onToggleMic={() =>
               callAction({ type: "mic", on: !callRef.current?.micOn })
+            }
+            onToggleCam={() =>
+              callAction({ type: "cam", on: !callRef.current?.camOn })
+            }
+            onToggleSpeaker={() =>
+              callAction({
+                type: "speaker",
+                on: callRef.current?.speakerOn === false,
+              })
             }
             onMinimize={() => callAction({ type: "minimize", min: true })}
             onRestore={() => callAction({ type: "minimize", min: false })}

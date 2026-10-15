@@ -6,8 +6,9 @@ export const CALL_RING_TIMEOUT_MS = 45 * 1000;
  *  thúc — máy A tắt thì máy B cũng tắt theo, không còn cảnh treo cuộc gọi. */
 export const CALL_ALIVE_MS = 1000;
 export const CALL_SILENT_END_MS = 6000;
-export function newCall({ id, role, name, at = Date.now() }) {
+export function newCall({ id, role, name, video = false, at = Date.now() }) {
   if (!id) throw new Error("Cuộc gọi thiếu mã.");
+  const isVideo = Boolean(video);
   return {
     id: String(id),
     role: role === "callee" ? "callee" : "caller",
@@ -19,6 +20,9 @@ export function newCall({ id, role, name, at = Date.now() }) {
     reason: "",
     minimized: false,
     micOn: true,
+    video: isVideo,
+    camOn: isVideo,
+    speakerOn: true,
     lastSeen: at,
   };
 }
@@ -71,6 +75,13 @@ export function callEvent(call, event, now = Date.now()) {
       reason: "Người thương đã kết thúc cuộc gọi",
     };
   if (type === "mic") return { ...call, micOn: event.on === true };
+  if (type === "cam")
+    return {
+      ...call,
+      camOn: event.on === true,
+      video: Boolean(call.video || event.on === true),
+    };
+  if (type === "speaker") return { ...call, speakerOn: event.on === true };
   if (type === "minimize") return { ...call, minimized: event.min === true };
   return call;
 }

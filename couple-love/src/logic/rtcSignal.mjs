@@ -29,6 +29,8 @@ export const RTC_STATS_MS = 500;
 export const RTC_DEAD_MS = 7000;
 /** Bitrate Opus cho tiếng nói: đủ rõ mà không tốn băng thông. */
 export const RTC_OPUS_BITRATE = 32000;
+/** Bitrate mục tiêu (kbps) cho Video Call thích ứng trên mạng 4G / TURN 80/443. */
+export const RTC_VIDEO_BITRATE_KBPS = 380;
 /**
  * Chờ tối đa bao lâu cho đường tiếng qua PeerJS (máy chủ chào hỏi + TURN) trước
  * khi chuyển sang đường WebRTC cũ. Ngắn để không bắt người dùng chờ lâu.
@@ -167,9 +169,10 @@ export const RTC_ICE_SERVERS = [
 export const ICE_POLICY = "all";
 
 /**
- * Chỉ lấy tiếng. Bật khử vọng (echo cancellation) và giảm ồn phần cứng của
- * WebRTC (kèm cờ mở rộng goog* cho engine native Android/iOS): nhờ vậy triệt
- * tiêu tiếng vang (echo) và tiếng ù nền khi gọi.
+ * Cấu hình bộ lọc phần cứng + Adaptive Filter của WebRTC:
+ * Bật khử vọng (echoCancellation + Delay-Agnostic AEC), giảm ồn phần cứng
+ * (noiseSuppression + ANR bậc 2), tự cân bằng âm lượng (AGC) và lọc thông cao
+ * (googHighpassFilter) để triệt tiêu tiếng vang, tiếng quạt/gió mà không méo giọng.
  */
 export const RTC_MEDIA = {
   audio: {
@@ -177,12 +180,36 @@ export const RTC_MEDIA = {
     noiseSuppression: true, // Bật khử tiếng ồn nền
     autoGainControl: true, // Tự động cân bằng âm lượng micro
     googEchoCancellation: true, // Cờ mở rộng cho WebRTC
+    googEchoCancellation2: true, // Adaptive Filter AEC thế hệ 2
+    googDAEchoCancellation: true, // Delay-Agnostic AEC cho máy ảo / Bluetooth / loa ngoài
     googAutoGainControl: true,
+    googAutoGainControl2: true, // Digital Adaptive AGC
     googNoiseSuppression: true,
+    googNoiseSuppression2: true, // Spectral Adaptive Noise Suppression
     googHighpassFilter: true, // Lọc tần số thấp (tiếng gió, tiếng ù)
+    googTypingNoiseDetection: true,
+    googAudioMirroring: false,
   },
   video: false,
 };
+
+/**
+ * Tạo cấu hình getUserMedia theo loại cuộc gọi (thoại hoặc video).
+ * Khi gọi video, giới hạn độ phân giải 640x480 @ 24fps để mượt trên 4G và máy yếu.
+ */
+export function rtcMediaConstraints(video = false) {
+  return {
+    audio: { ...RTC_MEDIA.audio },
+    video: video
+      ? {
+          facingMode: "user",
+          width: { ideal: 640, max: 960 },
+          height: { ideal: 480, max: 720 },
+          frameRate: { ideal: 24, max: 30 },
+        }
+      : false,
+  };
+}
 
 /**
  * `pid` = trao đổi mã máy của PeerJS qua kênh ghép nối (kênh này đã chạy sẵn,
@@ -305,6 +332,73 @@ export function tuneOpusSdp(sdp, options = {}) {
       .join(separator);
   }
   return tuned.join(separator);
+}
+
+/**
+ * Tinh chỉnh SDP toàn diện (Codec Opus + Bitrate thích ứng cho Audio/Video):
+ * - Audio: Opus FEC + tắt DTX + maxaveragebitrate (qua tuneOpusSdp).
+ * - Video (nếu có dòng `m=video`): chèn `b=AS:<kbps>` và `x-google-*-bitrate`
+ *   để WebRTC tự co giãn băng thông mượt mà trên mạng 4G yếu hoặc khi chuyển
+ *   đổi giữa các cổng TURN 80/443 của Metered.ca.
+ */
+export function tuneAdaptiveSdp(sdp, options = {}) {
+  const base = tuneOpusSdp(sdp, options);
+  if (!base || !/^m=video\b/im.test(base)) return base;
+  const videoKbps = Math.max(
+    120,
+    Number(options.videoBitrateKbps) || RTC_VIDEO_BITRATE_KBPS,
+  );
+  const minKbps = Math.max(80, Math.round(videoKbps * 0.35));
+  const startKbps = Math.max(140, Math.round(videoKbps * 0.7));
+  const separator = base.includes("\r\n") ? "\r\n" : "\n";
+  const lines = base.split(/\r\n|\n/);
+  const videoPayloads = new Set();
+  for (const line of lines) {
+    const match = /^a=rtpmap:(\d+)\s+(VP8|VP9|H264)\//i.exec(line.trim());
+    if (match) videoPayloads.add(match[1]);
+  }
+  const out = [];
+  let inVideo = false;
+  let hasVideoBandwidth = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (/^m=video\b/i.test(trimmed)) {
+      inVideo = true;
+      hasVideoBandwidth = false;
+      out.push(line);
+      continue;
+    }
+    if (/^m=/i.test(trimmed)) {
+      if (inVideo && !hasVideoBandwidth) out.push(`b=AS:${videoKbps}`);
+      inVideo = false;
+    }
+    if (inVideo && /^b=AS:/i.test(trimmed)) {
+      hasVideoBandwidth = true;
+      out.push(`b=AS:${videoKbps}`);
+      continue;
+    }
+    if (inVideo && /^c=IN\b/i.test(trimmed) && !hasVideoBandwidth) {
+      out.push(line);
+      out.push(`b=AS:${videoKbps}`);
+      hasVideoBandwidth = true;
+      continue;
+    }
+    const fmtp = /^a=fmtp:(\d+)\s*(.*)$/i.exec(trimmed);
+    if (fmtp && videoPayloads.has(fmtp[1])) {
+      const rest = fmtp[2].trim();
+      const extra = `x-google-min-bitrate=${minKbps};x-google-start-bitrate=${startKbps};x-google-max-bitrate=${videoKbps}`;
+      out.push(
+        rest.includes("x-google-max-bitrate")
+          ? line
+          : `a=fmtp:${fmtp[1]} ${rest ? `${rest};${extra}` : extra}`,
+      );
+      continue;
+    }
+    out.push(line);
+  }
+  if (inVideo && !hasVideoBandwidth) out.push(`b=AS:${videoKbps}`);
+  return out.join(separator);
 }
 
 /** "12,3 KB" — số liệu tiếng cho màn hình gọi, viết kiểu Việt Nam. */

@@ -5,6 +5,7 @@ import { themeById, withWallpaper } from "../logic/themes.mjs";
 export type Theme = {
   id: string;
   name: string;
+  messengerName?: string;
   emoji: string[];
   /** Hoạ tiết rải ở nền (hoa, mèo, sóng…) — theme không chỉ đổi màu. */
   deco: string[];
@@ -22,6 +23,14 @@ export type Theme = {
   text: string;
   glow: string;
   veil: string;
+  /** Màu bóng chat của mình (gradient phong cách Messenger). */
+  bubbleMine?: [string, string];
+  /** Màu nền bóng chat của người thương. */
+  bubblePartner?: string;
+  /** Màu nền khung nhập liệu đồng bộ theo chủ đề. */
+  inputBg?: string;
+  /** Màu viền khung nhập liệu đồng bộ theo chủ đề. */
+  inputBorder?: string;
 };
 type ThemeValue = {
   theme: Theme;

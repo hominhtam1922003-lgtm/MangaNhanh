@@ -167,14 +167,19 @@ export const RTC_ICE_SERVERS = [
 export const ICE_POLICY = "all";
 
 /**
- * Chỉ lấy tiếng. Bật khử vọng (echo cancellation) và giảm ồn của chính WebRTC:
- * nhờ vậy không phải tạm ngừng micro khi loa đang phát như cách cũ.
+ * Chỉ lấy tiếng. Bật khử vọng (echo cancellation) và giảm ồn phần cứng của
+ * WebRTC (kèm cờ mở rộng goog* cho engine native Android/iOS): nhờ vậy triệt
+ * tiêu tiếng vang (echo) và tiếng ù nền khi gọi.
  */
 export const RTC_MEDIA = {
   audio: {
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true,
+    echoCancellation: true, // Bật khử vang âm thanh (AEC)
+    noiseSuppression: true, // Bật khử tiếng ồn nền
+    autoGainControl: true, // Tự động cân bằng âm lượng micro
+    googEchoCancellation: true, // Cờ mở rộng cho WebRTC
+    googAutoGainControl: true,
+    googNoiseSuppression: true,
+    googHighpassFilter: true, // Lọc tần số thấp (tiếng gió, tiếng ù)
   },
   video: false,
 };

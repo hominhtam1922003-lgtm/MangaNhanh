@@ -35,7 +35,7 @@ module.exports = {
   expo: {
     name: "Mật Mã Yêu",
     slug: "hai-trai-tim",
-    version: "1.18.5",
+    version: "1.18.6",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
@@ -59,9 +59,10 @@ module.exports = {
         // Thông báo tin nhắn trên Android 13+ (hệ thống vẫn hỏi người dùng).
         "android.permission.POST_NOTIFICATIONS",
       ],
-      // 1.18.5: thay thế hoàn toàn iceServers bằng cấu hình TURN/STUN chuẩn
-      // chính thức của Metered.ca (global.relay.metered.ca + stun.relay.metered.ca).
-      versionCode: 25,
+      // 1.18.6: bật triệt để bộ lọc phần cứng chống vang/ồn (AEC, NS, AGC,
+      // googEchoCancellation, googAutoGainControl, googNoiseSuppression,
+      // googHighpassFilter) và giải phóng sạch toàn bộ track âm thanh khi ngắt.
+      versionCode: 26,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#fff1f2",

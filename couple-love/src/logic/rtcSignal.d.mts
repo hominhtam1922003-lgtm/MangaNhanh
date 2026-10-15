@@ -31,6 +31,10 @@ export declare const RTC_MEDIA: {
     echoCancellation: boolean;
     noiseSuppression: boolean;
     autoGainControl: boolean;
+    googEchoCancellation: boolean;
+    googAutoGainControl: boolean;
+    googNoiseSuppression: boolean;
+    googHighpassFilter: boolean;
   };
   video: boolean;
 };

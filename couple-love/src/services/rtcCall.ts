@@ -286,9 +286,30 @@ export class RtcCall {
   private async openMic(): Promise<boolean> {
     if (this.mic) return true;
     const rtc = loadNative();
+    const constraints = {
+      audio: {
+        echoCancellation: true, // Bật khử vang âm thanh (AEC)
+        noiseSuppression: true, // Bật khử tiếng ồn nền
+        autoGainControl: true, // Tự động cân bằng âm lượng micro
+        googEchoCancellation: true, // Cờ mở rộng cho WebRTC
+        googAutoGainControl: true,
+        googNoiseSuppression: true,
+        googHighpassFilter: true, // Lọc tần số thấp (tiếng gió, tiếng ù)
+      },
+      video: false,
+    };
     try {
-      const stream = await rtc?.mediaDevices?.getUserMedia?.(RTC_MEDIA);
+      const stream = await rtc?.mediaDevices?.getUserMedia?.(
+        constraints ?? RTC_MEDIA,
+      );
       if (stream) {
+        if (this.closed) {
+          try {
+            stream.getTracks?.()?.forEach?.((track: any) => track.stop());
+            stream.release?.();
+          } catch {}
+          return false;
+        }
         this.mic = stream;
         return true;
       }
@@ -297,7 +318,7 @@ export class RtcCall {
     // khoá mic cho cửa sổ kia): vẫn tạo luồng rỗng để WebRTC kết nối trực tiếp
     // và nghe được tiếng của bên kia.
     try {
-      if (rtc?.MediaStream) {
+      if (rtc?.MediaStream && !this.closed) {
         this.mic = new rtc.MediaStream();
         return true;
       }
@@ -601,6 +622,7 @@ export class RtcCall {
           return;
         }
         void this.peerStage();
+        this.teardown();
         this.report(
           "failed",
           "Chưa nối trực tiếp được, tiếng đang đi qua kênh ghép nối.",
@@ -762,7 +784,7 @@ export class RtcCall {
 
   private fail(detail: string) {
     if (this.live) this.opts.send(rtcPacket(this.opts.callId, "bye"), 0);
-    this.live = false;
+    this.teardown();
     this.report("failed", detail);
   }
 
@@ -952,18 +974,43 @@ export class RtcCall {
     this.pending = [];
     this.localCandidates = [];
     try {
+      this.peerMedia?.close?.();
+    } catch {}
+    try {
       this.peer?.destroy?.();
     } catch {}
     this.peer = null;
     this.peerMedia = null;
-    try {
-      for (const track of this.mic?.getTracks?.() ?? []) track.stop();
-    } catch {}
+    const stream = this.mic;
     this.mic = null;
     try {
-      this.pc?.close?.();
+      stream?.getTracks?.()?.forEach?.((track: any) => {
+        track.enabled = false;
+        track.stop();
+      });
+      stream?.release?.();
     } catch {}
+    const pc = this.pc;
     this.pc = null;
+    try {
+      if (pc) {
+        pc.onicecandidate = null;
+        pc.onconnectionstatechange = null;
+        pc.oniceconnectionstatechange = null;
+        pc.getSenders?.()?.forEach?.((sender: any) => {
+          try {
+            sender?.track?.stop?.();
+            pc.removeTrack?.(sender);
+          } catch {}
+        });
+        pc.getReceivers?.()?.forEach?.((receiver: any) => {
+          try {
+            receiver?.track?.stop?.();
+          } catch {}
+        });
+        pc.close?.();
+      }
+    } catch {}
   }
 
   close() {

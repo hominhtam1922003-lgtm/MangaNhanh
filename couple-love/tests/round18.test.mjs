@@ -477,4 +477,19 @@ test("1.18.3: cuộc gọi WebRTC + TURN riêng không còn khoá chết await t
     /nYuBOYJvrOiMo6IG/,
     "1.18.5: đúng credential Metered.ca",
   );
+  assert.match(
+    rtcCallSource,
+    /googEchoCancellation:\s*true/,
+    "1.18.6: bật cờ phần cứng chống vang googEchoCancellation",
+  );
+  assert.match(
+    rtcCallSource,
+    /googHighpassFilter:\s*true/,
+    "1.18.6: bật bộ lọc tần số thấp googHighpassFilter",
+  );
+  assert.match(
+    rtcCallSource,
+    /stream\?\.getTracks\?\.\(\)\?\.forEach\?\.\(\(track:\s*any\)\s*=>/,
+    "1.18.6: giải phóng hoàn toàn các track âm thanh khi kết thúc cuộc gọi",
+  );
 });

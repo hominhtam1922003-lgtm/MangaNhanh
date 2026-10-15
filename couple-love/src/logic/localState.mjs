@@ -102,6 +102,9 @@ export function emptyState(now = new Date().toISOString()) {
       // Nhạc chuông riêng lấy từ thư viện nhạc trong máy (rỗng = dùng nhạc mặc định).
       ringtone: "",
       ringtoneName: "",
+      // Ảnh nền cuộc gọi (mẫu có sẵn hoặc ảnh đôi chọn từ thư viện máy).
+      callBgId: "sunset-love",
+      callBgFile: "",
       // Mặc định bật giữ kết nối chạy nền để tắt màn hình vẫn nhận được cuộc gọi/tin nhắn.
       keepAlive: true,
     },
@@ -203,6 +206,8 @@ export function migrate(raw, now = new Date().toISOString()) {
     replyNudge: raw.settings?.replyNudge !== false,
     ringtone: text(raw.settings?.ringtone, 80),
     ringtoneName: text(raw.settings?.ringtoneName, 60),
+    callBgId: text(raw.settings?.callBgId, 40) || "sunset-love",
+    callBgFile: text(raw.settings?.callBgFile, 90),
     // Giữ kết nối chạy nền: mặc định bật để thông báo tin nhắn & cuộc gọi đến vẫn nổi khi tắt màn hình.
     keepAlive: raw.settings?.keepAlive !== false,
   };
@@ -771,6 +776,14 @@ export function reduce(state, action) {
         action.ringtone === undefined
           ? next.settings.ringtoneName
           : text(action.ringtoneName, 60),
+      callBgId:
+        action.callBgId === undefined
+          ? next.settings.callBgId || "sunset-love"
+          : text(action.callBgId, 40) || "sunset-love",
+      callBgFile:
+        action.callBgFile === undefined
+          ? next.settings.callBgFile || ""
+          : text(action.callBgFile, 90),
       // Giữ kết nối khi app ở nền (bật trong Cài đặt) — để tin nhắn vẫn nổi
       // thông báo khi tắt màn hình.
       keepAlive:

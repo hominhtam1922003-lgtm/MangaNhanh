@@ -18,7 +18,12 @@ import {
   rtcMediaConstraints,
   tuneAdaptiveSdp,
 } from "../src/logic/rtcSignal.mjs";
-import { callEvent, newCall } from "../src/logic/callLogic.mjs";
+import {
+  CALL_BACKGROUNDS,
+  callBackgroundById,
+  callEvent,
+  newCall,
+} from "../src/logic/callLogic.mjs";
 import { MESSENGER_THEMES, themeById } from "../src/logic/themes.mjs";
 import {
   PET_DECAY_INTERVAL_MS,
@@ -320,14 +325,63 @@ test("Nâng cấp 1.18.7: Chống ồn Adaptive Filter, SDP thích ứng, Flat C
     /Boss.*đang đòi ăn kìa, vào cho Boss ăn cùng em đi anh ơi!/,
   );
 
-  // Giao diện Full-screen Call + RTCView cover + Loa ngoài
+  // Giao diện Full-screen Call + RTCView cover + Loa ngoài + Đổi Camera + Ảnh nền cuộc gọi (1.18.10)
   assert.match(callUi, /Modal/, "màn hình gọi Full-screen Modal");
   assert.match(
     callUi,
     /StyleSheet\.absoluteFillObject/,
     "RTCView phủ kín màn hình",
   );
+  assert.match(
+    callUi,
+    /flex: 1, width: "100%", height: "100%"/,
+    "RTCView style flex:1 width/height 100%",
+  );
   assert.match(callUi, /objectFit="cover"/, "RTCView objectFit cover");
+  assert.match(callUi, /Đổi cam/, "có nút Đổi Camera ở góc trên chuẩn Zalo");
+  assert.match(callUi, /Ảnh nền/, "có nút chọn Ảnh nền cuộc gọi đôi mờ ảo");
+  assert.equal(
+    CALL_BACKGROUNDS.length >= 5,
+    true,
+    "có bộ ảnh nền cuộc gọi đôi",
+  );
+  assert.equal(callBackgroundById("sunset-love").id, "sunset-love");
+
+  // Kiểm tra hàm đổi camera trước/sau (_switchCamera)
+  const rtcCallSrc = read("src/services/rtcCall.ts");
+  assert.match(
+    rtcCallSrc,
+    /_switchCamera/,
+    "gọi _switchCamera() của react-native-webrtc",
+  );
+  let cFacing = newCall({
+    id: "v2",
+    role: "caller",
+    name: "Ngọc",
+    video: true,
+  });
+  assert.equal(cFacing.cameraFacing, "user");
+  cFacing = callEvent(cFacing, { type: "switchCamera" });
+  assert.equal(cFacing.cameraFacing, "environment");
+
+  // Kiểm tra cấu hình Supabase thực tế + Expo Push Token + Wake-up Device
+  const supaClient = read("src/services/supabaseClient.ts");
+  assert.match(supaClient, /https:\/\/nbbopfvsthuopiopupqd\.supabase\.co/);
+  assert.match(supaClient, /sb_publishable_ycuVrcaQYdRT8mgQx5vypg_-ir0JLv6/);
+  assert.equal(
+    /service_role|sb_secret_/.test(supaClient),
+    false,
+    "tuyệt đối không lộ Service Role Key trên Frontend",
+  );
+  assert.match(supaClient, /syncExpoPushTokenToProfile/);
+  assert.match(supaClient, /sendWakeupPushToPartner/);
+  assert.match(supaClient, /watchWakeupEvents/);
+  const edgeFn = read("supabase/functions/dispatch-notifications/index.ts");
+  assert.match(edgeFn, /Deno\.env\.get\("SUPABASE_SERVICE_ROLE_KEY"\)/);
+  assert.match(
+    edgeFn,
+    /payload\.table === "calls" \|\| payload\.table === "messages"/,
+  );
 
   const status = computePetStatus({ pet: pFeed, messages: [] }, 2500);
   assert.equal(status.level, 1);

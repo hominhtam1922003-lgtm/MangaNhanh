@@ -95,13 +95,20 @@ import {
   startCallService,
   startIncomingCallService,
   stopCallService,
+  stopIncomingCallService,
 } from "./src/services/callService";
 // Giữ kết nối khi app ở nền / tắt màn hình để tin nhắn vẫn nổi thông báo.
 import {
   onRelayServiceStop,
+  registerPersistentConnectionHeartbeat,
   startRelayService,
   stopRelayService,
 } from "./src/services/relayService";
+import PhotoPicker from "./src/components/PhotoPicker";
+import {
+  ImageManipulator as ImageTool,
+  SaveFormat,
+} from "expo-image-manipulator";
 // Lưu ảnh người thương gửi vào thư viện ảnh của máy.
 import { savePhotoToDevice } from "./src/services/media";
 import { TYPING_HOLD_MS, TYPING_SEND_MS } from "./src/logic/chatExtras.mjs";
@@ -138,6 +145,11 @@ import type {
   AuthProvider,
   PairingWatcher,
 } from "./src/services/account";
+import {
+  sendWakeupPushToPartner,
+  syncExpoPushTokenToProfile,
+  watchWakeupEvents,
+} from "./src/services/supabaseClient";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeContext";
 import {
   imageBase64,
@@ -563,6 +575,14 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     };
     const sent = client.publish(ringPacket);
     setTimeout(() => relayRef.current?.publish(ringPacket), 350);
+    void sendWakeupPushToPartner({
+      senderId: accountRef.current?.uid,
+      partnerId: accountRef.current?.partnerId,
+      type: "call",
+      callId: id,
+      isVideo,
+      senderName: current.me.nickname || "Người thương",
+    });
     applyCall(newCall({ id, role: "caller", name, video: isVideo }));
     setRelayLog((lines) =>
       [
@@ -643,8 +663,13 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       controller?.close();
     } catch {}
   }
-  // Nghe / Từ chối / Kết thúc / thu nhỏ / bật tắt mic, loa ngoài, camera.
-  function callAction(event: { type: string; on?: boolean; min?: boolean }) {
+  // Nghe / Từ chối / Kết thúc / thu nhỏ / bật tắt mic, loa ngoài, camera, đổi cam.
+  function callAction(event: {
+    type: string;
+    on?: boolean;
+    min?: boolean;
+    facing?: "user" | "environment";
+  }) {
     const active = callRef.current;
     if (!active) return;
     // Bấm “Đóng” trên màn hình đã kết thúc: dọn hẳn cửa sổ gọi.
@@ -659,6 +684,7 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       event.type === "reject" ||
       event.type === "hangup"
     ) {
+      void stopIncomingCallService();
       const packet = {
         kind: "call",
         event: event.type,
@@ -690,6 +716,15 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
         callId: active.id,
         on: Boolean(event.on),
       });
+    }
+    if (event.type === "switchCamera") {
+      const nextFacing =
+        rtcRef.current?.switchCamera() ??
+        (active.cameraFacing === "environment" ? "user" : "environment");
+      applyCall(
+        callEvent(active, { type: "switchCamera", facing: nextFacing }),
+      );
+      return;
     }
     if (event.type === "speaker") {
       const speakerOn = event.on !== false;
@@ -1094,6 +1129,13 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           }
         }
         update({ type: "message.sent", id: message.id });
+        void sendWakeupPushToPartner({
+          senderId: accountRef.current?.uid,
+          partnerId: accountRef.current?.partnerId,
+          type: "message",
+          senderName: current.me.nickname || "Người thương",
+          body: message.body || "Đã gửi một tin nhắn mới 💌",
+        });
       } catch (error) {
         setRelayLog((lines) =>
           [
@@ -2515,11 +2557,12 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     state?.relay?.id,
     state?.partner?.nickname,
   ]);
-  // Duy trì kết nối MQTT ngầm khi khoá màn hình / chuyển background hoặc quay lại app.
+  // Duy trì kết nối MQTT / Supabase Realtime ngầm khi khoá màn hình / chuyển
+  // background hoặc quay lại app (chạy cả trong Foreground Service lẫn AppState).
   useEffect(() => {
-    const sub = AppState.addEventListener("change", (nextState) => {
-      const client = relayRef.current;
-      if (client) {
+    const reviveSockets = () => {
+      for (const client of [relayRef.current, inviteInRef.current]) {
+        if (!client) continue;
         for (const slot of client.slots) {
           if (!slot.subscribed) {
             clearTimeout(slot.timer);
@@ -2528,6 +2571,10 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
           }
         }
       }
+    };
+    registerPersistentConnectionHeartbeat(reviveSockets);
+    const sub = AppState.addEventListener("change", (nextState) => {
+      reviveSockets();
       if (nextState === "active" && callRef.current?.phase === "active") {
         void applyCallAudioRoute(callRef.current.speakerOn !== false);
       }
@@ -2556,9 +2603,35 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     const data = (value.notification?.request?.content?.data ?? {}) as {
       open?: string;
       key?: string;
+      type?: string;
+      callId?: string;
+      isVideo?: boolean;
+      senderName?: string;
     };
     const action = String(value.actionIdentifier ?? "");
     const quick = String(value.userText ?? "").trim();
+    if (data.type === "call" || data.open === "call") {
+      const incomingCallId = String(
+        data.callId || `c${Date.now().toString(36)}`,
+      );
+      if (!callRef.current || callRef.current.id !== incomingCallId) {
+        const who =
+          String(data.senderName || "") ||
+          stateRef.current?.partner?.nickname ||
+          "Người thương";
+        const isVideo = Boolean(data.isVideo);
+        applyCall(
+          newCall({
+            id: incomingCallId,
+            role: "callee",
+            name: who,
+            video: isVideo,
+          }),
+        );
+        void startIncomingCallService(who, isVideo);
+      }
+      return;
+    }
     if (action === "tra-loi" && quick) {
       try {
         update({ type: "message.add", kind: "text", body: quick });
@@ -2583,6 +2656,38 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
     const feed = (response: unknown) => notificationReplyRef.current(response);
     const subscription =
       Notifications.addNotificationResponseReceivedListener?.(feed);
+    const receivedSub = Notifications.addNotificationReceivedListener?.(
+      (notification: any) => {
+        const data = (notification?.request?.content?.data ?? {}) as {
+          type?: string;
+          open?: string;
+          callId?: string;
+          isVideo?: boolean;
+          senderName?: string;
+        };
+        if (data.type === "call" || data.open === "call") {
+          const incomingCallId = String(
+            data.callId || `c${Date.now().toString(36)}`,
+          );
+          if (!callRef.current || callRef.current.id !== incomingCallId) {
+            const who =
+              String(data.senderName || "") ||
+              stateRef.current?.partner?.nickname ||
+              "Người thương";
+            const isVideo = Boolean(data.isVideo);
+            applyCall(
+              newCall({
+                id: incomingCallId,
+                role: "callee",
+                name: who,
+                video: isVideo,
+              }),
+            );
+            void startIncomingCallService(who, isVideo);
+          }
+        }
+      },
+    );
     // App mở từ thông báo (kể cả khi bị hệ thống tắt): chỉ xử lý thông báo vừa
     // bấm trong vòng 2 phút, tránh gửi lại tin cũ mỗi lần mở app.
     void Notifications.getLastNotificationResponseAsync?.().then((response) => {
@@ -2590,9 +2695,48 @@ function LocalApp({ onSwitchMode }: { onSwitchMode: () => void }) {
       const at = Number(response.notification?.date ?? 0);
       if (!at || Date.now() - at < 120000) feed(response);
     });
-    return () => subscription?.remove?.();
+    return () => {
+      subscription?.remove?.();
+      receivedSub?.remove?.();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Tự động lấy Expo Push Token khi mở app / đăng nhập và cập nhật vào bảng
+  // `profiles`, đồng thời lắng nghe sự kiện đánh thức từ bảng `calls`/`messages`.
+  useEffect(() => {
+    void syncExpoPushTokenToProfile(account?.uid ?? null);
+    if (!account?.uid) return undefined;
+    const wakeupWatcher = watchWakeupEvents(account.uid, (event) => {
+      if (event.type === "call") {
+        const incomingCallId = String(
+          event.callId || `c${Date.now().toString(36)}`,
+        );
+        if (!callRef.current || callRef.current.id !== incomingCallId) {
+          const who =
+            event.senderName ||
+            stateRef.current?.partner?.nickname ||
+            "Người thương";
+          const isVideo = Boolean(event.isVideo);
+          applyCall(
+            newCall({
+              id: incomingCallId,
+              role: "callee",
+              name: who,
+              video: isVideo,
+            }),
+          );
+          void startIncomingCallService(who, isVideo);
+          void notifyNow(
+            `${who} đang gọi ${isVideo ? "video " : ""}cho bạn 📞`,
+            "Mở app để nghe máy.",
+            true,
+          );
+        }
+      }
+    });
+    return () => wakeupWatcher.stop();
+  }, [account?.uid]);
   /**
    * Đổi tên hoặc ảnh đại diện → lưu lên Supabase (hồ sơ theo tài khoản), để lần
    * sau mở app trên máy nào cũng thấy đúng tên/ảnh. Chỉ gọi khi ĐÃ đăng nhập và
@@ -2983,6 +3127,7 @@ function LocalShell({
   // Máy yếu hoặc người dùng bật "giảm chuyển động": màn hình gọi không mở
   // WebGL, dùng tim vẽ sẵn cho nhẹ máy.
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [callBgPickerOpen, setCallBgPickerOpen] = useState(false);
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
     const subscription = AccessibilityInfo.addEventListener(
@@ -3384,12 +3529,21 @@ function LocalShell({
             micOn={call.micOn}
             camOn={Boolean(call.camOn)}
             speakerOn={call.speakerOn !== false}
+            cameraFacing={call.cameraFacing ?? "user"}
             partnerName={call.name}
             partnerAvatar={state.partner?.avatar ?? null}
             ringtoneUri={
               state.settings?.ringtone
                 ? imageUri(state.settings.ringtone)
                 : null
+            }
+            callBgId={state.settings?.callBgId || "sunset-love"}
+            callBgUri={
+              state.settings?.callBgFile
+                ? imageUri(state.settings.callBgFile)
+                : state.appearance?.wallpaper
+                  ? imageUri(state.appearance.wallpaper)
+                  : null
             }
             queueRef={callQueueRef}
             playingRef={callPlayingRef}
@@ -3405,17 +3559,58 @@ function LocalShell({
             onToggleCam={() =>
               callAction({ type: "cam", on: !callRef.current?.camOn })
             }
+            onSwitchCamera={() => callAction({ type: "switchCamera" })}
             onToggleSpeaker={() =>
               callAction({
                 type: "speaker",
                 on: callRef.current?.speakerOn === false,
               })
             }
+            onChangeCallBg={(bgId) =>
+              update({
+                type: "settings.set",
+                notify: state.settings.notify,
+                relay: state.settings.relay,
+                loveNotes: state.settings.loveNotes,
+                theme: state.settings.theme,
+                callBgId: bgId,
+              })
+            }
+            onPickCallBgPhoto={() => setCallBgPickerOpen(true)}
             onMinimize={() => callAction({ type: "minimize", min: true })}
             onRestore={() => callAction({ type: "minimize", min: false })}
             onAccept={() => callAction({ type: "accept" })}
             onReject={() => callAction({ type: "hangup" })}
             onHangUp={() => callAction({ type: "hangup" })}
+          />
+        ) : null}
+        {callBgPickerOpen ? (
+          <PhotoPicker
+            title="Chọn ảnh đôi làm nền cuộc gọi"
+            busyLabel="Đang lưu ảnh nền cuộc gọi…"
+            onClose={() => setCallBgPickerOpen(false)}
+            onPick={async (uri) => {
+              const context = ImageTool.manipulate(uri);
+              context.resize({ width: 1080 });
+              const rendered = await context.renderAsync();
+              const saved = await rendered.saveAsync({
+                compress: 0.78,
+                format: SaveFormat.JPEG,
+              });
+              const file = saveImage(
+                saved.uri,
+                `callbg-${Date.now().toString(36)}.jpg`,
+              );
+              update({
+                type: "settings.set",
+                notify: state.settings.notify,
+                relay: state.settings.relay,
+                loveNotes: state.settings.loveNotes,
+                theme: state.settings.theme,
+                callBgId: "custom",
+                callBgFile: file,
+              });
+            }}
           />
         ) : null}
         <View

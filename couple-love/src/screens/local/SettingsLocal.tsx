@@ -26,6 +26,7 @@ import {
 } from "../../services/localsync";
 import { requestNotifications } from "../../services/localnotify";
 import { restoreFromPayload } from "../../logic/localState.mjs";
+import { CALL_BACKGROUNDS } from "../../logic/callLogic.mjs";
 import { MESSENGER_THEMES, THEMES } from "../../logic/themes.mjs";
 import { formatPairCode } from "../../logic/pairing.mjs";
 import { useTheme } from "../../theme/ThemeContext";
@@ -85,6 +86,7 @@ export default function SettingsLocal({
   const [busy, setBusy] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
+  const [callBgOpen, setCallBgOpen] = useState(false);
   const { theme } = useTheme();
   async function run(task: () => Promise<void> | void) {
     setBusy(true);
@@ -129,6 +131,31 @@ export default function SettingsLocal({
     Alert.alert(
       "Đã đặt ảnh nền",
       "Ảnh nền sẽ sang máy người thương ở lần kết nối kế tiếp.",
+    );
+  }
+  async function applyCallBgPhoto(uri: string) {
+    const context = ImageTool.manipulate(uri);
+    context.resize({ width: 1080 });
+    const rendered = await context.renderAsync();
+    const saved = await rendered.saveAsync({
+      compress: 0.78,
+      format: SaveFormat.JPEG,
+    });
+    const previous = state.settings.callBgFile;
+    const file = saveImage(saved.uri, `callbg-${Date.now().toString(36)}.jpg`);
+    update({
+      type: "settings.set",
+      notify: state.settings.notify,
+      relay: state.settings.relay,
+      loveNotes: state.settings.loveNotes,
+      theme: state.settings.theme,
+      callBgId: "custom",
+      callBgFile: file,
+    });
+    if (previous && previous !== file) deleteImage(previous);
+    Alert.alert(
+      "Đã đặt ảnh nền cuộc gọi",
+      "Ảnh đôi của bạn đã được làm mờ ảo phía sau avatar khi gọi thoại.",
     );
   }
   async function applyAvatar(uri: string) {
@@ -618,6 +645,101 @@ export default function SettingsLocal({
             ) : null}
           </View>
         </View>
+        <Title small>Ảnh nền cuộc gọi (Voice Call Background)</Title>
+        <View className="mb-3">
+          <Note>
+            Chọn bộ ảnh nền đôi lãng mạn hoặc tải ảnh đôi từ thư viện máy làm
+            hình nền mờ ảo (blur/gradient overlay) phía sau avatar khi gọi
+            thoại.
+          </Note>
+          <View className="flex-row flex-wrap mt-2">
+            {CALL_BACKGROUNDS.map((preset) => {
+              const selected =
+                (state.settings.callBgId || "sunset-love") === preset.id;
+              return (
+                <Pressable
+                  key={preset.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ảnh nền cuộc gọi ${preset.name}`}
+                  onPress={() => {
+                    if (preset.id === "custom" && !state.settings.callBgFile) {
+                      setCallBgOpen(true);
+                      return;
+                    }
+                    update({
+                      type: "settings.set",
+                      notify: state.settings.notify,
+                      relay: state.settings.relay,
+                      loveNotes: state.settings.loveNotes,
+                      theme: state.settings.theme,
+                      callBgId: preset.id,
+                    });
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: 11,
+                    paddingVertical: 7,
+                    borderRadius: 16,
+                    marginRight: 8,
+                    marginBottom: 8,
+                    backgroundColor: selected ? theme.deep[1] : theme.soft,
+                    borderWidth: 1.5,
+                    borderColor: selected ? theme.deep[0] : theme.border,
+                  }}
+                >
+                  <Text className="mr-1.5">{preset.emoji}</Text>
+                  <Text
+                    className="text-xs font-bold"
+                    style={{ color: selected ? theme.onDeep : theme.ink }}
+                  >
+                    {preset.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <View className="flex-row mt-1">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Chọn ảnh đôi làm nền cuộc gọi"
+              onPress={() => setCallBgOpen(true)}
+              className="mr-3 px-4 py-2 rounded-full"
+              style={{ backgroundColor: theme.deep[1] }}
+            >
+              <Text className="font-bold" style={{ color: theme.onDeep }}>
+                📸 Chọn ảnh đôi làm nền gọi
+              </Text>
+            </Pressable>
+            {state.settings.callBgFile ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Xoá ảnh nền cuộc gọi tự chọn"
+                onPress={() => {
+                  const prev = state.settings.callBgFile;
+                  update({
+                    type: "settings.set",
+                    notify: state.settings.notify,
+                    relay: state.settings.relay,
+                    loveNotes: state.settings.loveNotes,
+                    theme: state.settings.theme,
+                    callBgId: "sunset-love",
+                    callBgFile: "",
+                  });
+                  if (prev) deleteImage(prev);
+                }}
+                className="px-4 py-2 rounded-full"
+                style={{
+                  backgroundColor: theme.soft,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                }}
+              >
+                <Text style={{ color: theme.ink }}>Bỏ ảnh tự chọn</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
         <Title small>Nhắc nhở &amp; lời yêu tự động</Title>
         <View className="flex-row justify-between items-center my-3">
           <View className="flex-1 pr-2">
@@ -890,6 +1012,14 @@ export default function SettingsLocal({
           busyLabel="Đang xử lý ảnh nền…"
           onClose={() => setWallpaperOpen(false)}
           onPick={(uri) => applyWallpaper(uri)}
+        />
+      ) : null}
+      {callBgOpen ? (
+        <PhotoPicker
+          title="Chọn ảnh đôi làm nền cuộc gọi"
+          busyLabel="Đang xử lý ảnh nền cuộc gọi…"
+          onClose={() => setCallBgOpen(false)}
+          onPick={(uri) => applyCallBgPhoto(uri)}
         />
       ) : null}
     </>

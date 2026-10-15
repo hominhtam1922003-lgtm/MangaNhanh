@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
+
 Deno.serve(async (request) => {
   const secret = Deno.env.get("CRON_SECRET");
   if (
@@ -7,11 +8,98 @@ Deno.serve(async (request) => {
     request.headers.get("Authorization") !== `Bearer ${secret}`
   )
     return new Response("Không được phép.", { status: 401 });
+
   const url = Deno.env.get("SUPABASE_URL"),
     key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key)
     return new Response("Thiếu cấu hình máy chủ.", { status: 503 });
+
   const db = createClient(url, key, { auth: { persistSession: false } });
+
+  // Hỗ trợ Database Webhook: khi có bản ghi mới chèn vào bảng `calls` hoặc
+  // `messages`, lập tức gửi Expo Push Notification đánh thức máy đối phương
+  // (đổ chuông, rung và bật màn hình cuộc gọi đến).
+  try {
+    const cloned = request.clone();
+    const payload = await cloned.json().catch(() => null);
+    if (
+      payload &&
+      payload.type === "INSERT" &&
+      (payload.table === "calls" || payload.table === "messages") &&
+      payload.record
+    ) {
+      const record = payload.record;
+      const isCall = payload.table === "calls";
+      const recipientId = String(
+        (isCall ? record.callee_id : record.recipient_id) ?? "",
+      ).trim();
+      if (!recipientId) {
+        return Response.json({ ok: false, reason: "missing_recipient" });
+      }
+      const { data: profile } = await db
+        .from("profiles")
+        .select("expo_push_token")
+        .eq("id", recipientId)
+        .maybeSingle();
+      const { data: tokenRows } = await db
+        .from("push_tokens")
+        .select("token")
+        .eq("user_id", recipientId);
+      const tokenSet = new Set<string>();
+      if (profile?.expo_push_token)
+        tokenSet.add(String(profile.expo_push_token));
+      for (const row of tokenRows ?? []) {
+        if (row?.token) tokenSet.add(String(row.token));
+      }
+      const validTokens = Array.from(tokenSet).filter((t) =>
+        /^(ExponentPushToken|ExpoPushToken)\[[\w-]+\]$/.test(t),
+      );
+      if (!validTokens.length) {
+        return Response.json({ ok: true, sent: 0 });
+      }
+      const senderName = String(
+        (isCall ? record.caller_name : record.sender_name) || "Người thương",
+      );
+      const isVideo = Boolean(record.is_video);
+      const title = isCall
+        ? `${senderName} đang gọi ${isVideo ? "Video " : ""}cho bạn 📞`
+        : `${senderName} 💌`;
+      const body = isCall
+        ? "Chạm để mở màn hình cuộc gọi và nghe máy ngay"
+        : String(record.body || "Bạn có một tin nhắn yêu thương mới.");
+      const pushRes = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(Deno.env.get("EXPO_ACCESS_TOKEN")
+            ? { Authorization: `Bearer ${Deno.env.get("EXPO_ACCESS_TOKEN")}` }
+            : {}),
+        },
+        body: JSON.stringify(
+          validTokens.map((to) => ({
+            to,
+            title,
+            body,
+            sound: "default",
+            priority: "high",
+            channelId: isCall ? "cuoc-goi-den-khan-v2" : "love-messages",
+            data: {
+              type: isCall ? "call" : "message",
+              open: isCall ? "call" : "chat",
+              callId: String(record.call_id ?? record.id ?? ""),
+              isVideo,
+              senderName,
+              body,
+            },
+            ttl: isCall ? 60 : 86400,
+          })),
+        ),
+        signal: AbortSignal.timeout(15000),
+      });
+      return Response.json({ ok: pushRes.ok, sent: validTokens.length });
+    }
+  } catch {}
+
   const generated = await db.rpc("generate_reminders");
   if (generated.error)
     return new Response("Không tạo được lời nhắc.", { status: 500 });
@@ -95,7 +183,7 @@ Deno.serve(async (request) => {
         body: JSON.stringify(
           values.map((t) => ({
             to: t.token,
-            title: "Hai Trái Tim",
+            title: "Mật Mã Yêu",
             body: "Có một lời nhắc yêu thương mới. Mở ứng dụng để xem.",
             sound: "default",
             channelId: "love-reminders",

@@ -6,6 +6,88 @@ export const CALL_RING_TIMEOUT_MS = 45 * 1000;
  *  thúc — máy A tắt thì máy B cũng tắt theo, không còn cảnh treo cuộc gọi. */
 export const CALL_ALIVE_MS = 1000;
 export const CALL_SILENT_END_MS = 6000;
+
+/**
+ * Danh sách bộ Ảnh nền cuộc gọi đôi dễ thương (Blur / Gradient Overlay phía sau Avatar).
+ * Người dùng có thể chọn mẫu có sẵn hoặc chọn ảnh đôi từ thư viện máy (`custom`).
+ */
+export const CALL_BACKGROUNDS = [
+  {
+    id: "sunset-love",
+    name: "Hoàng hôn đôi mình",
+    emoji: "🌅",
+    colors: ["#2e1065", "#701a75", "#9d174d"],
+    overlay: [
+      "rgba(20, 10, 38, 0.36)",
+      "rgba(40, 14, 54, 0.56)",
+      "rgba(9, 13, 22, 0.88)",
+    ],
+    accent: "#f472b6",
+    scene: "🌅 💑 ✨",
+    subtitle: "Dưới ánh hoàng hôn ấm áp bên nhau",
+  },
+  {
+    id: "starry-night",
+    name: "Đêm sao ngân hà",
+    emoji: "🌌",
+    colors: ["#090d16", "#1e1b4b", "#3b0764"],
+    overlay: [
+      "rgba(9, 13, 22, 0.4)",
+      "rgba(23, 21, 58, 0.58)",
+      "rgba(9, 13, 22, 0.9)",
+    ],
+    accent: "#818cf8",
+    scene: "🌙 👩‍❤️‍👨 ⭐",
+    subtitle: "Tựa vai nhau ngắm bầu trời sao đêm",
+  },
+  {
+    id: "cherry-blossom",
+    name: "Mùa hoa anh đào",
+    emoji: "🌸",
+    colors: ["#4a044e", "#831843", "#be185d"],
+    overlay: [
+      "rgba(36, 8, 42, 0.34)",
+      "rgba(58, 12, 46, 0.54)",
+      "rgba(12, 10, 24, 0.88)",
+    ],
+    accent: "#fb7185",
+    scene: "🌸 💑 🌸",
+    subtitle: "Cánh đào hồng phấn bay trong gió",
+  },
+  {
+    id: "ocean-breeze",
+    name: "Biển xanh nắng ấm",
+    emoji: "🌊",
+    colors: ["#0c4a6e", "#1e3a8a", "#172554"],
+    overlay: [
+      "rgba(8, 24, 44, 0.38)",
+      "rgba(14, 34, 64, 0.56)",
+      "rgba(9, 13, 22, 0.88)",
+    ],
+    accent: "#38bdf8",
+    scene: "🌊 👩‍❤️‍💋‍👨 🐚",
+    subtitle: "Sóng biển dịu êm vỗ về hai trái tim",
+  },
+  {
+    id: "custom",
+    name: "Ảnh đôi tự chọn",
+    emoji: "🖼️",
+    colors: ["#1f1235", "#3b1d5e", "#111827"],
+    overlay: [
+      "rgba(9, 13, 22, 0.42)",
+      "rgba(15, 18, 34, 0.62)",
+      "rgba(9, 13, 22, 0.88)",
+    ],
+    accent: "#f472b6",
+    scene: "📸 💑 💖",
+    subtitle: "Ảnh kỷ niệm riêng của hai đứa",
+  },
+];
+
+export function callBackgroundById(id) {
+  return CALL_BACKGROUNDS.find((item) => item.id === id) ?? CALL_BACKGROUNDS[0];
+}
+
 export function newCall({ id, role, name, video = false, at = Date.now() }) {
   if (!id) throw new Error("Cuộc gọi thiếu mã.");
   const isVideo = Boolean(video);
@@ -23,6 +105,7 @@ export function newCall({ id, role, name, video = false, at = Date.now() }) {
     video: isVideo,
     camOn: isVideo,
     speakerOn: true,
+    cameraFacing: "user",
     lastSeen: at,
   };
 }
@@ -80,6 +163,16 @@ export function callEvent(call, event, now = Date.now()) {
       ...call,
       camOn: event.on === true,
       video: Boolean(call.video || event.on === true),
+    };
+  if (type === "switchCamera")
+    return {
+      ...call,
+      cameraFacing:
+        event.facing === "environment" || event.facing === "user"
+          ? event.facing
+          : call.cameraFacing === "environment"
+            ? "user"
+            : "environment",
     };
   if (type === "speaker") return { ...call, speakerOn: event.on === true };
   if (type === "minimize") return { ...call, minimized: event.min === true };

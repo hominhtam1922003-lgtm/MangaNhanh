@@ -216,6 +216,7 @@ export class RtcCall {
   private peerWait: (() => void) | null = null;
   private mic: any = null;
   private remoteStream: any = null;
+  private facingMode: "user" | "environment" = "user";
   private closed = false;
   private live = false;
   private forcedRelay = false;
@@ -375,7 +376,7 @@ export class RtcCall {
     return false;
   }
 
-  private emitStreams() {
+  private emitStreams(forceClone = false) {
     if (this.closed) return;
     try {
       const rtc = loadNative();
@@ -385,16 +386,26 @@ export class RtcCall {
           : null;
       // Nếu chưa gán this.remoteStream mà pc đã có remote stream hoặc receiver
       // track thì gom lại ngay thành MediaStream để gọi remoteStream.toURL().
-      if (!this.remoteStream && this.pc) {
+      if ((!this.remoteStream || forceClone) && this.pc) {
         const remoteStreams = this.pc.getRemoteStreams?.() ?? [];
-        if (remoteStreams.length > 0 && remoteStreams[0]) {
+        if (remoteStreams.length > 0 && remoteStreams[0] && !forceClone) {
           this.remoteStream = remoteStreams[0];
         } else if (rtc?.MediaStream) {
           const receiverTracks = (this.pc.getReceivers?.() ?? [])
             .map((r: any) => r?.track)
             .filter(Boolean);
-          if (receiverTracks.some((t: any) => t?.kind === "video")) {
-            this.remoteStream = new rtc.MediaStream(receiverTracks);
+          const existingTracks = this.remoteStream?.getTracks?.() ?? [];
+          const merged =
+            receiverTracks.length >= existingTracks.length
+              ? receiverTracks
+              : existingTracks;
+          if (merged.length > 0) {
+            for (const track of merged) {
+              try {
+                track.enabled = true;
+              } catch {}
+            }
+            this.remoteStream = new rtc.MediaStream(merged);
           }
         }
       }
@@ -695,21 +706,28 @@ export class RtcCall {
     pc.oniceconnectionstatechange = () => this.readConnection();
     pc.ontrack = (event: any) => {
       if (this.closed) return;
+      const track = event?.track;
+      if (track) {
+        try {
+          track.enabled = true;
+          track.onunmute = () => this.emitStreams(true);
+        } catch {}
+      }
       const incoming = event?.streams?.[0];
       if (incoming) {
         this.remoteStream = incoming;
-      } else if (event?.track && rtc?.MediaStream) {
+      } else if (track && rtc?.MediaStream) {
         if (!this.remoteStream) this.remoteStream = new rtc.MediaStream();
         try {
-          this.remoteStream.addTrack?.(event.track);
+          this.remoteStream.addTrack?.(track);
         } catch {}
       }
-      this.emitStreams();
+      this.emitStreams(track?.kind === "video");
     };
     pc.onaddstream = (event: any) => {
       if (this.closed || !event?.stream) return;
       this.remoteStream = event.stream;
-      this.emitStreams();
+      this.emitStreams(true);
     };
     try {
       const tracks =
@@ -787,7 +805,7 @@ export class RtcCall {
     try {
       const offer = await this.pc.createOffer({
         offerToReceiveAudio: true,
-        offerToReceiveVideo: Boolean(this.opts.video),
+        offerToReceiveVideo: true,
       });
       // Chỉnh Opus: bật FEC (mất gói vẫn nghe được) và tắt DTX (tiếng đi liên tục)
       // kèm bitrate thích ứng cho Audio/Video trên mạng 4G và cổng TURN 80/443.
@@ -1094,6 +1112,27 @@ export class RtcCall {
     } catch {}
   }
 
+  /**
+   * Đổi camera trước / sau (Switch Camera chuẩn Zalo) trong cuộc gọi Video.
+   * Gọi trực tiếp `stream.getVideoTracks()[0]._switchCamera()` của react-native-webrtc.
+   */
+  switchCamera(): "user" | "environment" {
+    this.facingMode = this.facingMode === "user" ? "environment" : "user";
+    try {
+      const stream = this.mic;
+      const videoTrack = stream?.getVideoTracks?.()?.[0];
+      if (videoTrack) {
+        if (typeof videoTrack._switchCamera === "function") {
+          videoTrack._switchCamera();
+        } else if (typeof videoTrack.applyConstraints === "function") {
+          void videoTrack.applyConstraints({ facingMode: this.facingMode });
+        }
+      }
+    } catch {}
+    this.emitStreams();
+    return this.facingMode;
+  }
+
   /** Bật/tắt camera trong cuộc gọi video (hoặc mở thêm camera khi đang gọi thoại). */
   setCamera(on: boolean) {
     try {
@@ -1114,7 +1153,7 @@ export class RtcCall {
         ?.getUserMedia?.({
           audio: false,
           video: {
-            facingMode: "user",
+            facingMode: this.facingMode,
             width: { ideal: 640, max: 960 },
             height: { ideal: 480, max: 720 },
             frameRate: { ideal: 24, max: 30 },

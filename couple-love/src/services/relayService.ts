@@ -1,22 +1,16 @@
 /**
- * Giữ kết nối khi app ở chế độ nền / tắt màn hình.
+ * Duy trì kết nối ngầm (Persistent Connection) khi app ở chế độ nền / khoá màn hình.
  *
- * Vì sao cần: tin nhắn của hai bạn đi bằng MQTT ngay trong app (không máy chủ).
- * Khi màn hình tắt, Android sẽ đưa app vào chế độ ngủ và cắt kết nối — máy kia
- * nhắn mà máy này không nổi thông báo cho tới khi mở app. Bật dịch vụ chạy nổi
- * kiểu `dataSync` (kèm một thông báo thường trực, có nút **Tắt**) là cách đúng
- * của Android để giữ kết nối sống, và bản 1.16.0 có công tắc trong Cài đặt.
- *
- * Điều app KHÔNG làm được (nói thẳng để bạn biết): nếu người dùng vào Cài đặt
- * của điện thoại và **Buộc dừng** app, hoặc gạt app khỏi danh sách gần đây, thì
- * mọi kết nối trong app đều tắt. Muốn có thông báo trong trường hợp đó thì phải
- * dùng dịch vụ đẩy (FCM/APNs) kèm máy chủ riêng — trái với cách app đang chạy
- * (cài là dùng, không tài khoản, không máy chủ).
+ * Cấu hình vòng đời kết nối MQTT / Supabase Realtime và WebRTC Signaling chạy
+ * trong một Foreground Service (trên Android) kèm nhịp tim tự nối lại định kỳ,
+ * để hệ thống không đóng băng socket khi người dùng tắt màn hình hoặc chuyển
+ * sang ứng dụng khác.
  */
 import { Platform } from "react-native";
 import {
   loadNotifee,
   notifeeSupport,
+  onForegroundHeartbeat,
   onNotifeeAction,
   useNotifeeService,
 } from "./notifeeCore";
@@ -30,31 +24,43 @@ export function relayServiceSupport() {
   return notifeeSupport();
 }
 
-/** Bật dịch vụ giữ kết nối — gọi khi app đang ở tiền cảnh (Android bắt buộc). */
+/**
+ * Đăng ký hàm kiểm tra và hồi phục kết nối MQTT / Supabase Realtime định kỳ
+ * bên trong Foreground Service ngay cả khi màn hình đã tắt.
+ */
+export function registerPersistentConnectionHeartbeat(
+  handler: () => void | Promise<void>,
+) {
+  onForegroundHeartbeat(handler);
+}
+
+/** Bật dịch vụ giữ kết nối — gọi khi app đang mở hoặc có sự kiện nền. */
 export async function startRelayService(partnerName?: string | null) {
   if (Platform.OS !== "android") return false;
+  const mod = loadNotifee();
   const notifee = useNotifeeService();
   if (!notifee) return false;
   try {
     const channelId = await notifee.createChannel({
       id: CHANNEL,
-      name: "Giữ kết nối nhận tin nhắn",
-      importance: 2, // thấp: không kêu, chỉ để hệ thống biết app đang chạy nền
+      name: "Giữ kết nối nhận tin nhắn & cuộc gọi",
+      importance: 2, // thấp: không kêu, chỉ để hệ thống giữ sống tiến trình nền
+      visibility: mod?.AndroidVisibility?.PUBLIC ?? 1,
       sound: undefined,
     });
     await notifee.displayNotification({
       id: NOTIFICATION,
       title: "Đang giữ kết nối",
       body: partnerName
-        ? `Tin nhắn của ${partnerName} sẽ nổi ngay cả khi tắt màn hình`
-        : "Tin nhắn sẽ nổi ngay cả khi tắt màn hình",
+        ? `Tin nhắn & cuộc gọi của ${partnerName} sẽ nổi ngay cả khi tắt màn hình`
+        : "Tin nhắn & cuộc gọi sẽ nổi ngay cả khi tắt màn hình",
       android: {
         channelId,
         asForegroundService: true,
-        // Kiểu "dataSync": đúng loại công việc là giữ kết nối để nhận dữ liệu.
+        // Kiểu "dataSync": giữ kết nối MQTT / Supabase Realtime & WebRTC Signaling.
         // Khai trong plugins/with-call-foreground-service.js.
         foregroundServiceTypes: [
-          loadNotifee()?.AndroidForegroundServiceType
+          mod?.AndroidForegroundServiceType
             ?.FOREGROUND_SERVICE_TYPE_DATA_SYNC ?? 1,
         ],
         ongoing: true,
@@ -62,7 +68,7 @@ export async function startRelayService(partnerName?: string | null) {
         onlyAlertOnce: true,
         showTimestamp: false,
         smallIcon: "ic_launcher",
-        pressAction: { id: "default" },
+        pressAction: { id: "default", launchActivity: "default" },
         actions: [
           { title: "Tắt", pressAction: { id: RELAY_SERVICE_STOP_ACTION } },
         ],

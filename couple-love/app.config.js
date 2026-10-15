@@ -35,7 +35,7 @@ module.exports = {
   expo: {
     name: "Mật Mã Yêu",
     slug: "hai-trai-tim",
-    version: "1.18.9",
+    version: "1.18.10",
     orientation: "portrait",
     scheme: "haitraitim",
     userInterfaceStyle: "light",
@@ -56,14 +56,19 @@ module.exports = {
         // Giữ kết nối khi app ở chế độ nền để tin nhắn vẫn nổi thông báo.
         "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
         "android.permission.WAKE_LOCK",
+        "android.permission.VIBRATE",
+        // Đánh thức màn hình khóa khi có cuộc gọi đến (Full-screen Intent như Zalo).
+        "android.permission.USE_FULL_SCREEN_INTENT",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
         // Thông báo tin nhắn trên Android 13+ (hệ thống vẫn hỏi người dùng).
         "android.permission.POST_NOTIFICATIONS",
       ],
-      // 1.18.9: giao diện Cuộc gọi Full-screen nền tối sang trọng, Video Call
-      // phủ kín 100% + PiP góc phải, sửa dứt điểm Loa ngoài (Speakerphone vs
-      // Earpiece), đánh thức màn hình khi có cuộc gọi đến lúc tắt màn hình, và
-      // chuẩn hoá logic Thú Cưng (Exp 0/1000, +1000 mỗi cấp, chu kỳ 15 phút).
-      versionCode: 29,
+      // 1.18.10: Ảnh nền cuộc gọi đôi mờ ảo (Voice Call Background blur/gradient
+      // overlay), sửa triệt để hiển thị Video Call + nút Đổi Camera chuẩn Zalo
+      // (_switchCamera), duy trì kết nối ngầm Foreground Service & thông báo
+      // Full-screen Intent trên màn hình khóa.
+      versionCode: 30,
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#fff1f2",

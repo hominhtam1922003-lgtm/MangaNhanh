@@ -1,4 +1,14 @@
 // Kiểu dữ liệu cho trạng thái cuộc gọi (hàm thật nằm trong callLogic.mjs).
+export type CallBackgroundPreset = {
+  id: string;
+  name: string;
+  emoji: string;
+  colors: string[];
+  overlay: string[];
+  accent: string;
+  scene: string;
+  subtitle: string;
+};
 export type CallInfo = {
   id: string;
   role: "caller" | "callee";
@@ -16,12 +26,18 @@ export type CallInfo = {
   camOn?: boolean;
   /** Trạng thái bật/tắt loa ngoài (Speakerphone). */
   speakerOn?: boolean;
+  /** Hướng camera hiện tại: trước ("user") hoặc sau ("environment"). */
+  cameraFacing?: "user" | "environment";
   /** Mốc cuối cùng còn nghe được nhịp "còn đây" của máy kia. */
   lastSeen: number;
 };
 export declare const CALL_RING_TIMEOUT_MS: number;
 export declare const CALL_ALIVE_MS: number;
 export declare const CALL_SILENT_END_MS: number;
+export declare const CALL_BACKGROUNDS: CallBackgroundPreset[];
+export declare function callBackgroundById(
+  id?: string | null,
+): CallBackgroundPreset;
 export declare function newCall(input: {
   id: string;
   role: "caller" | "callee";
@@ -31,7 +47,12 @@ export declare function newCall(input: {
 }): CallInfo;
 export declare function callEvent(
   call: CallInfo | null,
-  event: { type: string; on?: boolean; min?: boolean },
+  event: {
+    type: string;
+    on?: boolean;
+    min?: boolean;
+    facing?: "user" | "environment";
+  },
   now?: number,
 ): CallInfo | null;
 export declare function callTimedOut(

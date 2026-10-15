@@ -14,6 +14,7 @@ const {
   AndroidConfig,
   withAndroidManifest,
   withDangerousMod,
+  withInfoPlist,
 } = require("@expo/config-plugins");
 
 const SERVICE_NAME = "app.notifee.core.ForegroundService";
@@ -132,6 +133,7 @@ function withCallForegroundService(config) {
     const attributes = {
       "android:name": SERVICE_NAME,
       "android:exported": "false",
+      "android:stopWithTask": "false",
       "android:foregroundServiceType": FGS_TYPE,
       "tools:replace": "android:foregroundServiceType",
     };
@@ -140,6 +142,28 @@ function withCallForegroundService(config) {
     );
     if (existing) existing.$ = { ...existing.$, ...attributes };
     else application.service.push({ $: attributes });
+
+    // Đảm bảo có đủ quyền hiển thị cuộc gọi toàn màn hình trên màn hình khoá
+    // (USE_FULL_SCREEN_INTENT) và giữ máy thức (WAKE_LOCK / VIBRATE).
+    manifest.manifest["uses-permission"] =
+      manifest.manifest["uses-permission"] || [];
+    const requiredPerms = [
+      "android.permission.USE_FULL_SCREEN_INTENT",
+      "android.permission.WAKE_LOCK",
+      "android.permission.VIBRATE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+    ];
+    for (const perm of requiredPerms) {
+      const hasPerm = manifest.manifest["uses-permission"].some(
+        (p) => p?.$?.["android:name"] === perm,
+      );
+      if (!hasPerm) {
+        manifest.manifest["uses-permission"].push({
+          $: { "android:name": perm },
+        });
+      }
+    }
     return current;
   });
 
@@ -150,6 +174,21 @@ function withCallForegroundService(config) {
       return current;
     },
   ]);
+
+  config = withInfoPlist(config, (current) => {
+    const existing = Array.isArray(current.modResults.UIBackgroundModes)
+      ? current.modResults.UIBackgroundModes
+      : [];
+    const modes = new Set([
+      ...existing,
+      "audio",
+      "voip",
+      "fetch",
+      "remote-notification",
+    ]);
+    current.modResults.UIBackgroundModes = Array.from(modes);
+    return current;
+  });
 
   config = withDangerousMod(config, [
     "ios",

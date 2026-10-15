@@ -8,12 +8,14 @@
  *    - Khi bật loa ngoài (`speakerOn === true`): ép luồng âm thanh phát ra Loa
  *      ngoài (Speaker - âm lượng lớn, `shouldRouteThroughEarpiece: false`).
  * 2. Khi có cuộc gọi đến lúc tắt/khoá màn hình (`startIncomingCallService`):
- *    Mở thông báo ưu tiên cực đại kèm `fullScreenAction` đánh thức màn hình,
- *    đổ chuông/rung và hiển thị hai nút Nghe máy / Từ chối.
+ *    Mở thông báo ưu tiên cực đại kèm `fullScreenAction` (Full-screen Intent)
+ *    trên màn hình khoá (Lock screen) y hệt Zalo / Messenger, đánh thức màn hình,
+ *    đổ chuông/rung liên tục và hiển thị hai nút Nghe máy / Từ chối.
  */
 import { Platform } from "react-native";
 import { AudioModule, setAudioModeAsync } from "expo-audio";
 import {
+  loadNotifee,
   notifeeSupport,
   onNotifeeAction,
   useNotifeeService,
@@ -28,8 +30,9 @@ let actionReady = false;
 
 /** Mã kênh thông báo, mã thông báo và mã các nút hành động. */
 const CALL_CHANNEL = "cuoc-goi";
-const INCOMING_CALL_CHANNEL = "cuoc-goi-den-khan";
+const INCOMING_CALL_CHANNEL = "cuoc-goi-den-khan-v2";
 const CALL_NOTIFICATION = "cuoc-goi-dang-mo";
+const INCOMING_CALL_NOTIFICATION = "cuoc-goi-den-lockscreen";
 const CALL_HANGUP_ACTION = "cup-may";
 const CALL_ACCEPT_ACTION = "nghe-may";
 const CALL_REJECT_ACTION = "tu-choi-cuoc-goi";
@@ -122,35 +125,42 @@ export function onCallServiceAnswer(
 
 /**
  * Đánh thức thiết bị và hiển thị thông báo cuộc gọi đến toàn màn hình
- * (`fullScreenAction`) kèm rung và chuông khi có cuộc gọi đến lúc tắt màn hình.
+ * (`fullScreenAction` / Full-screen Intent) trên màn hình khoá (Lock screen)
+ * kèm rung và chuông khi có cuộc gọi đến lúc tắt màn hình hoặc ẩn app.
  */
 export async function startIncomingCallService(
   partnerName: string,
   isVideo = false,
 ) {
   if (Platform.OS !== "android") return false;
+  const mod = loadNotifee();
   const notifee = useNotifeeService();
   if (!notifee) return false;
   ensureActionListener();
   try {
     const channelId = await notifee.createChannel({
       id: INCOMING_CALL_CHANNEL,
-      name: "Cuộc gọi đến",
-      importance: notifee.AndroidImportance?.HIGH ?? 4,
+      name: "Cuộc gọi đến (Màn hình khoá)",
+      importance: mod?.AndroidImportance?.HIGH ?? 4,
+      visibility: mod?.AndroidVisibility?.PUBLIC ?? 1,
+      bypassDnd: true,
       sound: "default",
       vibration: true,
-      vibrationPattern: [300, 600, 400, 600],
+      vibrationPattern: [300, 600, 400, 600, 300, 700],
+      lights: true,
     });
     await notifee.displayNotification({
-      id: CALL_NOTIFICATION,
+      id: INCOMING_CALL_NOTIFICATION,
       title: `${partnerName || "Người thương"} đang gọi ${isVideo ? "Video " : ""}cho bạn 📞`,
       body: "Chạm để mở màn hình cuộc gọi hoặc bấm Nghe máy ngay",
       android: {
         channelId,
-        category: notifee.AndroidCategory?.CALL ?? "call",
-        importance: notifee.AndroidImportance?.HIGH ?? 4,
+        category: mod?.AndroidCategory?.CALL ?? "call",
+        importance: mod?.AndroidImportance?.HIGH ?? 4,
+        visibility: mod?.AndroidVisibility?.PUBLIC ?? 1,
         ongoing: true,
         autoCancel: false,
+        loopSound: true,
         smallIcon: "ic_launcher",
         fullScreenAction: {
           id: "default",
@@ -178,20 +188,32 @@ export async function startIncomingCallService(
   }
 }
 
+export async function stopIncomingCallService() {
+  if (Platform.OS !== "android") return;
+  const notifee = useNotifeeService();
+  if (!notifee) return;
+  try {
+    await notifee.cancelNotification(INCOMING_CALL_NOTIFICATION);
+  } catch {}
+}
+
 /**
  * Mở dịch vụ chạy nổi + thông báo "Cuộc gọi đang diễn ra…". Gọi khi cuộc gọi đã
  * được nghe máy.
  */
 export async function startCallService(partnerName: string) {
   if (Platform.OS !== "android") return false;
+  const mod = loadNotifee();
   const notifee = useNotifeeService();
   if (!notifee) return false;
   ensureActionListener();
+  void stopIncomingCallService();
   try {
     const channelId = await notifee.createChannel({
       id: CALL_CHANNEL,
       name: "Cuộc gọi",
-      importance: notifee.AndroidImportance?.LOW ?? 2,
+      importance: mod?.AndroidImportance?.LOW ?? 2,
+      visibility: mod?.AndroidVisibility?.PUBLIC ?? 1,
     });
     await notifee.displayNotification({
       id: CALL_NOTIFICATION,
@@ -202,18 +224,20 @@ export async function startCallService(partnerName: string) {
       android: {
         channelId,
         asForegroundService: true,
-        // Kiểu "microphone": Android 14 bắt buộc khai đúng kiểu này mới cho thu
-        // micro khi app ở chế độ nền (xem plugins/with-call-foreground-service.js).
+        // Kiểu "microphone" + "dataSync": Android 14+ cho phép thu micro và giữ
+        // kết nối tín hiệu WebRTC khi app ở chế độ nền / khoá màn hình.
         foregroundServiceTypes: [
-          notifee.AndroidForegroundServiceType
+          mod?.AndroidForegroundServiceType
             ?.FOREGROUND_SERVICE_TYPE_MICROPHONE ?? 128,
+          mod?.AndroidForegroundServiceType
+            ?.FOREGROUND_SERVICE_TYPE_DATA_SYNC ?? 1,
         ],
         ongoing: true,
         autoCancel: false,
         onlyAlertOnce: true,
         showTimestamp: false,
         smallIcon: "ic_launcher",
-        pressAction: { id: "default" },
+        pressAction: { id: "default", launchActivity: "default" },
         actions: [
           { title: "Cúp máy", pressAction: { id: CALL_HANGUP_ACTION } },
         ],
@@ -232,6 +256,9 @@ export async function stopCallService() {
   if (Platform.OS !== "android") return;
   const notifee = useNotifeeService();
   if (!notifee) return;
+  try {
+    await notifee.cancelNotification(INCOMING_CALL_NOTIFICATION);
+  } catch {}
   try {
     await notifee.stopForegroundService();
   } catch {}

@@ -47,7 +47,8 @@ alter table public.profiles
   add column if not exists pair_secret text,
   add column if not exists paired_at timestamptz,
   add column if not exists display_name text,
-  add column if not exists avatar_url text;
+  add column if not exists avatar_url text,
+  add column if not exists expo_push_token text;
 
 create unique index if not exists profiles_short_code_key
   on public.profiles (upper(short_code))
@@ -330,3 +331,56 @@ drop policy if exists avatars_update on storage.objects;
 create policy avatars_update on storage.objects
   for update to authenticated
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- 10) Bảng calls & messages đánh thức thiết bị qua Realtime / Webhook -----------
+create table if not exists public.calls (
+  id uuid primary key default gen_random_uuid(),
+  call_id text not null,
+  caller_id uuid references public.profiles(id) on delete cascade,
+  callee_id uuid not null references public.profiles(id) on delete cascade,
+  caller_name text not null default 'Người thương',
+  is_video boolean not null default false,
+  status text not null default 'ringing',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.messages (
+  id uuid primary key default gen_random_uuid(),
+  sender_id uuid references public.profiles(id) on delete cascade,
+  recipient_id uuid not null references public.profiles(id) on delete cascade,
+  sender_name text not null default 'Người thương',
+  body text not null default '',
+  created_at timestamptz not null default now()
+);
+
+alter table public.calls enable row level security;
+alter table public.messages enable row level security;
+
+drop policy if exists calls_access on public.calls;
+create policy calls_access on public.calls
+  for all to authenticated
+  using (caller_id = auth.uid() or callee_id = auth.uid())
+  with check (caller_id = auth.uid() or callee_id = auth.uid());
+
+drop policy if exists messages_access on public.messages;
+create policy messages_access on public.messages
+  for all to authenticated
+  using (sender_id = auth.uid() or recipient_id = auth.uid())
+  with check (sender_id = auth.uid() or recipient_id = auth.uid());
+
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table public.calls;
+  exception
+    when duplicate_object then null;
+    when undefined_object then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.messages;
+  exception
+    when duplicate_object then null;
+    when undefined_object then null;
+  end;
+end $$;
+

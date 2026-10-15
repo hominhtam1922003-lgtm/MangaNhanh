@@ -2,9 +2,11 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
+  Image,
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -16,10 +18,15 @@ import { useAudioPlayer } from "expo-audio";
 import { LocalAvatar } from "../../components/UI";
 import ThreeHeart from "../../components/ThreeHeart";
 import { useTheme } from "../../theme/ThemeContext";
-import { callClock } from "../../logic/callLogic.mjs";
+import {
+  CALL_BACKGROUNDS,
+  callBackgroundById,
+  callClock,
+} from "../../logic/callLogic.mjs";
 import type { CallInfo } from "../../logic/callLogic.mjs";
 import { formatAudioBytes } from "../../logic/rtcSignal.mjs";
 import { rtcVideoView } from "../../services/rtcCall";
+import { imageUri } from "../../services/localdb";
 import {
   CALL_CLOSE_MS,
   CALL_PLAY_GAP_MS,
@@ -38,7 +45,7 @@ const RINGBACK = require("../../../assets/ringback.wav");
 /** Nhịp phát lại tiếng của người thương. */
 const PLAY_TICK_MS = 90;
 
-/** Nút tròn trên màn hình gọi Full-screen nền tối sang trọng. */
+/** Nút tròn trên màn hình gọi Full-screen sang trọng. */
 function CallButton({
   emoji,
   label,
@@ -61,7 +68,7 @@ function CallButton({
         ? "#ef4444"
         : active
           ? "rgba(255, 255, 255, 0.92)"
-          : "rgba(255, 255, 255, 0.16)";
+          : "rgba(255, 255, 255, 0.18)";
   const borderColor =
     tone === "green"
       ? "#4ade80"
@@ -69,7 +76,7 @@ function CallButton({
         ? "#f87171"
         : active
           ? "#ffffff"
-          : "rgba(255, 255, 255, 0.26)";
+          : "rgba(255, 255, 255, 0.28)";
   return (
     <View className="items-center mx-2">
       <Pressable
@@ -138,22 +145,27 @@ function Waveform({ color, live }: { color: string; live: boolean }) {
 
 /**
  * Giao diện Cuộc gọi Full-screen (Voice & Video):
- * - Nền tối sang trọng với hiệu ứng LinearGradient (#090d16 -> #111827 -> #1e1b4b).
- * - Video Call: `RTCView` của `remoteStream` phủ kín 100% màn hình chính với
- *   `objectFit="cover"` (không bị cụt nửa khung), luồng camera cá nhân `localStream`
- *   đặt ở góc trên bên phải dạng PiP (Picture-in-Picture).
- * - Cuộc gọi đến: Hai nút Từ chối (Đỏ rực `#ef4444`, icon phone-off `📵`) và
- *   Nghe (Xanh lá `#22c55e`, icon phone chuẩn `📞`) đặt dưới cùng, tách rời đối
- *   xứng hai bên với khoảng cách rộng rãi.
+ * 1. Voice Call Background: Ảnh nền đôi mờ ảo (Blur / LinearGradient overlay phía
+ *    sau avatar) với bộ chủ đề lãng mạn + tuỳ chọn chọn ảnh đôi từ thư viện máy,
+ *    hiển thị rõ tên, đồng hồ cuộc gọi (`00:25`) và các nút điều khiển trực quan.
+ * 2. Video Call Chuẩn Zalo:
+ *    - `RTCView` của `remoteStream` đặt `style={{ flex: 1, width: '100%', height: '100%' }}`
+ *      và `objectFit="cover"` phủ kín toàn màn hình (không bị cụt nửa khung hay đen).
+ *    - `localStream` nằm ở góc trên bên phải dạng PiP.
+ *    - Nút Đổi Camera (`🔄 Đổi cam`, gọi `stream.getVideoTracks()[0]._switchCamera()`)
+ *      đặt ở góc trên màn hình Video Call giống chuẩn Zalo.
  */
 export default function CallLocal({
   call,
   micOn,
   camOn = false,
   speakerOn = true,
+  cameraFacing = "user",
   partnerName,
   partnerAvatar,
   ringtoneUri,
+  callBgId = "sunset-love",
+  callBgUri = null,
   queueRef,
   playingRef,
   rtcInfo,
@@ -164,7 +176,10 @@ export default function CallLocal({
   onUseLegacyAudio,
   onToggleMic,
   onToggleCam,
+  onSwitchCamera,
   onToggleSpeaker,
+  onChangeCallBg,
+  onPickCallBgPhoto,
   onMinimize,
   onRestore,
   onAccept,
@@ -175,9 +190,12 @@ export default function CallLocal({
   micOn: boolean;
   camOn?: boolean;
   speakerOn?: boolean;
+  cameraFacing?: "user" | "environment";
   partnerName: string;
   partnerAvatar: string | null;
   ringtoneUri: string | null;
+  callBgId?: string;
+  callBgUri?: string | null;
   queueRef: React.MutableRefObject<AudioFrame[]>;
   playingRef: React.MutableRefObject<boolean>;
   rtcInfo: { state: string; detail: string };
@@ -193,7 +211,10 @@ export default function CallLocal({
   onUseLegacyAudio: () => void;
   onToggleMic: () => void;
   onToggleCam?: () => void;
+  onSwitchCamera?: () => void;
   onToggleSpeaker?: () => void;
+  onChangeCallBg?: (bgId: string) => void;
+  onPickCallBgPhoto?: () => void;
   onMinimize: () => void;
   onRestore: () => void;
   onAccept: () => void;
@@ -208,6 +229,7 @@ export default function CallLocal({
   const incoming = useAudioPlayer(undefined);
   const [elapsed, setElapsed] = useState(0);
   const [buffered, setBuffered] = useState(0);
+  const [bgPickerOpen, setBgPickerOpen] = useState(false);
   const lastPlayRef = useRef(0);
   const startedRef = useRef(false);
   const pulse = useRef(new Animated.Value(0)).current;
@@ -294,7 +316,7 @@ export default function CallLocal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // Đồng hồ cuộc gọi.
+  // Đồng hồ cuộc gọi (`00:25`).
   useEffect(() => {
     if (!active) {
       setElapsed(0);
@@ -361,7 +383,7 @@ export default function CallLocal({
   });
   const haloOpacity = pulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.36, 0.08],
+    outputRange: [0.38, 0.08],
   });
   const statusText = callBarText(call, Date.now());
   const endedText = call.reason || "Cuộc gọi đã kết thúc";
@@ -374,9 +396,11 @@ export default function CallLocal({
   const hasRemoteVideo = Boolean(RTCView && rtcStreams?.remoteUrl);
   const topInset =
     Platform.OS === "android" ? (StatusBar.currentHeight ?? 28) + 12 : 52;
+  const bgPreset = callBackgroundById(callBgId);
+  const partnerAvatarUri = partnerAvatar ? imageUri(partnerAvatar) : null;
+  const effectiveBgImageUri = callBgUri || partnerAvatarUri;
 
   if (call.minimized && call.phase !== "ended") {
-    // Thanh nổi thu nhỏ khi người dùng chủ động bấm "Thu nhỏ".
     return (
       <Pressable
         accessibilityRole="button"
@@ -440,7 +464,7 @@ export default function CallLocal({
       onRequestClose={active ? onMinimize : onHangUp}
     >
       <LinearGradient
-        colors={["#090d16", "#111827", "#1e1b4b"]}
+        colors={bgPreset.colors as [string, string, string]}
         style={{
           flex: 1,
           width: "100%",
@@ -449,18 +473,77 @@ export default function CallLocal({
           backgroundColor: "#090d16",
         }}
       >
-        {/* LUỒNG VIDEO CHÍNH FULL-SCREEN (objectFit="cover" chiếm trọn 100% màn hình) */}
+        {/* 1. LỚP ẢNH NỀN ĐÔI MỜ ẢO (VOICE CALL BACKGROUND - BLUR & GRADIENT OVERLAY) */}
+        {(!hasRemoteVideo || !active) && effectiveBgImageUri ? (
+          <Image
+            source={{ uri: effectiveBgImageUri }}
+            blurRadius={callBgUri ? 12 : 22}
+            resizeMode="cover"
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                width: "100%",
+                height: "100%",
+                opacity: callBgUri ? 0.68 : 0.42,
+              },
+            ]}
+          />
+        ) : null}
+
+        {/* Hiệu ứng Bokeh mờ ảo lãng mạn phía sau Avatar khi gọi thoại */}
+        {!hasRemoteVideo || !active ? (
+          <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+            <View
+              style={{
+                position: "absolute",
+                top: "14%",
+                left: -40,
+                width: 210,
+                height: 210,
+                borderRadius: 105,
+                backgroundColor: bgPreset.accent,
+                opacity: 0.16,
+              }}
+            />
+            <View
+              style={{
+                position: "absolute",
+                bottom: "22%",
+                right: -50,
+                width: 240,
+                height: 240,
+                borderRadius: 120,
+                backgroundColor: theme.deep[1],
+                opacity: 0.18,
+              }}
+            />
+            <LinearGradient
+              colors={bgPreset.overlay as [string, string, string]}
+              style={StyleSheet.absoluteFillObject}
+            />
+          </View>
+        ) : null}
+
+        {/* 2. LUỒNG VIDEO CHÍNH FULL-SCREEN (objectFit="cover", flex: 1, width/height 100%) */}
         {isVideoCall && active && RTCView && rtcStreams?.remoteUrl ? (
-          <RTCView
-            streamURL={rtcStreams.remoteUrl}
-            objectFit="cover"
-            zOrder={0}
+          <View
+            pointerEvents="none"
             style={{
               ...StyleSheet.absoluteFillObject,
+              flex: 1,
               width: "100%",
               height: "100%",
+              backgroundColor: "#000000",
             }}
-          />
+          >
+            <RTCView
+              key={rtcStreams.remoteUrl}
+              streamURL={rtcStreams.remoteUrl}
+              objectFit="cover"
+              zOrder={0}
+              style={{ flex: 1, width: "100%", height: "100%" }}
+            />
+          </View>
         ) : null}
 
         {/* Lớp phủ mờ nhẹ phía trên và dưới khi có video để chữ/nút luôn sắc nét */}
@@ -481,83 +564,249 @@ export default function CallLocal({
           <View
             style={{
               position: "absolute",
-              top: topInset + 48,
+              top: topInset + 52,
               right: 16,
-              width: 112,
-              height: 160,
+              width: 114,
+              height: 164,
               borderRadius: 18,
               overflow: "hidden",
               borderWidth: 2,
-              borderColor: "rgba(255, 255, 255, 0.78)",
+              borderColor: "rgba(255, 255, 255, 0.82)",
               backgroundColor: "#1f2937",
               zIndex: 20,
               elevation: 8,
             }}
           >
             <RTCView
+              key={`${rtcStreams.localUrl}-${cameraFacing}`}
               streamURL={rtcStreams.localUrl}
-              mirror
+              mirror={cameraFacing !== "environment"}
               objectFit="cover"
               zOrder={1}
-              style={{ width: "100%", height: "100%" }}
+              style={{ flex: 1, width: "100%", height: "100%" }}
             />
+            {onSwitchCamera ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Đổi camera trên khung PiP"
+                onPress={onSwitchCamera}
+                style={{
+                  position: "absolute",
+                  bottom: 6,
+                  right: 6,
+                  width: 30,
+                  height: 30,
+                  borderRadius: 15,
+                  backgroundColor: "rgba(9, 13, 22, 0.72)",
+                  borderWidth: 1,
+                  borderColor: "rgba(255, 255, 255, 0.35)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ fontSize: 14 }}>🔄</Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
 
-        {/* THANH ĐẦU FULL-SCREEN: Nhãn loại cuộc gọi + trạng thái loa + nút Thu nhỏ */}
+        {/* THANH ĐẦU FULL-SCREEN: Nhãn cuộc gọi + Nút Đổi Camera (góc trên chuẩn Zalo) + Đổi Ảnh nền + Thu nhỏ */}
         <View
-          style={{
-            paddingTop: topInset,
-            paddingHorizontal: 20,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            zIndex: 10,
-          }}
+          style={{ paddingTop: topInset, paddingHorizontal: 16, zIndex: 25 }}
         >
           <View
             style={{
-              backgroundColor: "rgba(255, 255, 255, 0.14)",
-              borderRadius: 18,
-              paddingHorizontal: 14,
-              paddingVertical: 6,
-              borderWidth: 1,
-              borderColor: "rgba(255, 255, 255, 0.22)",
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
             }}
           >
-            <Text
-              className="text-xs font-semibold"
-              style={{ color: "#f8fafc" }}
-            >
-              {isVideoCall ? "📹 Cuộc gọi Video" : "📞 Cuộc gọi Thoại"} ·{" "}
-              {speakerOn ? "🔊 Loa ngoài" : "🔈 Loa trong"}
-            </Text>
-          </View>
-          {active ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Thu nhỏ"
-              onPress={onMinimize}
+            <View
               style={{
-                backgroundColor: "rgba(255, 255, 255, 0.14)",
+                backgroundColor: "rgba(255, 255, 255, 0.15)",
                 borderRadius: 18,
-                paddingHorizontal: 14,
+                paddingHorizontal: 12,
                 paddingVertical: 6,
                 borderWidth: 1,
-                borderColor: "rgba(255, 255, 255, 0.22)",
+                borderColor: "rgba(255, 255, 255, 0.24)",
               }}
             >
               <Text
                 className="text-xs font-semibold"
                 style={{ color: "#f8fafc" }}
               >
-                ⤡ Thu nhỏ
+                {isVideoCall ? "📹 Cuộc gọi Video" : "📞 Cuộc gọi Thoại"} ·{" "}
+                {speakerOn ? "🔊 Loa ngoài" : "🔈 Loa trong"}
               </Text>
-            </Pressable>
+            </View>
+
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              {/* Nút Đổi Camera trước/sau ở góc trên màn hình Video Call (Chuẩn Zalo) */}
+              {(isVideoCall || camOn) && onSwitchCamera ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Đổi camera trước sau"
+                  onPress={onSwitchCamera}
+                  style={{
+                    backgroundColor: "rgba(255, 255, 255, 0.18)",
+                    borderRadius: 18,
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    marginRight: 8,
+                    borderWidth: 1,
+                    borderColor: "rgba(255, 255, 255, 0.28)",
+                    flexDirection: "row",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text
+                    className="text-xs font-semibold"
+                    style={{ color: "#f8fafc" }}
+                  >
+                    🔄 Đổi cam
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {/* Nút cài đặt Ảnh nền cuộc gọi đôi mờ ảo */}
+              {!hasRemoteVideo && (onChangeCallBg || onPickCallBgPhoto) ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Chọn ảnh nền cuộc gọi"
+                  onPress={() => setBgPickerOpen((prev) => !prev)}
+                  style={{
+                    backgroundColor: bgPickerOpen
+                      ? "rgba(244, 114, 182, 0.35)"
+                      : "rgba(255, 255, 255, 0.15)",
+                    borderRadius: 18,
+                    paddingHorizontal: 11,
+                    paddingVertical: 6,
+                    marginRight: active ? 8 : 0,
+                    borderWidth: 1,
+                    borderColor: bgPickerOpen
+                      ? "#f472b6"
+                      : "rgba(255, 255, 255, 0.24)",
+                  }}
+                >
+                  <Text
+                    className="text-xs font-semibold"
+                    style={{ color: "#f8fafc" }}
+                  >
+                    🖼️ Ảnh nền
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {active ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Thu nhỏ"
+                  onPress={onMinimize}
+                  style={{
+                    backgroundColor: "rgba(255, 255, 255, 0.15)",
+                    borderRadius: 18,
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderWidth: 1,
+                    borderColor: "rgba(255, 255, 255, 0.24)",
+                  }}
+                >
+                  <Text
+                    className="text-xs font-semibold"
+                    style={{ color: "#f8fafc" }}
+                  >
+                    ⤡ Thu nhỏ
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+
+          {/* Thanh chọn nhanh Ảnh nền cuộc gọi đôi dễ thương */}
+          {bgPickerOpen && !hasRemoteVideo ? (
+            <View
+              style={{
+                marginTop: 10,
+                paddingVertical: 10,
+                paddingHorizontal: 12,
+                borderRadius: 18,
+                backgroundColor: "rgba(9, 13, 22, 0.84)",
+                borderWidth: 1,
+                borderColor: "rgba(255, 255, 255, 0.22)",
+              }}
+            >
+              <Text
+                className="text-xs font-semibold mb-2"
+                style={{ color: "#f8fafc" }}
+              >
+                Chọn ảnh nền cuộc gọi đôi (hiệu ứng mờ ảo phía sau avatar):
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {CALL_BACKGROUNDS.map((preset) => {
+                  const selected = bgPreset.id === preset.id;
+                  return (
+                    <Pressable
+                      key={preset.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Ảnh nền ${preset.name}`}
+                      onPress={() => {
+                        if (preset.id === "custom" && onPickCallBgPhoto) {
+                          onPickCallBgPhoto();
+                        } else {
+                          onChangeCallBg?.(preset.id);
+                        }
+                      }}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 7,
+                        borderRadius: 14,
+                        marginRight: 8,
+                        backgroundColor: selected
+                          ? preset.accent
+                          : "rgba(255,255,255,0.12)",
+                        borderWidth: 1,
+                        borderColor: selected
+                          ? "#ffffff"
+                          : "rgba(255,255,255,0.2)",
+                      }}
+                    >
+                      <Text
+                        className="text-xs font-bold"
+                        style={{ color: "#ffffff" }}
+                      >
+                        {preset.emoji} {preset.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+                {onPickCallBgPhoto ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Tải ảnh đôi từ máy làm nền cuộc gọi"
+                    onPress={onPickCallBgPhoto}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 7,
+                      borderRadius: 14,
+                      backgroundColor: "rgba(244, 114, 182, 0.28)",
+                      borderWidth: 1,
+                      borderColor: "#f472b6",
+                    }}
+                  >
+                    <Text
+                      className="text-xs font-bold"
+                      style={{ color: "#ffffff" }}
+                    >
+                      📸 Chọn ảnh trong máy
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </ScrollView>
+            </View>
           ) : null}
         </View>
 
-        {/* KHỐI TRUNG TÂM: Avatar lớn, Tên đối phương, Đồng hồ sắc nét & Trạng thái */}
+        {/* KHỐI TRUNG TÂM: Avatar lớn + Khung cảnh đôi + Tên đối phương + Đồng hồ 00:25 sắc nét */}
         <View
           className="items-center px-6"
           style={{
@@ -567,72 +816,92 @@ export default function CallLocal({
           }}
         >
           {!hasRemoteVideo || !active ? (
-            <View
-              style={{
-                width: 156,
-                height: 156,
-                alignItems: "center",
-                justifyContent: "center",
-                marginBottom: 14,
-              }}
-            >
-              <Animated.View
+            <>
+              <View
                 style={{
-                  position: "absolute",
-                  width: 150,
-                  height: 150,
-                  borderRadius: 75,
-                  backgroundColor: theme.deep[1],
-                  opacity: active ? haloOpacity : 0.22,
-                  transform: [{ scale }],
-                }}
-              />
-              <Animated.View
-                style={{
-                  position: "absolute",
-                  width: 128,
-                  height: 128,
-                  borderRadius: 64,
-                  borderWidth: 2,
-                  borderColor: "rgba(255,255,255,0.28)",
-                  transform: [{ scale }],
-                }}
-              />
-              {!flatUi && active && !reduced ? (
-                <View
-                  pointerEvents="none"
-                  style={{
-                    position: "absolute",
-                    width: 320,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <ThreeHeart
-                    height={230}
-                    level={active && rtcLive ? rtcAudio.level : 0}
-                    interactive={false}
-                  />
-                </View>
-              ) : null}
-              <Animated.View
-                pointerEvents="none"
-                style={{
-                  transform: [
-                    {
-                      scale:
-                        active && rtcLive ? heartScale : active ? scale : 1,
-                    },
-                  ],
+                  paddingHorizontal: 14,
+                  paddingVertical: 4,
+                  borderRadius: 999,
+                  backgroundColor: "rgba(255, 255, 255, 0.12)",
+                  borderWidth: 1,
+                  borderColor: "rgba(255, 255, 255, 0.2)",
+                  marginBottom: 14,
                 }}
               >
-                <LocalAvatar
-                  name={partnerName}
-                  image={partnerAvatar}
-                  size={112}
+                <Text
+                  className="text-xs font-semibold"
+                  style={{ color: "#fce7f3" }}
+                >
+                  {bgPreset.scene} {bgPreset.subtitle}
+                </Text>
+              </View>
+              <View
+                style={{
+                  width: 160,
+                  height: 160,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 14,
+                }}
+              >
+                <Animated.View
+                  style={{
+                    position: "absolute",
+                    width: 154,
+                    height: 154,
+                    borderRadius: 77,
+                    backgroundColor: bgPreset.accent || theme.deep[1],
+                    opacity: active ? haloOpacity : 0.25,
+                    transform: [{ scale }],
+                  }}
                 />
-              </Animated.View>
-            </View>
+                <Animated.View
+                  style={{
+                    position: "absolute",
+                    width: 132,
+                    height: 132,
+                    borderRadius: 66,
+                    borderWidth: 2,
+                    borderColor: "rgba(255,255,255,0.34)",
+                    transform: [{ scale }],
+                  }}
+                />
+                {!flatUi && active && !reduced ? (
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: "absolute",
+                      width: 320,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <ThreeHeart
+                      height={230}
+                      level={active && rtcLive ? rtcAudio.level : 0}
+                      interactive={false}
+                    />
+                  </View>
+                ) : null}
+                <Animated.View
+                  pointerEvents="none"
+                  style={{
+                    transform: [
+                      {
+                        scale:
+                          active && rtcLive ? heartScale : active ? scale : 1,
+                      },
+                    ],
+                  }}
+                >
+                  <LocalAvatar
+                    name={partnerName}
+                    image={partnerAvatar}
+                    size={114}
+                  />
+                </Animated.View>
+              </View>
+            </>
           ) : null}
 
           <Text
@@ -641,21 +910,40 @@ export default function CallLocal({
           >
             {partnerName}
           </Text>
-          <Text
-            className="text-3xl font-bold mt-2 text-center"
+
+          {/* Đồng hồ thời gian cuộc gọi `00:25` hoặc trạng thái đổ chuông */}
+          <View
             style={{
-              color: active ? "#4ade80" : "#e2e8f0",
-              fontVariant: ["tabular-nums"],
+              marginTop: 8,
+              paddingHorizontal: 18,
+              paddingVertical: 5,
+              borderRadius: 999,
+              backgroundColor: active
+                ? "rgba(34, 197, 94, 0.18)"
+                : "rgba(255, 255, 255, 0.12)",
+              borderWidth: 1,
+              borderColor: active
+                ? "rgba(74, 222, 128, 0.45)"
+                : "rgba(255, 255, 255, 0.22)",
             }}
           >
-            {ringing
-              ? call.role === "caller"
-                ? "Đang đổ chuông…"
-                : "Cuộc gọi đến…"
-              : active
-                ? callClock(elapsed)
-                : endedText}
-          </Text>
+            <Text
+              className="text-2xl font-bold text-center"
+              style={{
+                color: active ? "#4ade80" : "#e2e8f0",
+                fontVariant: ["tabular-nums"],
+                letterSpacing: 1,
+              }}
+            >
+              {ringing
+                ? call.role === "caller"
+                  ? "Đang đổ chuông…"
+                  : "Cuộc gọi đến…"
+                : active
+                  ? callClock(elapsed)
+                  : endedText}
+            </Text>
+          </View>
 
           {active ? (
             <View className="mt-3 items-center">

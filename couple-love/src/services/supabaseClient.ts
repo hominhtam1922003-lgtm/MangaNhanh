@@ -1,32 +1,26 @@
-// supabaseClient.ts — client Supabase cho Expo SDK 54 (React Native).
+// supabaseClient.ts — client Supabase thực tế & luồng Expo Push Token cho Mật Mã Yêu.
 //
-// Vì sao viết riêng tệp này: `@supabase/supabase-js` chạy trên React Native cần
-// bốn thứ mà bản web không cần — (1) `react-native-url-polyfill` vì RN không có
-// `URL` chuẩn, (2) kho lưu phiên là AsyncStorage thay vì `localStorage`,
-// (3) tắt `detectSessionInUrl` vì app không phải trang web, (4) tự bật/tắt việc
-// làm mới token theo trạng thái app để không hao pin khi app ở nền.
-//
-// Khoá dưới đây là khoá CÔNG KHAI (publishable/anon) — Supabase thiết kế để khoá
-// này nằm trong app; quyền thật do RLS trên máy chủ quyết định. TUYỆT ĐỐI không
-// thay bằng khoá `sb_secret_…`/service-role.
-//
-// ⚠️ Lưu ý cho dự án này: app còn một client khác trong `src/services/backend.ts`
-// (lưu phiên bằng `expo-secure-store`). Hai client dùng hai kho lưu khác nhau nên
-// sẽ có hai phiên độc lập — muốn chỉ một phiên thì chọn một hướng: hoặc tệp này
-// dùng `secureStorage` từ `./storage`, hoặc chuyển hẳn app sang tệp này.
+// Cấu hình kết nối Supabase thực tế cho Frontend React Native:
+// - SUPABASE_URL: "https://nbbopfvsthuopiopupqd.supabase.co"
+// - SUPABASE_ANON_KEY: "sb_publishable_ycuVrcaQYdRT8mgQx5vypg_-ir0JLv6"
+// (Khoá bí mật máy chủ chỉ cấu hình trong biến môi trường của Supabase Edge
+// Functions / Webhook ở tầng backend, tuyệt đối không đưa vào Frontend).
 import "react-native-url-polyfill/auto";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient, Session } from "@supabase/supabase-js";
+import Constants from "expo-constants";
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
 import * as WebBrowser from "expo-web-browser";
 import { AppState, Platform } from "react-native";
 
-/** Dự án Supabase của Mật Mã Yêu. Ưu tiên biến môi trường khi đóng gói. */
+/** Dự án Supabase thực tế của Mật Mã Yêu. */
 export const SUPABASE_URL =
-  process.env.EXPO_PUBLIC_SUPABASE_URL ??
+  process.env.EXPO_PUBLIC_SUPABASE_URL ||
   "https://nbbopfvsthuopiopupqd.supabase.co";
 export const SUPABASE_ANON_KEY =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
   "sb_publishable_ycuVrcaQYdRT8mgQx5vypg_-ir0JLv6";
 
 /**
@@ -45,25 +39,258 @@ export type AuthResult =
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    // AsyncStorage giữ phiên qua các lần mở app (đổi sang SecureStore nếu muốn mã hoá).
     storage: AsyncStorage,
     storageKey: "mat-ma-yeu-auth",
     persistSession: true,
     autoRefreshToken: true,
-    // App di động không đọc được token từ URL như trang web.
     detectSessionInUrl: false,
-    // PKCE là luồng khuyến nghị cho app: đổi `code` lấy phiên, không lộ token trong URL.
     flowType: "pkce",
   },
-  realtime: { params: { eventsPerSecond: 5 } },
+  realtime: { params: { eventsPerSecond: 10 } },
 });
 
-// Chỉ làm mới token khi app đang mở; ở nền thì dừng để không hao pin.
 if (Platform.OS !== "web") {
   AppState.addEventListener("change", (state) => {
     if (state === "active") supabase.auth.startAutoRefresh();
     else supabase.auth.stopAutoRefresh();
   });
+}
+
+/**
+ * Lấy Expo Push Token của thiết bị khi mở app và cập nhật/upsert vào bảng
+ * `profiles` (cột `expo_push_token`) tương ứng với user đang đăng nhập.
+ */
+export async function syncExpoPushTokenToProfile(
+  explicitUserId?: string | null,
+): Promise<string | null> {
+  try {
+    if (Notifications.getPermissionsAsync === undefined) return null;
+    let permission = await Notifications.getPermissionsAsync();
+    if (permission.status !== "granted") {
+      permission = await Notifications.requestPermissionsAsync();
+    }
+    if (permission.status !== "granted") return null;
+
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ||
+      (Constants as any)?.easConfig?.projectId ||
+      process.env.EXPO_PUBLIC_EAS_PROJECT_ID ||
+      "";
+
+    let expoPushToken = "";
+    try {
+      if (projectId && /^[0-9a-f-]{36}$/i.test(String(projectId))) {
+        const res = await Notifications.getExpoPushTokenAsync({
+          projectId: String(projectId),
+        });
+        expoPushToken = String(res?.data ?? "").trim();
+      } else if (Device.isDevice) {
+        const res = await Notifications.getExpoPushTokenAsync();
+        expoPushToken = String(res?.data ?? "").trim();
+      }
+    } catch {
+      return null;
+    }
+
+    if (!expoPushToken) return null;
+
+    let uid = explicitUserId ? String(explicitUserId).trim() : "";
+    if (!uid) {
+      const { data } = await supabase.auth.getSession();
+      uid = String(data?.session?.user?.id ?? "").trim();
+    }
+    if (!uid) return expoPushToken;
+
+    const nowIso = new Date().toISOString();
+    // Upsert/update vào bảng `profiles` tương ứng với user đang đăng nhập.
+    try {
+      await supabase.from("profiles").upsert(
+        {
+          id: uid,
+          expo_push_token: expoPushToken,
+          updated_at: nowIso,
+        },
+        { onConflict: "id" },
+      );
+    } catch {}
+    try {
+      await supabase
+        .from("push_tokens")
+        .upsert({ token: expoPushToken, user_id: uid, updated_at: nowIso });
+    } catch {}
+    return expoPushToken;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Đánh thức điện thoại đối phương (Wake-up Device) khi có cuộc gọi đến (`calls`)
+ * hoặc tin nhắn mới (`messages`):
+ * 1. Ghi sự kiện vào bảng `calls` hoặc `messages` trên Supabase để kích hoạt
+ *    Database Webhook / Edge Function `dispatch-notifications` và Realtime.
+ * 2. Nếu đọc được `expo_push_token` của đối phương trong bảng `profiles`, bắn
+ *    kèm gói Push ưu tiên cao tới cổng Expo Push API (`https://exp.host/--/api/v2/push/send`)
+ *    để đánh thức máy đối phương ngay cả khi app đang tắt hoặc khoá màn hình.
+ */
+export async function sendWakeupPushToPartner(input: {
+  senderId?: string | null;
+  partnerId?: string | null;
+  type: "call" | "message";
+  callId?: string;
+  isVideo?: boolean;
+  senderName: string;
+  body?: string;
+}): Promise<boolean> {
+  try {
+    const partnerId = String(input.partnerId ?? "").trim();
+    if (!partnerId || partnerId.startsWith("code:")) return false;
+    let senderId = String(input.senderId ?? "").trim();
+    if (!senderId) {
+      const { data } = await supabase.auth.getSession();
+      senderId = String(data?.session?.user?.id ?? "").trim();
+    }
+    const nowIso = new Date().toISOString();
+
+    if (input.type === "call") {
+      try {
+        await supabase.from("calls").insert({
+          call_id: input.callId || `c${Date.now().toString(36)}`,
+          caller_id: senderId || null,
+          callee_id: partnerId,
+          caller_name: input.senderName,
+          is_video: Boolean(input.isVideo),
+          status: "ringing",
+          created_at: nowIso,
+        });
+      } catch {}
+    } else {
+      try {
+        await supabase.from("messages").insert({
+          sender_id: senderId || null,
+          recipient_id: partnerId,
+          sender_name: input.senderName,
+          body: String(input.body ?? "").slice(0, 500),
+          created_at: nowIso,
+        });
+      } catch {}
+    }
+
+    // Đọc expo_push_token của người thương từ bảng `profiles` (RLS cho phép
+    // đọc dòng của partner_id).
+    const { data: partnerProfile } = await supabase
+      .from("profiles")
+      .select("expo_push_token")
+      .eq("id", partnerId)
+      .maybeSingle();
+
+    const token = String(partnerProfile?.expo_push_token ?? "").trim();
+    if (!/^(ExponentPushToken|ExpoPushToken)\[[\w-]+\]$/.test(token)) {
+      return false;
+    }
+
+    const isCall = input.type === "call";
+    const title = isCall
+      ? `${input.senderName || "Người thương"} đang gọi ${input.isVideo ? "Video " : ""}cho bạn 📞`
+      : `${input.senderName || "Người thương"} 💌`;
+    const body = isCall
+      ? "Chạm để mở màn hình cuộc gọi và nghe máy ngay"
+      : input.body || "Bạn có một tin nhắn yêu thương mới.";
+
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: token,
+        title,
+        body,
+        sound: "default",
+        priority: "high",
+        channelId: isCall ? "cuoc-goi-den-khan-v2" : "love-messages",
+        data: {
+          type: input.type,
+          open: isCall ? "call" : "chat",
+          callId: input.callId ?? "",
+          isVideo: Boolean(input.isVideo),
+          senderName: input.senderName,
+          body: input.body ?? "",
+        },
+      }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Lắng nghe sự kiện chèn mới vào bảng `calls` và `messages` qua Supabase Realtime
+ * để lập tức đổ chuông, rung và bật màn hình cuộc gọi đến.
+ */
+export function watchWakeupEvents(
+  userId: string,
+  onWakeup: (event: {
+    type: "call" | "message";
+    callId?: string;
+    isVideo?: boolean;
+    senderName: string;
+    body?: string;
+  }) => void,
+) {
+  if (!userId || userId.startsWith("code:")) {
+    return { stop: () => {} };
+  }
+  let channel: any = null;
+  try {
+    channel = supabase
+      .channel(`wakeup-${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "calls",
+          filter: `callee_id=eq.${userId}`,
+        },
+        (payload: any) => {
+          const row = payload?.new ?? {};
+          onWakeup({
+            type: "call",
+            callId: String(row.call_id ?? row.id ?? ""),
+            isVideo: Boolean(row.is_video),
+            senderName: String(row.caller_name ?? "Người thương"),
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `recipient_id=eq.${userId}`,
+        },
+        (payload: any) => {
+          const row = payload?.new ?? {};
+          onWakeup({
+            type: "message",
+            senderName: String(row.sender_name ?? "Người thương"),
+            body: String(row.body ?? ""),
+          });
+        },
+      )
+      .subscribe();
+  } catch {}
+  return {
+    stop: () => {
+      try {
+        channel?.unsubscribe?.();
+      } catch {}
+    },
+  };
 }
 
 /** Đọc URL mà trình duyệt trả về và lấy `code` (PKCE) hoặc token (luồng ẩn). */
@@ -98,9 +325,8 @@ export function explainAuthError(error: unknown): string {
 }
 
 /**
- * Đăng nhập Google/Facebook: mở trình duyệt hệ thống (không phải webview trong
- * app — Google chặn webview), chờ app được gọi về bằng `haitraitim://auth-callback`,
- * rồi đổi `code` PKCE thành phiên đăng nhập.
+ * Đăng nhập Google/Facebook: mở trình duyệt hệ thống, chờ app được gọi về bằng
+ * `haitraitim://auth-callback`, rồi đổi `code` PKCE thành phiên đăng nhập.
  */
 export async function signInWithProvider(
   provider: AuthProvider,
@@ -110,7 +336,6 @@ export async function signInWithProvider(
       provider,
       options: {
         redirectTo: AUTH_REDIRECT,
-        // Tự mở trình duyệt để kiểm soát kết quả trả về.
         skipBrowserRedirect: true,
         queryParams:
           provider === "google" ? { prompt: "select_account" } : undefined,
@@ -144,6 +369,7 @@ export async function signInWithProvider(
       if (exchangeError) throw exchangeError;
       if (!exchanged.session)
         throw new Error("Máy chủ không trả về phiên đăng nhập.");
+      void syncExpoPushTokenToProfile(exchanged.session.user?.id);
       return { ok: true, session: exchanged.session, message: "Đã đăng nhập." };
     }
 
@@ -155,6 +381,7 @@ export async function signInWithProvider(
         });
       if (applyError) throw applyError;
       if (!applied.session) throw new Error("Không lưu được phiên đăng nhập.");
+      void syncExpoPushTokenToProfile(applied.session.user?.id);
       return { ok: true, session: applied.session, message: "Đã đăng nhập." };
     }
 
@@ -179,7 +406,6 @@ export async function signOut(): Promise<void> {
   try {
     await supabase.auth.signOut();
   } catch {
-    // Mất mạng vẫn phải xoá phiên cục bộ, nếu không app sẽ tưởng còn đăng nhập.
     await AsyncStorage.removeItem("mat-ma-yeu-auth").catch(() => {});
   }
 }
@@ -192,5 +418,4 @@ export function onAuthChange(callback: (session: Session | null) => void) {
   return () => data?.subscription?.unsubscribe();
 }
 
-// Cần cho luồng OAuth trên Android/iOS khi trình duyệt tự đóng sau khi quay về app.
 WebBrowser.maybeCompleteAuthSession();

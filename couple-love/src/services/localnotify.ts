@@ -1,5 +1,5 @@
 import * as Notifications from "expo-notifications";
-import { Linking } from "react-native";
+import { Linking, Platform } from "react-native";
 import type { State } from "./localdb";
 import {
   anniversaryEvents,
@@ -8,8 +8,10 @@ import {
 } from "../logic/localState.mjs";
 import { dateOnly } from "../logic/time.mjs";
 import { loveLineFor, loveLineKey } from "../logic/lovelines.mjs";
-// Thông báo phải nổi lên NGAY CẢ KHI app đang mở (giống Messenger/Zalo): nếu
-// không đặt handler này thì Android/iOS sẽ nuốt thông báo lúc app đang chạy.
+import { loadNotifee, useNotifeeService } from "./notifeeCore";
+
+// Thông báo phải nổi lên NGAY CẢ KHI app đang mở hoặc đang khoá màn hình (giống
+// Messenger/Zalo): nếu không đặt handler này thì Android/iOS sẽ nuốt thông báo.
 try {
   Notifications.setNotificationHandler?.({
     handleNotification: async () => ({
@@ -42,19 +44,22 @@ export async function ensureMessageCategory() {
 
 export async function ensureChannel() {
   if (Notifications.getPermissionsAsync === undefined) return false;
-  // Kênh tin nhắn: mức cao nhất để hiện băng-rôn và kêu như tin nhắn.
+  // Kênh tin nhắn: mức cao nhất (MAX) + hiển thị công khai trên màn hình khoá
+  // (PUBLIC) để khi có tin nhắn mới, màn hình khoá sáng lên, rung và đổ chuông.
   await Notifications.setNotificationChannelAsync("love-messages", {
     name: "Tin nhắn của người thương",
     importance: Notifications.AndroidImportance.MAX,
     sound: "default",
+    enableVibrate: true,
     vibrationPattern: [0, 250, 150, 250],
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
   });
   await Notifications.setNotificationChannelAsync("love-reminders", {
     name: "Lời nhắc yêu thương",
     importance: Notifications.AndroidImportance.HIGH,
     sound: "default",
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+    enableVibrate: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
   });
   return true;
 }
@@ -69,8 +74,7 @@ export async function notificationPermission() {
     return "unknown";
   }
 }
-/** Hỏi quyền ngay khi mở app (Android 13+ mặc định chặn nếu chưa hỏi) — trước
- *  đây chỉ hỏi khi người dùng tự bật công tắc nên không có thông báo nào. */
+/** Hỏi quyền ngay khi mở app (Android 13+ mặc định chặn nếu chưa hỏi). */
 export async function askNotificationPermission() {
   await ensureChannel();
   const before = await notificationPermission();
@@ -98,9 +102,47 @@ export async function requestNotifications() {
     permission = await Notifications.requestPermissionsAsync();
   return permission.status === "granted";
 }
-/** Báo ngay lập tức (tin nhắn mới, nhật ký mới, cảm xúc mới) — kiểu thông báo
- * tin nhắn: hiện ngay cả khi app đang mở ở màn hình khác. Chưa cấp quyền thì bỏ
- * qua, người dùng vẫn thấy trong mục “Lời nhắc”. */
+
+async function displayNotifeeLockScreenBanner(
+  title: string,
+  body: string,
+  chat: boolean,
+) {
+  if (Platform.OS !== "android") return false;
+  const mod = loadNotifee();
+  const notifee = useNotifeeService();
+  if (!notifee) return false;
+  try {
+    const channelId = await notifee.createChannel({
+      id: chat ? "tin-nhan-khan-cap" : "loi-nhac-khan-cap",
+      name: chat ? "Tin nhắn màn hình khoá" : "Lời nhắc màn hình khoá",
+      importance: mod?.AndroidImportance?.HIGH ?? 4,
+      visibility: mod?.AndroidVisibility?.PUBLIC ?? 1,
+      sound: "default",
+      vibration: true,
+      vibrationPattern: [200, 300, 150, 300],
+    });
+    await notifee.displayNotification({
+      id: `msg-${Date.now()}`,
+      title,
+      body,
+      android: {
+        channelId,
+        category: mod?.AndroidCategory?.MESSAGE ?? "msg",
+        importance: mod?.AndroidImportance?.HIGH ?? 4,
+        visibility: mod?.AndroidVisibility?.PUBLIC ?? 1,
+        smallIcon: "ic_launcher",
+        pressAction: { id: "default", launchActivity: "default" },
+      },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Báo ngay lập tức (tin nhắn mới, cuộc gọi đến, nhật ký mới, cảm xúc mới) —
+ * hiển thị ngay cả khi khoá màn hình hoặc đang ở app khác, kèm đổ chuông & rung. */
 export async function notifyNow(
   title: string,
   body: string,
@@ -110,7 +152,10 @@ export async function notifyNow(
   try {
     if (Notifications.getPermissionsAsync === undefined) return false;
     const permission = await Notifications.getPermissionsAsync();
-    if (permission.status !== "granted") return false;
+    if (permission.status !== "granted") {
+      void displayNotifeeLockScreenBanner(title, body, chat);
+      return false;
+    }
     await ensureChannel();
     if (chat) await ensureMessageCategory();
     await Notifications.scheduleNotificationAsync({
@@ -132,7 +177,7 @@ export async function notifyNow(
     });
     return true;
   } catch {
-    return false;
+    return await displayNotifeeLockScreenBanner(title, body, chat);
   }
 }
 function atEight(day: string) {

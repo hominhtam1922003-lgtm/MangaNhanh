@@ -63,6 +63,10 @@ export type State = {
     ringtone?: string;
     /** Tên bài nhạc chuông để hiện trong Cài đặt. */
     ringtoneName?: string;
+    /** Mẫu ảnh nền cuộc gọi ("sunset-love" | "starry-night" | "cherry-blossom" | "ocean-breeze" | "custom"). */
+    callBgId?: string;
+    /** Tệp ảnh đôi tự chọn làm ảnh nền cuộc gọi (nằm trong thư mục ảnh của app). */
+    callBgFile?: string;
     /** Giữ kết nối khi app ở nền để tin nhắn vẫn nổi thông báo (Android). */
     keepAlive?: boolean;
   };

@@ -40,7 +40,7 @@ jobs:
       - name: Cài gói phụ thuộc
         run: npm ci --no-audit --no-fund
       - name: Dò từng trạm (WebSocket + MQTT + hai máy gửi nhận)
-        run: node scripts/relay-probe.mjs | tee /tmp/relay-probe.log
+        run: node scripts/relay-probe.mjs 2>&1 | tee /tmp/relay-probe.log
       - name: Công bố kết quả dò trạm
         if: always()
         uses: actions/github-script@v8

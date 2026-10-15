@@ -6,9 +6,17 @@ import {
   BROKERS,
   RelayClient,
   buildRelayPayload,
+  roomFromPair,
 } from "../src/services/relayProtocol.mjs";
-import { createRoom } from "../tests/helpers/rooms.mjs";
 import { emptyState, reduce } from "../src/logic/localState.mjs";
+
+const createRoom = () =>
+  roomFromPair(
+    "probe-" +
+      Math.random().toString(36).slice(2, 12) +
+      "-" +
+      Date.now().toString(36),
+  );
 
 globalThis.WebSocket = WebSocket;
 const wait = (milliseconds) =>

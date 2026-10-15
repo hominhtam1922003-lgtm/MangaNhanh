@@ -8,7 +8,13 @@ on:
   workflow_dispatch:
   push:
     branches: [main, arena/6f7cfa08-manganhanh]
-    paths: ["couple-love/**", ".github/workflows/build-couple-ipa.yml"]
+    paths:
+      [
+        "couple-love/**",
+        "!couple-love/README.md",
+        "!couple-love/scripts/relay-probe.mjs",
+        ".github/workflows/build-couple-ipa.yml",
+      ]
 permissions:
   contents: read
   checks: write
